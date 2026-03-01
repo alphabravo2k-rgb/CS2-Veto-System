@@ -1,3 +1,26 @@
+// File: server.js
+/**
+ * ⚡ COMP-OS — VETO ENGINE SERVER
+ * =============================================================================
+ * FILE          : server.js
+ * RESPONSIBILITY: Real-time Map Veto Orchestration & Persistence
+ * LAYER         : Backend (Node.js / Express / Socket.io)
+ * RISK LEVEL    : CRITICAL
+ * =============================================================================
+ *
+ * RELEASE METADATA
+ * -----------------------------------------------------------------------------
+ * VERSION       : v4.0.0 (SECURE-ORBIT)
+ * STATUS        : ENFORCED
+ *
+ * FEATURES:
+ * - Constant-Time String Comparison for Admin Secrets.
+ * - Socket-level Rate Limiting to prevent memory exhaustion.
+ * - SSRF Protections on dynamic Discord webhooks.
+ * - Strict CORS policy enforcement in Production.
+ * =============================================================================
+ */
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -19,36 +42,32 @@ try {
     db = require('./db');
 } catch (error) {
     dbError = error;
-    console.error('');
-    console.error('═══════════════════════════════════════════════════════════');
+    console.error('\n═══════════════════════════════════════════════════════════');
     console.error('[SERVER] ❌ CRITICAL ERROR: Failed to load database module!');
-    console.error('═══════════════════════════════════════════════════════════');
-    console.error('');
+    console.error('═══════════════════════════════════════════════════════════\n');
     console.error('Error:', error.message);
-    console.error('');
-    console.error('📦 SOLUTION: Install sqlite3 on your production server:');
-    console.error('');
-    console.error('   cd /path/to/server');
-    console.error('   npm install sqlite3');
-    console.error('');
-    console.error('If that fails (common on Linux servers), try:');
-    console.error('');
-    console.error('   sudo apt-get update');
-    console.error('   sudo apt-get install -y build-essential python3');
-    console.error('   npm install sqlite3 --build-from-source');
-    console.error('');
-    console.error('═══════════════════════════════════════════════════════════');
-    console.error('');
-    console.error('⚠️  Server will NOT start until sqlite3 is installed!');
-    console.error('');
     process.exit(1);
 }
 
 const app = express();
-app.use(cors());
+
+// 🛡️ SECURITY FIX: Lock CORS to intended domains in production to prevent hijack connections
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []) 
+    : "*";
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 const MAPS_FILE = path.join(__dirname, 'maps.json');
+const HISTORY_FILE = path.join(__dirname, 'match_history.json'); // 🛡️ CRASH FIX: Moved to global scope so reset endpoint can see it
+
+// 🛡️ SECURITY FIX: Refuse to boot if production is missing a secret
+const IS_PROD = process.env.NODE_ENV === 'production';
+if (IS_PROD && !process.env.ADMIN_SECRET) {
+    console.error('[SERVER] ❌ FATAL: ADMIN_SECRET must be set in production!');
+    process.exit(1);
+}
 const MASTER_SECRET = process.env.ADMIN_SECRET || "default_secret";
 
 let rooms = {};
@@ -67,24 +86,41 @@ const WINGMAN_MAPS = [
 
 let activeMaps = [...DEFAULT_MAPS];
 
+// 🛡️ SECURITY FIX: Constant-time comparison prevents timing attacks on admin endpoints
+function safeCompare(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const aBuf = Buffer.from(a);
+    const bBuf = Buffer.from(b);
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+// 🛡️ SECURITY FIX: Centralized Authorization logic
+function authorize(room, key, requiredTeam = null) {
+    if (!room || !key || typeof key !== 'string') return false;
+    if (safeCompare(key, room.keys.admin)) return true;
+    if (requiredTeam && safeCompare(key, room.keys[requiredTeam])) return true;
+    return false;
+}
+
+// 🛡️ SECURITY FIX: SSRF Validation for Webhooks
+function isValidWebhook(url) {
+    if (!url || typeof url !== 'string') return false;
+    return url.startsWith('https://discord.com/api/webhooks/') || url.startsWith('https://discordapp.com/api/webhooks/');
+}
+
 // --- LOAD DATA ---
 async function loadData() {
     try {
-        // Initialize SQLite database and create table if needed
         await db.initDatabase();
-
-        // Initialize settings table for admin webhook
         await settings.initSettingsTable();
 
-        // Load all matches from database
         const savedMatches = await db.loadAllMatches();
         savedMatches.forEach(match => {
             rooms[match.id] = match;
         });
 
-
         // Migration: Load from JSON if it exists (one-time migration)
-        const HISTORY_FILE = path.join(__dirname, 'match_history.json');
         if (fs.existsSync(HISTORY_FILE) && savedMatches.length === 0) {
             try {
                 const savedData = JSON.parse(fs.readFileSync(HISTORY_FILE));
@@ -102,37 +138,28 @@ async function loadData() {
             }
         }
     } catch (e) {
-        // Database loading error handled silently
+        // Handled silently
     }
 }
 
-// Start loading data (don't block server startup if DB fails)
 loadData().catch(error => {
     console.error('[SERVER] ❌ Failed to initialize database on startup:', error.message);
-    console.error('[SERVER] ⚠️  Server will start but database features may not work');
-    console.error('[SERVER] 📦 Make sure sqlite3 is installed: npm install sqlite3');
 });
 
 if (fs.existsSync(MAPS_FILE)) {
     try {
         activeMaps = JSON.parse(fs.readFileSync(MAPS_FILE));
-    } catch (e) { /* Maps load error handled silently */ }
+    } catch (e) { }
 } else {
     fs.writeFileSync(MAPS_FILE, JSON.stringify(activeMaps, null, 2));
 }
 
 async function saveHistory(roomId = null) {
     try {
-        if (roomId) {
-            // Save specific room to SQLite
-            const room = rooms[roomId];
-            if (room) {
-                await db.saveMatch(room);
-            }
+        if (roomId && rooms[roomId]) {
+            await db.saveMatch(rooms[roomId]);
         } else {
-            // Save all rooms (for bulk operations)
-            const matchesArray = Object.values(rooms);
-            for (const match of matchesArray) {
+            for (const match of Object.values(rooms)) {
                 await db.saveMatch(match);
             }
         }
@@ -150,7 +177,6 @@ function saveMaps() {
 }
 
 // --- API ROUTES ---
-// Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
@@ -166,7 +192,6 @@ app.get('/api/history', async (req, res) => {
         const results = await db.getPaginatedMatches(page, limit);
         res.json(results);
     } catch (error) {
-        console.error("[API] Error fetching history:", error);
         res.status(500).json({ error: "Failed to fetch history" });
     }
 });
@@ -174,13 +199,11 @@ app.get('/api/history', async (req, res) => {
 app.get('/api/maps', (req, res) => res.json(activeMaps));
 
 app.post('/api/admin/history', async (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     try {
-        // Combine in-memory active rooms with database matches
         const activeMatches = Object.values(rooms).map(({ timerHandle, ...keep }) => keep);
         const dbMatches = await db.getAllMatches();
 
-        // Create a map of all matches, prioritizing in-memory (active) ones
         const matchMap = new Map();
         dbMatches.forEach(m => matchMap.set(m.id, m));
         activeMatches.forEach(m => matchMap.set(m.id, m));
@@ -189,31 +212,27 @@ app.post('/api/admin/history', async (req, res) => {
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         res.json(allMatches);
     } catch (error) {
-        console.error("[API] Error fetching admin history:", error);
         res.status(500).json({ error: "Failed to fetch history" });
     }
 });
 
 app.post('/api/admin/delete', async (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     try {
         const room = rooms[req.body.id];
         if (room) {
             if (room.timerHandle) clearTimeout(room.timerHandle);
             delete rooms[req.body.id];
         }
-
-        // Delete from database
         await db.deleteMatch(req.body.id);
         res.json({ success: true });
     } catch (error) {
-        console.error("[API] Error deleting match:", error);
         res.status(500).json({ error: "Failed to delete match" });
     }
 });
 
 app.post('/api/admin/reset', (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     Object.values(rooms).forEach(r => { if (r.timerHandle) clearTimeout(r.timerHandle); });
     rooms = {};
     if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
@@ -221,12 +240,12 @@ app.post('/api/admin/reset', (req, res) => {
 });
 
 app.post('/api/admin/maps/get', (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     res.json(activeMaps);
 });
 
 app.post('/api/admin/maps/update', (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     if (!Array.isArray(req.body.maps)) return res.status(400).json({ error: "Invalid Data" });
     activeMaps = req.body.maps;
     saveMaps();
@@ -234,65 +253,68 @@ app.post('/api/admin/maps/update', (req, res) => {
 });
 
 app.post('/api/admin/webhook/get', async (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     try {
         const webhookUrl = await settings.getAdminWebhook();
         res.json({ webhookUrl: webhookUrl || '' });
     } catch (error) {
-        console.error("[API] Error getting admin webhook:", error);
         res.status(500).json({ error: "Failed to get webhook" });
     }
 });
 
 app.post('/api/admin/webhook/set', async (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     try {
         const { webhookUrl } = req.body;
-
-        // Validate webhook URL if provided
-        if (webhookUrl && !discordWebhook.isValidDiscordWebhook(webhookUrl)) {
+        if (webhookUrl && !isValidWebhook(webhookUrl)) {
             return res.status(400).json({ error: "Invalid Discord webhook URL" });
         }
-
         await settings.setAdminWebhook(webhookUrl || '');
         res.json({ success: true });
     } catch (error) {
-        console.error("[API] Error setting admin webhook:", error);
         res.status(500).json({ error: "Failed to set webhook" });
     }
 });
 
 app.post('/api/admin/webhook/test', async (req, res) => {
-    if (req.body.secret !== MASTER_SECRET) return res.status(403).json({ error: "Invalid Key" });
+    if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     try {
         const { webhookUrl } = req.body;
-
-        if (!webhookUrl) {
-            return res.status(400).json({ error: "Webhook URL required" });
+        if (!webhookUrl || !isValidWebhook(webhookUrl)) {
+            return res.status(400).json({ error: "Valid Webhook URL required" });
         }
-
         await discordWebhook.testWebhook(webhookUrl);
         res.json({ success: true, message: "Webhook test successful" });
     } catch (error) {
-        console.error("[API] Error testing webhook:", error);
         res.status(500).json({ error: error.message || "Webhook test failed" });
     }
 });
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, { cors: { origin: allowedOrigins } });
 
-// Track connected users
 let connectedUsers = 0;
-// Track users per room (roomId -> count)
 const roomUserCounts = {};
 
-// Function to broadcast user count to all clients
+// 🛡️ SECURITY FIX: Extremely basic rate limiting for memory-based server
+const rateLimits = new Map();
+function isRateLimited(socketId) {
+    const now = Date.now();
+    const limit = rateLimits.get(socketId) || { count: 0, resetAt: now + 60000 };
+    if (now > limit.resetAt) {
+        limit.count = 0;
+        limit.resetAt = now + 60000;
+    }
+    if (limit.count >= 20) return true; // Max 20 actions per minute per socket
+    limit.count++;
+    rateLimits.set(socketId, limit);
+    return false;
+}
+
 function broadcastUserCount() {
     io.emit('user_count', connectedUsers);
 }
 
-// Function to broadcast room-specific user count
 function broadcastRoomUserCount(roomId) {
     const count = roomUserCounts[roomId] || 0;
     io.to(roomId).emit('room_user_count', { roomId, count });
@@ -315,8 +337,8 @@ const startTurnTimer = (roomId) => {
     const room = rooms[roomId];
     if (!room || room.finished) return;
     if (room.timerHandle) clearTimeout(room.timerHandle);
-    const timerSeconds = room.timerDuration || 60; // Get timer duration in seconds
-    const duration = timerSeconds * 1000; // Convert to milliseconds
+    const timerSeconds = room.timerDuration || 60; 
+    const duration = timerSeconds * 1000; 
     room.timerEndsAt = Date.now() + duration;
     room.timerHandle = setTimeout(() => { handleAutoAction(roomId); }, duration);
 };
@@ -325,13 +347,12 @@ const handleAutoAction = (roomId) => {
     const room = rooms[roomId];
     if (!room || room.finished) return;
     const step = room.sequence[room.step];
-    if (!step) return; // Safety check: step might be undefined
+    if (!step) return; 
 
     if (step.a === 'ban' || step.a === 'pick') {
         const availableMaps = room.maps.filter(m => m.status === 'available');
         if (availableMaps.length > 0) {
             const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-            // Get team name based on step.t
             const teamName = step.t === 'A' ? (room.teamA || 'Team A') : (step.t === 'B' ? (room.teamB || 'Team B') : 'System');
             if (step.a === 'ban') {
                 randomMap.status = 'banned';
@@ -352,7 +373,6 @@ const handleAutoAction = (roomId) => {
         if (idx !== -1) {
             const randomSide = Math.random() > 0.5 ? 'CT' : 'T';
             room.maps[idx].side = randomSide;
-            // Get team name based on step.t (same as ban/pick logic)
             const teamName = step.t === 'A' ? (room.teamA || 'Team A') : (step.t === 'B' ? (room.teamB || 'Team B') : 'System');
             const lastLogIndex = room.logs.length - 1;
             const lastLog = room.logs[lastLogIndex];
@@ -393,22 +413,15 @@ const checkMatchEnd = (room) => {
     }
 };
 
-// Helper function to send webhook notifications
 async function notifyWebhook(roomId, eventType, data) {
     try {
         const room = rooms[roomId];
         if (!room) return;
-
-        // Get admin webhook
         const adminWebhook = await settings.getAdminWebhook();
-
-        // Send to admin webhook (if configured)
         if (adminWebhook) {
             await discordWebhook.sendDiscordNotification(adminWebhook, room, eventType, data);
         }
-
-        // Send to match-specific webhook (if provided)
-        if (room.tempWebhookUrl) {
+        if (room.tempWebhookUrl && isValidWebhook(room.tempWebhookUrl)) {
             await discordWebhook.sendDiscordNotification(room.tempWebhookUrl, room, eventType, data);
         }
     } catch (error) {
@@ -417,20 +430,19 @@ async function notifyWebhook(roomId, eventType, data) {
 }
 
 io.on('connection', (socket) => {
-    // Track which rooms this socket is in
     socket.currentRoom = null;
-
-    // Increment user count on connection
     connectedUsers++;
-    // Send current count to the new client immediately
     socket.emit('user_count', connectedUsers);
-    // Broadcast to all clients
     broadcastUserCount();
 
     socket.on('create_match', ({ teamA, teamB, teamALogo, teamBLogo, format, customMapNames, customSequence, useTimer, useCoinFlip, timerDuration, tempWebhookUrl }) => {
-        console.log('[CREATE_MATCH] Timer enabled:', useTimer, 'Timer duration:', timerDuration, 'Type:', typeof timerDuration);
+        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        
+        // 🛡️ SECURITY FIX: SSRF Protection
+        const safeWebhook = isValidWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
+
         const roomId = generateKey(6);
-        let finalSequence = SEQUENCES[format];
+        let finalSequence = SEQUENCES[format] || SEQUENCES.bo1; // Prevent undefined format crash
         if (format === 'custom' && Array.isArray(customSequence) && customSequence.length > 0) finalSequence = customSequence;
 
         let finalMaps = [];
@@ -439,7 +451,7 @@ io.on('connection', (socket) => {
         } else if (format === 'custom' && Array.isArray(customMapNames) && customMapNames.length > 0) {
             finalMaps = customMapNames.map(name => {
                 const existing = activeMaps.find(m => m.name === name);
-                return { name: name, customImage: existing ? (existing.customImage || null) : null, status: 'available', pickedBy: null, side: null };
+                return { name: String(name), customImage: existing ? (existing.customImage || null) : null, status: 'available', pickedBy: null, side: null };
             });
         } else {
             finalMaps = activeMaps.map(m => ({ name: m.name, customImage: m.customImage || null, status: 'available', pickedBy: null, side: null }));
@@ -449,65 +461,62 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             id: roomId, date: new Date().toISOString(),
             keys: { admin: generateKey(8), A: generateKey(8), B: generateKey(8) },
-            teamA: teamA || "Team A", teamB: teamB || "Team B",
-            teamALogo: teamALogo || null, teamBLogo: teamBLogo || null,
+            teamA: typeof teamA === 'string' ? teamA : "Team A", 
+            teamB: typeof teamB === 'string' ? teamB : "Team B",
+            teamALogo: typeof teamALogo === 'string' ? teamALogo : null, 
+            teamBLogo: typeof teamBLogo === 'string' ? teamBLogo : null,
             format, sequence: finalSequence, step: 0, maps: finalMaps,
             logs: [], finished: false, lastPickedMap: null, playedMaps: [],
             useTimer: !!useTimer, ready: { A: false, B: false }, timerEndsAt: null, timerHandle: null,
-            timerDuration: parsedTimerDuration, // Store timer duration in seconds
+            timerDuration: parsedTimerDuration,
             useCoinFlip: !!useCoinFlip,
             coinFlip: useCoinFlip ? { status: 'waiting_call', winner: null, result: null } : null,
-            tempWebhookUrl: tempWebhookUrl || null
+            tempWebhookUrl: safeWebhook
         };
         saveHistory(roomId);
-
-        // Send webhook notification for match creation
         notifyWebhook(roomId, 'match_created', {});
-
         socket.emit('match_created', { roomId, keys: rooms[roomId].keys });
     });
 
     socket.on('join_room', ({ roomId, key }) => {
+        if (isRateLimited(socket.id)) return;
         if (!rooms[roomId]) return socket.emit('error', 'Match not found');
 
-        // Leave previous room if any
         if (socket.currentRoom && socket.currentRoom !== roomId) {
             roomUserCounts[socket.currentRoom] = Math.max(0, (roomUserCounts[socket.currentRoom] || 0) - 1);
             socket.leave(socket.currentRoom);
             broadcastRoomUserCount(socket.currentRoom);
         }
 
-        // Join new room
         socket.join(roomId);
         socket.currentRoom = roomId;
-
-        // Increment room user count
         roomUserCounts[roomId] = (roomUserCounts[roomId] || 0) + 1;
         broadcastRoomUserCount(roomId);
 
         const room = rooms[roomId];
         let role = 'viewer';
-        if (key === room.keys.admin) role = 'admin';
-        else if (key === room.keys.A) role = 'A';
-        else if (key === room.keys.B) role = 'B';
+        if (authorize(room, key, null)) role = 'admin';
+        else if (authorize(room, key, 'A')) role = 'A';
+        else if (authorize(room, key, 'B')) role = 'B';
+        
         socket.emit('role_assigned', role);
         const { keys, timerHandle, ...safe } = room;
         socket.emit('update_state', safe);
-
     });
 
     socket.on('team_ready', ({ roomId, key }) => {
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
         if (!room || room.finished || !room.useTimer) return;
+        
         let role = null;
-        if (key === room.keys.A) role = 'A';
-        else if (key === room.keys.B) role = 'B';
+        if (authorize(room, key, 'A')) role = 'A';
+        else if (authorize(room, key, 'B')) role = 'B';
+        
         if (role && !room.ready[role]) {
             room.ready[role] = true;
             const teamName = role === 'A' ? room.teamA : room.teamB;
             room.logs.push(`[READY] ${teamName} is Ready`);
-
-            // Send webhook for team ready
             notifyWebhook(roomId, 'ready', { team: teamName });
 
             const coinFlipDone = !room.useCoinFlip || (room.coinFlip && room.coinFlip.status === 'done');
@@ -522,9 +531,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('coin_call', ({ roomId, call, key }) => {
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
         if (!room || !room.useCoinFlip || !room.coinFlip || room.coinFlip.status !== 'waiting_call') return;
-        if (key !== room.keys.A) return;
+        if (!authorize(room, key, 'A')) return;
 
         const result = crypto.randomInt(0, 2) === 0 ? 'heads' : 'tails';
         const winner = (call === result) ? 'A' : 'B';
@@ -535,8 +545,6 @@ io.on('connection', (socket) => {
 
         const winnerName = winner === 'A' ? room.teamA : room.teamB;
         room.logs.push(`[COIN] ${room.teamA} called ${call.toUpperCase()}. Result: ${result.toUpperCase()}. Winner: ${winnerName}`);
-
-        // Send webhook for coin flip result
         notifyWebhook(roomId, 'coin_flip', { result, winner: winnerName });
 
         saveHistory(roomId);
@@ -545,16 +553,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('coin_decision', ({ roomId, decision, key }) => {
-        // decision: 'first' (We Start) or 'second' (They Start)
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
         if (!room || !room.useCoinFlip || room.coinFlip.status !== 'deciding') return;
         const winner = room.coinFlip.winner;
-        if (key !== room.keys[winner]) return;
+        if (!authorize(room, key, winner)) return;
 
         let swapSequence = false;
-        // Default: A starts.
-        // If A is winner and picks 'second', B starts (swap).
-        // If B is winner and picks 'first', B starts (swap).
         if (winner === 'A' && decision === 'second') swapSequence = true;
         if (winner === 'B' && decision === 'first') swapSequence = true;
 
@@ -566,7 +571,6 @@ io.on('connection', (socket) => {
             });
         }
 
-        // FIXED LOGIC: Base log on the DECISION, not the swap
         const winnerName = winner === 'A' ? room.teamA : room.teamB;
         if (decision === 'first') {
             room.logs.push(`[COIN] ${winnerName} chose to start first.`);
@@ -582,17 +586,23 @@ io.on('connection', (socket) => {
     });
 
     socket.on('action', ({ roomId, data, key }) => {
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
         if (!room || room.finished) return;
         if (room.useTimer && (!room.ready.A || !room.ready.B)) return;
         if (room.useCoinFlip && (!room.coinFlip || room.coinFlip.status !== 'done')) return;
 
         const currentStep = room.sequence[room.step];
-        if (!currentStep) return; // Safety check: step might be undefined
-        if (currentStep.t !== 'System' && key !== room.keys.admin && key !== room.keys[currentStep.t]) return;
+        if (!currentStep) return; 
+        
+        // 🛡️ SECURITY FIX: Centralized authorization
+        if (currentStep.t !== 'System' && !authorize(room, key, currentStep.t)) return;
 
         if (currentStep.a === 'ban' || currentStep.a === 'pick') {
-            const idx = room.maps.findIndex(m => m.name === data);
+            // 🛡️ SANITIZATION: Cast data to string to prevent object injection attacks
+            const safeData = String(data);
+            const idx = room.maps.findIndex(m => m.name === safeData);
+            
             if (idx === -1 || room.maps[idx].status !== 'available') return;
             const map = room.maps[idx];
             const teamName = currentStep.t === 'A' ? room.teamA : room.teamB;
@@ -600,8 +610,6 @@ io.on('connection', (socket) => {
             if (currentStep.a === 'ban') {
                 map.status = 'banned';
                 room.logs.push(`[BAN] ${teamName} banned ${map.name}`);
-
-                // Send webhook for ban
                 notifyWebhook(roomId, 'ban', { mapName: map.name, team: teamName });
             } else {
                 map.status = 'picked';
@@ -609,8 +617,6 @@ io.on('connection', (socket) => {
                 room.lastPickedMap = map.name;
                 room.playedMaps.push(map.name);
                 room.logs.push(`[PICK] ${teamName} picked ${map.name}`);
-
-                // Send webhook for pick (side will be added later)
                 notifyWebhook(roomId, 'pick', { mapName: map.name, team: teamName, side: null });
             }
             room.step++;
@@ -619,19 +625,17 @@ io.on('connection', (socket) => {
             if (!target) { const d = room.maps.find(m => m.status === 'available'); if (d) target = d.name; }
             const idx = room.maps.findIndex(m => m.name === target);
             if (idx !== -1) {
-                room.maps[idx].side = data;
+                const safeData = String(data);
+                room.maps[idx].side = safeData;
                 const teamName = currentStep.t === 'A' ? room.teamA : room.teamB;
                 const lastLogIndex = room.logs.length - 1;
                 const lastLog = room.logs[lastLogIndex];
                 if (lastLog && lastLog.includes(`picked ${target}`)) {
-                    room.logs[lastLogIndex] = `${lastLog} (${teamName} chose ${data} side for ${target})`;
+                    room.logs[lastLogIndex] = `${lastLog} (${teamName} chose ${safeData} side for ${target})`;
                 } else {
-                    room.logs.push(`[SIDE] ${teamName} chose ${data} side for ${target}`);
+                    room.logs.push(`[SIDE] ${teamName} chose ${safeData} side for ${target}`);
                 }
-
-                // Send webhook for side selection
-                notifyWebhook(roomId, 'side', { mapName: target, team: teamName, side: data });
-
+                notifyWebhook(roomId, 'side', { mapName: target, team: teamName, side: safeData });
                 room.lastPickedMap = null;
                 room.step++;
             }
@@ -643,7 +647,6 @@ io.on('connection', (socket) => {
         }
         checkMatchEnd(room);
 
-        // Send webhook if match just finished
         if (room.finished) {
             notifyWebhook(roomId, 'match_complete', {});
         }
@@ -654,8 +657,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('admin_reset_match', ({ roomId, secret }) => {
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
-        if (!room || secret !== MASTER_SECRET) return;
+        if (!room || !safeCompare(secret, MASTER_SECRET)) return;
         if (room.timerHandle) clearTimeout(room.timerHandle);
         room.step = 0;
         room.logs = [`[ADMIN] Match reset by Admin`];
@@ -664,7 +668,6 @@ io.on('connection', (socket) => {
         room.playedMaps = [];
         room.timerEndsAt = null;
         room.ready = { A: false, B: false };
-        // Preserve timerDuration when resetting
         if (!room.timerDuration) room.timerDuration = 60;
         room.coinFlip = room.useCoinFlip ? { status: 'waiting_call', winner: null, result: null } : null;
         room.maps.forEach(m => { m.status = 'available'; m.pickedBy = null; m.side = null; });
@@ -674,14 +677,18 @@ io.on('connection', (socket) => {
     });
 
     socket.on('admin_undo_step', ({ roomId, secret }) => {
+        if (isRateLimited(socket.id)) return;
         const room = rooms[roomId];
-        if (!room || secret !== MASTER_SECRET || room.step === 0) return;
+        // 🛡️ SECURITY FIX: Used constant-time string comparison for the secret
+        if (!room || !safeCompare(secret, MASTER_SECRET) || room.step === 0) return;
+        
         if (room.timerHandle) clearTimeout(room.timerHandle);
         room.timerEndsAt = null;
         room.step--;
         if (room.finished) room.finished = false;
         const lastLog = room.logs[room.logs.length - 1];
-        if (!lastLog) return; // Safety check: no logs to undo
+        if (!lastLog) return; 
+        
         if (lastLog.includes('(') && lastLog.includes('side for')) {
             const splitIdx = lastLog.indexOf('(');
             const mapNameMatch = lastLog.match(/side for (.*?)\)/);
@@ -712,20 +719,15 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('update_state', safe);
     });
 
-    // Cleanup on disconnect (prevents memory leaks)
     socket.on('disconnect', () => {
-        // Decrement room user count if socket was in a room
         if (socket.currentRoom) {
             roomUserCounts[socket.currentRoom] = Math.max(0, (roomUserCounts[socket.currentRoom] || 0) - 1);
             broadcastRoomUserCount(socket.currentRoom);
         }
-
-        // Decrement total user count on disconnect
         connectedUsers = Math.max(0, connectedUsers - 1);
         broadcastUserCount();
-        // Note: We don't clean up timers here because multiple users can be in the same room
-        // Timers are cleaned up when rooms are deleted or matches finish
+        rateLimits.delete(socket.id); // Clear memory on disconnect
     });
 });
 
-server.listen(3001, () => { });
+server.listen(3001, () => { console.log('Server running on port 3001'); });
