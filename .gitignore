@@ -12,11 +12,16 @@ client/.env
 *.env.test.local
 *.env.production.local
 
-# Database files
+# Database files & Artifacts
 server/match_history.db
 server/match_history.db-journal
 server/match_history.db-wal
+server/match_history.db-shm
+*.db-shm
 match_history.json
+
+# Runtime State / Configs
+server/maps.json
 
 # Build outputs
 client/build/
