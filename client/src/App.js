@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import io from 'socket.io-client';
 
 // --- CONFIGURATION ---
@@ -10,86 +10,45 @@ const LOGO_URL = "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
 const socket = io(SOCKET_URL);
 
 // --- MAP PREFIX DETECTION ---
-// Helper function to get the full map name with appropriate prefix
 const getMapNameWithPrefix = (mapName) => {
     if (!mapName) return mapName;
+    if (mapName.includes('_')) return mapName.toLowerCase();
 
-    // If map name already contains a prefix (has underscore), return as is
-    if (mapName.includes('_')) {
-        return mapName.toLowerCase();
-    }
-
-    // Known defusal maps (de_ prefix)
     const defusalMaps = ['dust2', 'inferno', 'mirage', 'overpass', 'nuke', 'anubis', 'ancient', 'vertigo', 'cache', 'train', 'cobblestone', 'tuscan', 'sanctum', 'poseidon'];
-
-    // Known hostage maps (cs_ prefix)
     const hostageMaps = ['office', 'assault', 'italy', 'militia'];
-
-    // Known aim maps (aim_ prefix)
     const aimMaps = ['aim_map', 'aim_redline', 'aim_ag_texture2'];
-
-    // Known awp maps (awp_ prefix)
     const awpMaps = ['awp_india', 'awp_lego_2', 'awp_map'];
-
-    // Known ar_ maps (arms race)
     const arMaps = ['shoots', 'monastery', 'baggage', 'lake', 'stmarc', 'safehouse', 'sugarcane'];
-
-    // Known bhop maps (bhop_ prefix)
     const bhopMaps = ['bhop_map', 'bhop_easy', 'bhop_hard'];
-
-    // Known ze maps (ze_ prefix - zombie escape)
     const zeMaps = ['ze_map', 'ze_escape', 'ze_survival'];
 
     const lowerName = mapName.toLowerCase();
 
-    // Check each category
-    if (defusalMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `de_${lowerName}`;
-    }
-    if (hostageMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `cs_${lowerName}`;
-    }
-    if (aimMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `aim_${lowerName}`;
-    }
-    if (awpMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `awp_${lowerName}`;
-    }
-    if (arMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `ar_${lowerName}`;
-    }
-    if (bhopMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `bhop_${lowerName}`;
-    }
-    if (zeMaps.some(m => lowerName.includes(m) || m.includes(lowerName))) {
-        return `ze_${lowerName}`;
-    }
+    // 🛡️ BUG FIX: Removed `m.includes(lowerName)` which caused false positives (e.g. 'e' matching 'inferno')
+    if (defusalMaps.some(m => lowerName.includes(m))) return `de_${lowerName}`;
+    if (hostageMaps.some(m => lowerName.includes(m))) return `cs_${lowerName}`;
+    if (aimMaps.some(m => lowerName.includes(m))) return `aim_${lowerName}`;
+    if (awpMaps.some(m => lowerName.includes(m))) return `awp_${lowerName}`;
+    if (arMaps.some(m => lowerName.includes(m))) return `ar_${lowerName}`;
+    if (bhopMaps.some(m => lowerName.includes(m))) return `bhop_${lowerName}`;
+    if (zeMaps.some(m => lowerName.includes(m))) return `ze_${lowerName}`;
 
-    // Default to de_ for unknown maps (most common)
     return `de_${lowerName}`;
 };
 
-// Helper function to get map image URL with prefix detection
 const getMapImageUrl = (mapName, customImage = null) => {
-    if (customImage) {
-        return { primary: customImage, fallbacks: [] };
-    }
+    if (customImage) return { primary: customImage, fallbacks: [] };
 
     const mapWithPrefix = getMapNameWithPrefix(mapName);
     const baseName = mapWithPrefix.toLowerCase();
     const mapNameLower = mapName.toLowerCase();
 
-    // Primary URL with new GitHub repository
     const primaryUrl = `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.png`;
-
-    // Secondary fallback URLs - try all possible prefixes
     const prefixes = ['de_', 'ar_', 'cs_', 'awp_', 'aim_', 'bhop_', 'ze_'];
     const secondaryUrls = [];
 
-    // Add fallback with detected prefix first
     secondaryUrls.push(`https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.jpg`);
 
-    // Try all other prefixes as fallbacks
     prefixes.forEach(prefix => {
         const prefixedName = `${prefix}${mapNameLower}`;
         if (prefixedName !== baseName) {
@@ -98,7 +57,6 @@ const getMapImageUrl = (mapName, customImage = null) => {
         }
     });
 
-    // Legacy fallback URLs
     secondaryUrls.push(`https://image.gametracker.com/images/maps/160x120/csgo/${baseName}.jpg`);
     secondaryUrls.push(`https://image.gametracker.com/images/maps/160x120/csgo/de_${mapNameLower}.jpg`);
 
@@ -106,9 +64,19 @@ const getMapImageUrl = (mapName, customImage = null) => {
 };
 
 // --- UTILITIES ---
+// 🛡️ SECURITY FIX: Read the key, save to session, and immediately scrub it from the URL
 const getParams = () => {
     const params = new URLSearchParams(window.location.search);
-    return { room: params.get('room'), key: params.get('key') };
+    let room = params.get('room');
+    let key = params.get('key');
+
+    if (room && key) {
+        sessionStorage.setItem(`lot_key_${room}`, key);
+        window.history.replaceState({}, document.title, `${window.location.pathname}?room=${room}`);
+    } else if (room) {
+        key = sessionStorage.getItem(`lot_key_${room}`);
+    }
+    return { room, key };
 };
 
 const openInNewTab = (url) => window.open(url, '_blank', 'noopener,noreferrer');
@@ -123,130 +91,104 @@ const playSound = (type = 'action') => {
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
 
-        // Calm and soft sounds for different actions
         switch (type) {
             case 'ban':
-                oscillator.frequency.value = 220; // Softer lower pitch
-                oscillator.type = 'sine'; // Changed from square to sine for softer sound
-                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); // Much lower volume
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15); // Softer fade
+                oscillator.frequency.value = 220; 
+                oscillator.type = 'sine'; 
+                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.15);
                 break;
             case 'pick':
-                oscillator.frequency.value = 330; // Pleasant higher pitch
+                oscillator.frequency.value = 330; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); // Much lower volume
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); // Softer fade
+                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.12);
                 break;
             case 'side':
-                oscillator.frequency.value = 275; // Mid-range pleasant tone
-                oscillator.type = 'sine'; // Changed from triangle to sine
-                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); // Lower volume
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); // Softer fade
+                oscillator.frequency.value = 275; 
+                oscillator.type = 'sine'; 
+                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.1);
                 break;
             case 'ready':
-                oscillator.frequency.value = 440; // Pleasant A note
+                oscillator.frequency.value = 440; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.06, audioContext.currentTime); // Lower volume
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08); // Softer fade
+                gainNode.gain.setValueAtTime(0.06, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.08);
                 break;
             case 'coin':
-                // Continuous coin spinning sound - metallic wobble effect
                 const baseFreq = 200;
                 const wobbleAmount = 30;
-                const wobbleSpeed = 15; // How fast it wobbles
-                const totalDuration = 0.1; // Duration of each wobble cycle
-
-                // Create multiple oscillators for a richer, metallic sound
+                const wobbleSpeed = 15; 
+                const totalDuration = 0.1; 
                 for (let i = 0; i < 3; i++) {
                     const osc = audioContext.createOscillator();
                     const gain = audioContext.createGain();
                     osc.connect(gain);
                     gain.connect(audioContext.destination);
-
-                    // Different frequencies for harmonics
                     osc.frequency.setValueAtTime(baseFreq + (i * 50), audioContext.currentTime);
-                    osc.type = i === 0 ? 'sine' : 'triangle'; // Mix of wave types
-
-                    // Volume envelope
+                    osc.type = i === 0 ? 'sine' : 'triangle'; 
                     const startTime = audioContext.currentTime + (i * 0.03);
                     gain.gain.setValueAtTime(0, startTime);
                     gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + 0.01);
                     gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + totalDuration - 0.01);
                     gain.gain.linearRampToValueAtTime(0, startTime + totalDuration);
-
-                    // Add frequency wobble for spinning effect
                     for (let t = 0; t < totalDuration; t += 0.02) {
                         const wobble = Math.sin((t * wobbleSpeed) * Math.PI * 2) * wobbleAmount;
-                        osc.frequency.setValueAtTime(
-                            baseFreq + (i * 50) + wobble,
-                            startTime + t
-                        );
+                        osc.frequency.setValueAtTime(baseFreq + (i * 50) + wobble, startTime + t);
                     }
-
                     osc.start(startTime);
                     osc.stop(startTime + totalDuration);
                 }
                 return;
             case 'coinLoop':
-                // Continuous spinning coin sound - loops during animation
                 const baseFreq2 = 180;
                 const wobbleAmount2 = 25;
                 const wobbleSpeed2 = 12;
                 const cycleDuration = 0.15;
-
-                // Create metallic spinning sound with multiple oscillators
                 for (let i = 0; i < 4; i++) {
                     const osc = audioContext.createOscillator();
                     const gain = audioContext.createGain();
                     const filter = audioContext.createBiquadFilter();
-
                     osc.connect(filter);
                     filter.connect(gain);
                     gain.connect(audioContext.destination);
-
                     filter.type = 'lowpass';
                     filter.frequency.value = 500 + (i * 100);
-
                     const freq = baseFreq2 + (i * 40);
                     osc.type = i === 0 ? 'sine' : (i === 1 ? 'triangle' : 'sawtooth');
-
-                    // Volume modulation for metallic wobble
                     const startTime2 = audioContext.currentTime;
                     gain.gain.setValueAtTime(0.03 - (i * 0.005), startTime2);
                     gain.gain.linearRampToValueAtTime(0, startTime2 + cycleDuration);
-
-                    // Frequency wobble for spinning effect
                     for (let t = 0; t < cycleDuration; t += 0.01) {
                         const wobble = Math.sin((t * wobbleSpeed2) * Math.PI * 2) * wobbleAmount2;
                         osc.frequency.setValueAtTime(freq + wobble, startTime2 + t);
                     }
-
                     osc.start(startTime2);
                     osc.stop(startTime2 + cycleDuration);
                 }
                 return;
             case 'countdown':
-                // Soft countdown tick sound
-                oscillator.frequency.value = 400; // Pleasant tick tone
+                oscillator.frequency.value = 400; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.05, audioContext.currentTime); // Very soft
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05); // Quick, soft fade
+                gainNode.gain.setValueAtTime(0.05, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.05);
                 break;
             default:
-                oscillator.frequency.value = 300; // Pleasant mid tone
+                oscillator.frequency.value = 300; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); // Lower volume
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); // Softer fade
+                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); 
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + 0.12);
         }
@@ -266,7 +208,6 @@ const Countdown = ({ endsAt, soundEnabled = false }) => {
             return;
         }
 
-        // Initialize on first run
         const endsAtTime = typeof endsAt === 'number' ? endsAt : new Date(endsAt).getTime();
         const initialDiff = Math.floor((endsAtTime - Date.now()) / 1000);
         const initialTimeLeft = initialDiff > 0 ? initialDiff : 0;
@@ -278,7 +219,6 @@ const Countdown = ({ endsAt, soundEnabled = false }) => {
             const diff = Math.floor((endsAtTime - Date.now()) / 1000);
             const newTimeLeft = diff > 0 ? diff : 0;
 
-            // Play countdown sound from 10 to 0 (only when time decreases)
             if (soundEnabled && prevTimeRef.current !== null && newTimeLeft <= 10 && newTimeLeft >= 0 && newTimeLeft < prevTimeRef.current) {
                 playSound('countdown');
             }
@@ -375,52 +315,47 @@ const MapCard = ({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, acti
     const [imageFailed, setImageFailed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
 
-    // Extract complex expression to separate variable for useEffect dependency
     const fallbacksKey = mapImageUrls.fallbacks.join(',');
 
-    // Test image loading
     useEffect(() => {
         if (map.customImage) {
-            // Custom images are assumed to work
             setImageFailed(false);
-            setImageUrl(initialUrl); // Ensure imageUrl is set for custom images
+            setImageUrl(initialUrl); 
             return;
         }
 
-        let testImage; // Declare testImage once
+        let testImage; 
         let timeoutId;
-        let currentIndex = -1; // Start before the first fallback to try primary first
+        let currentIndex = -1; 
 
-        const allUrlsToTest = [initialUrl, ...mapImageUrls.fallbacks]; // Corrected declaration
+        const allUrlsToTest = [initialUrl, ...mapImageUrls.fallbacks]; 
 
         const tryNextUrl = () => {
             currentIndex++;
             if (currentIndex >= allUrlsToTest.length) {
-                // All URLs failed
                 setImageFailed(true);
                 return;
             }
 
             const testUrl = allUrlsToTest[currentIndex];
-            testImage = new Image(); // Create new image for each attempt
+            testImage = new Image(); 
 
             testImage.onload = () => {
                 clearTimeout(timeoutId);
-                setImageUrl(testUrl); // Set the successfully loaded URL
+                setImageUrl(testUrl); 
                 setImageFailed(false);
             };
 
             testImage.onerror = () => {
                 clearTimeout(timeoutId);
-                tryNextUrl(); // Try the next URL
+                tryNextUrl(); 
             };
 
             timeoutId = setTimeout(() => {
-                // If timeout, clear handlers and try next URL
                 testImage.onload = null;
                 testImage.onerror = null;
                 tryNextUrl();
-            }, 3000); // 3 second timeout per URL
+            }, 3000); 
 
             testImage.src = testUrl;
         };
@@ -429,12 +364,13 @@ const MapCard = ({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, acti
 
         return () => {
             clearTimeout(timeoutId);
-            testImage.onload = null;
-            testImage.onerror = null;
+            if (testImage) {
+               testImage.onload = null;
+               testImage.onerror = null;
+            }
         };
-    }, [map.name, initialUrl, fallbacksKey, map.customImage, mapImageUrls.fallbacks]); // Dependencies
+    }, [map.name, initialUrl, fallbacksKey, map.customImage, mapImageUrls.fallbacks]); 
 
-    // Generate fallback URLs for CSS
     const fallbackUrls = mapImageUrls.fallbacks.length > 0
         ? ', ' + mapImageUrls.fallbacks.map(url => `url(${url})`).join(', ')
         : '';
@@ -462,39 +398,14 @@ const MapCard = ({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, acti
         >
             {imageFailed && (
                 <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
                     background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-                    borderRadius: '10px',
-                    padding: '20px',
-                    textAlign: 'center',
-                    zIndex: 1
+                    borderRadius: '10px', padding: '20px', textAlign: 'center', zIndex: 1
                 }}>
-                    <div style={{
-                        fontSize: '2rem',
-                        color: '#888',
-                        marginBottom: '10px',
-                        opacity: 0.5
-                    }}>🖼️</div>
-                    <div style={{
-                        fontSize: '0.85rem',
-                        color: '#aaa',
-                        marginBottom: '15px',
-                        fontWeight: 'bold'
-                    }}>MAP IMAGE NOT AVAILABLE</div>
-                    <div style={{
-                        fontSize: '1.2rem',
-                        color: '#fff',
-                        fontWeight: 'bold',
-                        textTransform: 'uppercase'
-                    }}>{map.name}</div>
+                    <div style={{ fontSize: '2rem', color: '#888', marginBottom: '10px', opacity: 0.5 }}>🖼️</div>
+                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginBottom: '15px', fontWeight: 'bold' }}>MAP IMAGE NOT AVAILABLE</div>
+                    <div style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 'bold', textTransform: 'uppercase' }}>{map.name}</div>
                 </div>
             )}
             {map.status === 'picked' && mapOrderLabel && <div style={styles.mapOrderBadge}>{mapOrderLabel}</div>}
@@ -517,34 +428,20 @@ const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = t
 
     useEffect(() => {
         if (gameState.coinFlip.result && gameState.coinFlip.status === 'deciding') {
-            // Generate random values for each flip
-            const randomRotations = Math.floor(Math.random() * 1800) + 1800; // 1800-3600 degrees
-            const randomDuration = (Math.random() * 1.5) + 2.5; // 2.5-4 seconds
-            const randomXAxis = (Math.random() * 20) - 10; // -10 to 10 degrees
-            const randomZAxis = (Math.random() * 20) - 10; // -10 to 10 degrees
+            const randomRotations = Math.floor(Math.random() * 1800) + 1800; 
+            const randomDuration = (Math.random() * 1.5) + 2.5; 
+            const randomXAxis = (Math.random() * 20) - 10; 
+            const randomZAxis = (Math.random() * 20) - 10; 
 
-            setFlipAnimation({
-                rotations: randomRotations,
-                duration: randomDuration,
-                xAxis: randomXAxis,
-                zAxis: randomZAxis
-            });
-
+            setFlipAnimation({ rotations: randomRotations, duration: randomDuration, xAxis: randomXAxis, zAxis: randomZAxis });
             setIsFlipping(true);
 
-            // Play spinning coin sound continuously during flip
             if (soundEnabled) {
-                // Play initial coin sound
                 playSound('coin');
-
-                // Loop the spinning sound every 150ms during the animation
-                soundIntervalRef.current = setInterval(() => {
-                    playSound('coinLoop');
-                }, 150);
+                soundIntervalRef.current = setInterval(() => { playSound('coinLoop'); }, 150);
             }
 
             setTimeout(() => {
-                // Clear the sound interval
                 if (soundIntervalRef.current) {
                     clearInterval(soundIntervalRef.current);
                     soundIntervalRef.current = null;
@@ -554,7 +451,6 @@ const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = t
             }, randomDuration * 1000);
         }
 
-        // Cleanup on unmount or when component changes
         return () => {
             if (soundIntervalRef.current) {
                 clearInterval(soundIntervalRef.current);
@@ -567,65 +463,25 @@ const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = t
     const isWinner = myRole === gameState.coinFlip.winner;
 
     return (
-        // FIXED: Flat Slate Blue Background (#1e293b) - Not Black
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#1e293b', zIndex: 3000, display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
             <style>
                 {flipAnimation && `
                     @keyframes coinFlip3D {
-                        0% { 
-                            transform: rotateY(0deg) rotateX(0deg) rotateZ(0deg) scale(1);
-                            filter: brightness(1);
-                        }
-                        25% {
-                            transform: rotateY(${flipAnimation.rotations * 0.25}deg) rotateX(${flipAnimation.xAxis}deg) rotateZ(${flipAnimation.zAxis}deg) scale(1.1);
-                            filter: brightness(1.3);
-                        }
-                        50% {
-                            transform: rotateY(${flipAnimation.rotations * 0.5}deg) rotateX(${-flipAnimation.xAxis}deg) rotateZ(${-flipAnimation.zAxis}deg) scale(0.95);
-                            filter: brightness(0.8);
-                        }
-                        75% {
-                            transform: rotateY(${flipAnimation.rotations * 0.75}deg) rotateX(${flipAnimation.xAxis * 0.5}deg) rotateZ(${flipAnimation.zAxis * 0.5}deg) scale(1.05);
-                            filter: brightness(1.2);
-                        }
-                        100% { 
-                            transform: rotateY(${flipAnimation.rotations}deg) rotateX(0deg) rotateZ(0deg) scale(1);
-                            filter: brightness(1);
-                        }
+                        0% { transform: rotateY(0deg) rotateX(0deg) rotateZ(0deg) scale(1); filter: brightness(1); }
+                        25% { transform: rotateY(${flipAnimation.rotations * 0.25}deg) rotateX(${flipAnimation.xAxis}deg) rotateZ(${flipAnimation.zAxis}deg) scale(1.1); filter: brightness(1.3); }
+                        50% { transform: rotateY(${flipAnimation.rotations * 0.5}deg) rotateX(${-flipAnimation.xAxis}deg) rotateZ(${-flipAnimation.zAxis}deg) scale(0.95); filter: brightness(0.8); }
+                        75% { transform: rotateY(${flipAnimation.rotations * 0.75}deg) rotateX(${flipAnimation.xAxis * 0.5}deg) rotateZ(${flipAnimation.zAxis * 0.5}deg) scale(1.05); filter: brightness(1.2); }
+                        100% { transform: rotateY(${flipAnimation.rotations}deg) rotateX(0deg) rotateZ(0deg) scale(1); filter: brightness(1); }
                     }
-                    
                     @keyframes coinShadow {
-                        0%, 100% {
-                            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 
-                                        0 0 50px rgba(255, 215, 0, 0.3),
-                                        inset 0 0 20px rgba(255, 255, 255, 0.1),
-                                        0 0 0 0 rgba(255, 215, 0, 0);
-                        }
-                        25%, 75% {
-                            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3), 
-                                        0 0 80px rgba(255, 215, 0, 0.6),
-                                        inset 0 0 30px rgba(255, 255, 255, 0.2),
-                                        0 0 40px 10px rgba(255, 215, 0, 0.3);
-                        }
-                        50% {
-                            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 
-                                        0 0 100px rgba(255, 215, 0, 0.8),
-                                        inset 0 0 40px rgba(255, 255, 255, 0.3),
-                                        0 0 60px 20px rgba(255, 215, 0, 0.5);
-                        }
+                        0%, 100% { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 50px rgba(255, 215, 0, 0.3), inset 0 0 20px rgba(255, 255, 255, 0.1), 0 0 0 0 rgba(255, 215, 0, 0); }
+                        25%, 75% { box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3), 0 0 80px rgba(255, 215, 0, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.2), 0 0 40px 10px rgba(255, 215, 0, 0.3); }
+                        50% { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 100px rgba(255, 215, 0, 0.8), inset 0 0 40px rgba(255, 255, 255, 0.3), 0 0 60px 20px rgba(255, 215, 0, 0.5); }
                     }
-                    
                     @keyframes fadeInScale {
-                        0% {
-                            opacity: 0;
-                            transform: scale(0.8);
-                        }
-                        100% {
-                            opacity: 1;
-                            transform: scale(1);
-                        }
+                        0% { opacity: 0; transform: scale(0.8); }
+                        100% { opacity: 1; transform: scale(1); }
                     }
-                    
                     .coin-3d {
                         transform-style: preserve-3d;
                         backface-visibility: hidden;
@@ -650,84 +506,23 @@ const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = t
             )}
 
             {(isFlipping || showResult) && (
-                <div style={{
-                    perspective: '2000px',
-                    perspectiveOrigin: 'center center',
-                    marginBottom: '40px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    position: 'relative'
-                }}>
-                    <div
-                        className={isFlipping ? 'coin-3d' : ''}
-                        style={{
-                            width: '180px',
-                            height: '180px',
-                            borderRadius: '50%',
-                            border: '6px solid rgba(255, 255, 255, 0.9)',
+                <div style={{ perspective: '2000px', perspectiveOrigin: 'center center', marginBottom: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+                    <div className={isFlipping ? 'coin-3d' : ''} style={{
+                            width: '180px', height: '180px', borderRadius: '50%', border: '6px solid rgba(255, 255, 255, 0.9)',
                             background: gameState.coinFlip.result === 'heads'
                                 ? 'radial-gradient(circle at 30% 30%, #ffd700 0%, #ffed4e 30%, #b8860b 70%, #8b6914 100%)'
                                 : 'radial-gradient(circle at 30% 30%, #cbd5e1 0%, #94a3b8 30%, #64748b 70%, #475569 100%)',
-                            marginBottom: '20px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            fontSize: '5rem',
-                            fontWeight: '900',
-                            color: '#fff',
-                            textShadow: '0 4px 10px rgba(0,0,0,0.8), 0 0 20px rgba(255,255,255,0.3)',
-                            fontFamily: "'Rajdhani', sans-serif",
-                            position: 'relative',
-                            overflow: 'hidden',
-                            transition: isFlipping ? 'none' : 'all 0.5s ease'
-                        }}
-                    >
-                        {/* 3D depth effect with pseudo-elements */}
-                        <div style={{
-                            position: 'absolute',
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: '50%',
-                            background: gameState.coinFlip.result === 'heads'
-                                ? 'radial-gradient(circle at 70% 70%, rgba(0,0,0,0.3) 0%, transparent 60%)'
-                                : 'radial-gradient(circle at 70% 70%, rgba(0,0,0,0.4) 0%, transparent 60%)',
-                            pointerEvents: 'none'
-                        }}></div>
-                        <div style={{
-                            position: 'absolute',
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: '50%',
-                            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4) 0%, transparent 50%)',
-                            pointerEvents: 'none'
-                        }}></div>
-                        <span style={{
-                            position: 'relative',
-                            zIndex: 1,
-                            transform: isFlipping ? 'scale(0.8)' : 'scale(1)',
-                            transition: 'transform 0.3s ease'
+                            marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '5rem', fontWeight: '900', color: '#fff', textShadow: '0 4px 10px rgba(0,0,0,0.8), 0 0 20px rgba(255,255,255,0.3)', fontFamily: "'Rajdhani', sans-serif", position: 'relative', overflow: 'hidden', transition: isFlipping ? 'none' : 'all 0.5s ease'
                         }}>
+                        <div style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: gameState.coinFlip.result === 'heads' ? 'radial-gradient(circle at 70% 70%, rgba(0,0,0,0.3) 0%, transparent 60%)' : 'radial-gradient(circle at 70% 70%, rgba(0,0,0,0.4) 0%, transparent 60%)', pointerEvents: 'none' }}></div>
+                        <div style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4) 0%, transparent 50%)', pointerEvents: 'none' }}></div>
+                        <span style={{ position: 'relative', zIndex: 1, transform: isFlipping ? 'scale(0.8)' : 'scale(1)', transition: 'transform 0.3s ease' }}>
                             {isFlipping ? '?' : (gameState.coinFlip.result === 'heads' ? 'H' : 'T')}
                         </span>
                     </div>
 
                     {!isFlipping && (
-                        // FIXED: Black Bold Text on White with smooth fade-in
-                        <div style={{
-                            background: '#fff',
-                            color: '#000',
-                            padding: '12px 45px',
-                            borderRadius: '50px',
-                            fontSize: '2.2rem',
-                            fontWeight: '900',
-                            textTransform: 'uppercase',
-                            fontFamily: "'Rajdhani', sans-serif",
-                            boxShadow: '0 0 30px rgba(255, 255, 255, 0.7), 0 0 60px rgba(255, 215, 0, 0.4)',
-                            animation: 'fadeInScale 0.5s ease-out',
-                            transform: 'scale(1)',
-                            transition: 'all 0.3s ease'
-                        }}>
+                        <div style={{ background: '#fff', color: '#000', padding: '12px 45px', borderRadius: '50px', fontSize: '2.2rem', fontWeight: '900', textTransform: 'uppercase', fontFamily: "'Rajdhani', sans-serif", boxShadow: '0 0 30px rgba(255, 255, 255, 0.7), 0 0 60px rgba(255, 215, 0, 0.4)', animation: 'fadeInScale 0.5s ease-out', transform: 'scale(1)', transition: 'all 0.3s ease' }}>
                             {gameState.coinFlip.result}
                         </div>
                     )}
@@ -770,7 +565,8 @@ export default function App() {
     const [inputError, setInputError] = useState(false);
 
     const isAdminRoute = window.location.pathname === '/admin';
-    const [adminSecret, setAdminSecret] = useState(localStorage.getItem('adminSecret') || '');
+    // 🛡️ SECURITY FIX: Store Admin Secret in sessionStorage instead of localStorage to prevent permanent XSS hijacking
+    const [adminSecret, setAdminSecret] = useState(sessionStorage.getItem('adminSecret') || '');
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
     const [adminTeamA, setAdminTeamA] = useState('');
@@ -791,16 +587,15 @@ export default function App() {
     const [customSequence, setCustomSequence] = useState([]);
     const [userCustomMap, setUserCustomMap] = useState('');
     const [useTimer, setUseTimer] = useState(false);
-    const [timerDuration, setTimerDuration] = useState(60); // Default 60 seconds
+    const [timerDuration, setTimerDuration] = useState(60); 
     const [useCoinFlip, setUseCoinFlip] = useState(false);
-    const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('soundEnabled') !== 'false'); // Default enabled
-    const [userCount, setUserCount] = useState(0); // Track total connected users
+    const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('soundEnabled') !== 'false');
+    const [userCount, setUserCount] = useState(0); 
 
-    const prevLogsRef = useRef([]); // Track previous logs to detect new actions 
+    const prevLogsRef = useRef([]); 
 
     const [vetoMode, setVetoMode] = useState('vrs');
 
-    // Discord Webhook States
     const [adminWebhook, setAdminWebhook] = useState('');
     const [tempWebhook, setTempWebhook] = useState('');
     const [webhookTestStatus, setWebhookTestStatus] = useState(null);
@@ -808,11 +603,14 @@ export default function App() {
     const fileInputA = useRef(null);
     const fileInputB = useRef(null);
 
+    // 🛡️ SCALABILITY FIX: Memoize Styles so React doesn't regenerate the object 60x a second during countdowns
+    const styles = useMemo(() => getStyles(isMobile), [isMobile]);
+
     const fetchAdminHistory = useCallback((secret) => {
         fetch(`${SOCKET_URL}/api/admin/history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret }) })
             .then(res => res.json()).then(data => {
                 if (data.error) { if (!isAdminRoute) alert(data.error); }
-                else { setHistoryData(data); setIsAdminAuthenticated(true); localStorage.setItem('adminSecret', secret); }
+                else { setHistoryData(data); setIsAdminAuthenticated(true); sessionStorage.setItem('adminSecret', secret); }
             });
     }, [isAdminRoute]);
 
@@ -841,29 +639,18 @@ export default function App() {
         if (isAdminRoute && adminSecret) {
             fetchAdminHistory(adminSecret);
             fetchMapPool(adminSecret);
-            // Load admin webhook
             fetch(`${SOCKET_URL}/api/admin/webhook/get`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ secret: adminSecret })
-            })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.webhookUrl) setAdminWebhook(data.webhookUrl);
-                })
-                .catch(() => { });
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret })
+            }).then(r => r.json()).then(data => { if (data.webhookUrl) setAdminWebhook(data.webhookUrl); }).catch(() => { });
         }
 
-        // Listen for total user count updates (works on all pages)
         socket.on('user_count', (count) => {
             setUserCount(count);
         });
 
-
         if (params.room && !isAdminRoute) {
             socket.emit('join_room', { roomId: params.room, key: params.key });
             socket.on('update_state', (data) => {
-                // Detect new actions by comparing logs
                 if (data && data.logs && prevLogsRef.current.length > 0 && soundEnabled) {
                     const newLogs = data.logs.slice(prevLogsRef.current.length);
                     newLogs.forEach(log => {
@@ -873,7 +660,6 @@ export default function App() {
                         else if (log.includes('[READY]')) playSound('ready');
                         else if (log.includes('[COIN]')) playSound('coin');
                         else if (log.includes('[AUTO-BAN]') || log.includes('[AUTO-PICK]') || log.includes('[AUTO-SIDE]')) {
-                            // Play sound for auto actions too
                             if (log.includes('AUTO-BAN')) playSound('ban');
                             else if (log.includes('AUTO-PICK')) playSound('pick');
                             else if (log.includes('AUTO-SIDE')) playSound('side');
@@ -902,13 +688,23 @@ export default function App() {
             }
         });
 
-        return () => { socket.off('update_state'); socket.off('role_assigned'); window.removeEventListener('resize', handleResize); };
+        // 🛡️ MEMORY LEAK FIX: Ensure all Socket listeners are cleaned up when the component unmounts
+        return () => { 
+            socket.off('update_state'); 
+            socket.off('role_assigned'); 
+            socket.off('user_count');
+            socket.off('match_created');
+            window.removeEventListener('resize', handleResize); 
+        };
     }, [params.room, params.key, isAdminRoute, adminSecret, fetchAdminHistory, fetchMapPool, soundEnabled]);
 
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
         if (file) {
             if (file.size > 2000000) return alert("File too large. Max 2MB.");
+            // 🛡️ SECURITY FIX: Block SVG files containing malicious scripts
+            if (!file.type.match(/^image\/(jpeg|png|webp|gif)$/)) return alert("Only JPG, PNG, WEBP, and GIF are allowed.");
+            
             const reader = new FileReader();
             reader.onloadend = () => {
                 if (team === 'A') setTeamALogo(reader.result);
@@ -943,9 +739,13 @@ export default function App() {
             if (customSequence.length === 0) return alert("Please define at least one step in the sequence.");
         }
 
+        // 🛡️ SECURITY FIX: Basic Client SSRF Webhook Validation
+        const webhookVal = tempWebhook.trim();
+        if (webhookVal && !webhookVal.startsWith('https://discord.com/api/webhooks/') && !webhookVal.startsWith('https://discordapp.com/api/webhooks/')) {
+            return alert("Invalid Discord Webhook format.");
+        }
+
         if (!isFromAdmin) setIsGenerating(true);
-        const durationToSend = useTimer ? timerDuration : 60;
-        console.log('[CLIENT] Creating match - useTimer:', useTimer, 'timerDuration:', timerDuration, 'sending:', durationToSend);
         socket.emit('create_match', {
             teamA: tA, teamB: tB,
             teamALogo: logoA, teamBLogo: logoB,
@@ -955,16 +755,15 @@ export default function App() {
             useTimer,
             useCoinFlip,
             timerDuration: useTimer ? parseInt(timerDuration) : 60,
-            tempWebhookUrl: tempWebhook.trim()
+            tempWebhookUrl: webhookVal
         });
         setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo('');
         setUseCoinFlip(false);
-        setTempWebhook(''); // Clear temp webhook after match creation
+        setTempWebhook(''); 
     };
 
     const handleAction = (data) => {
         if (!gameState || gameState.finished) return;
-        // Play sound immediately on user action (before server confirms)
         if (soundEnabled) {
             const currentStep = gameState.sequence[gameState.step];
             if (currentStep) {
@@ -981,7 +780,6 @@ export default function App() {
         socket.emit('team_ready', { roomId: params.room, key: params.key });
     };
 
-    // --- COIN HANDLERS ---
     const handleCoinCall = (call) => {
         if (soundEnabled) playSound('coin');
         socket.emit('coin_call', { roomId: params.room, call, key: params.key });
@@ -1019,7 +817,6 @@ export default function App() {
     const deleteMatch = (id) => { if (!window.confirm("DELETE?")) return; fetch(`${SOCKET_URL}/api/admin/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, secret: adminSecret }) }).then(res => res.json()).then(data => { if (data.success) fetchAdminHistory(adminSecret); }); };
     const nukeHistory = () => { if (!window.confirm("DELETE ALL?")) return; fetch(`${SOCKET_URL}/api/admin/reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) }).then(res => res.json()).then(data => { if (data.success) fetchAdminHistory(adminSecret); }); };
 
-    // --- ADMIN ACTIONS ---
     const handleAdminReset = (roomId) => {
         if (!window.confirm("Reset this match completely?")) return;
         socket.emit('admin_reset_match', { roomId, secret: adminSecret });
@@ -1070,7 +867,6 @@ export default function App() {
         return isMe ? `YOUR TURN: ${actionText} ${count} MAP${count > 1 ? 'S' : ''}` : `WAITING FOR ${teamName.toUpperCase()}`;
     };
 
-    // --- NEW HELPER FOR ROLE BADGE ---
     const getRoleLabel = () => {
         if (myRole === 'admin') return { text: 'ADMIN VIEW', color: '#ffd700' };
         if (myRole === 'A') return { text: `${gameState.teamA} VIEW`, color: '#00d4ff' };
@@ -1078,7 +874,8 @@ export default function App() {
         return { text: 'SPECTATOR VIEW', color: '#888' };
     };
 
-    const getMapLogData = (mapName) => {
+    // 🛡️ SCALABILITY FIX: Wraps the loop in a callback so it doesn't recalculate functions repeatedly
+    const getMapLogData = useCallback((mapName) => {
         if (!gameState || !gameState.logs) return null;
         const banLog = gameState.logs.find(l => l.includes(`banned ${mapName}`));
         if (banLog) return { type: 'ban', team: banLog.split(' banned ')[0].replace('[BAN] ', '').trim() };
@@ -1086,27 +883,21 @@ export default function App() {
         if (pickLog) {
             const teamName = pickLog.split(' picked ')[0].replace('[PICK] ', '').trim();
             let sideText = "WAITING FOR SIDE";
-
-            // First check if side is in the pickLog itself (inline format)
             const inlineMatch = pickLog.match(/\((.*?) chose (CT|T) side for/);
             if (inlineMatch) {
                 sideText = `${inlineMatch[1]} CHOSE ${inlineMatch[2]}`;
             } else {
-                // Check for separate side log
                 const sideLog = gameState.logs.find(l => l.includes(`side for ${mapName}`));
                 if (sideLog) {
                     const match = sideLog.match(/(?:\[SIDE\]|\() (.*?) chose (CT|T) side/);
                     if (match) sideText = `${match[1]} CHOSE ${match[2]}`;
                 }
             }
-
-            // Also check the map.side property as final fallback
             const mapObj = gameState.maps.find(m => m.name === mapName);
             if (mapObj && mapObj.side && sideText === "WAITING FOR SIDE") {
                 const sideChooser = mapObj.pickedBy === 'A' ? gameState.teamA : gameState.teamB;
                 sideText = `${sideChooser} CHOSE ${mapObj.side}`;
             }
-
             return { type: 'pick', team: teamName, sideText };
         }
         if (gameState.logs.find(l => l.includes(`[DECIDER] ${mapName} (Knife`))) return { type: 'decider', sideText: 'SIDE VIA KNIFE' };
@@ -1116,9 +907,8 @@ export default function App() {
             if (match) return { type: 'decider', sideText: `${match[1]} CHOSE ${match[2]}` };
         }
         return null;
-    };
+    }, [gameState]);
 
-    const styles = getStyles(isMobile);
 
     // --- RENDER ADMIN ---
     if (isAdminRoute) {
@@ -1127,31 +917,15 @@ export default function App() {
             <div style={{ ...styles.container, background: '#05070a' }}>
                 <h1 style={{ ...styles.neonTitle, marginTop: '20px', fontSize: '2.5rem' }}>CONTROL PANEL</h1>
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    {/* Total User Count in Admin Panel */}
                     <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        color: '#00ff00',
-                        fontSize: '0.9rem',
-                        fontWeight: 'bold',
-                        background: 'rgba(0, 0, 0, 0.6)',
-                        padding: '6px 12px',
-                        borderRadius: '5px',
-                        border: '1px solid #00ff00',
-                        fontFamily: "'Rajdhani', sans-serif"
+                        display: 'flex', alignItems: 'center', gap: '8px', color: '#00ff00', fontSize: '0.9rem',
+                        fontWeight: 'bold', background: 'rgba(0, 0, 0, 0.6)', padding: '6px 12px',
+                        borderRadius: '5px', border: '1px solid #00ff00', fontFamily: "'Rajdhani', sans-serif"
                     }}>
-                        <div style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            background: '#00ff00',
-                            boxShadow: '0 0 10px #00ff00',
-                            animation: 'pulse 2s infinite'
-                        }}></div>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff00', boxShadow: '0 0 10px #00ff00', animation: 'pulse 2s infinite' }}></div>
                         <span>Total: {userCount}</span>
                     </div>
-                    <div style={{ color: '#00d4ff', fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => { localStorage.removeItem('adminSecret'); window.location.reload(); }}>LOGOUT</div>
+                    <div style={{ color: '#00d4ff', fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => { sessionStorage.removeItem('adminSecret'); window.location.reload(); }}>LOGOUT</div>
                 </div>
                 <button onClick={goHome} style={{ position: 'absolute', top: '20px', left: '20px', background: 'transparent', border: '1px solid #444', color: '#fff', padding: '5px 10px' }}>← PUBLIC HOME</button>
 
@@ -1176,18 +950,12 @@ export default function App() {
                                     {useTimer && (
                                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                             {[30, 45, 60, 90, 120].map(seconds => (
-                                                <button
-                                                    key={seconds}
-                                                    onClick={() => setTimerDuration(seconds)}
+                                                <button key={seconds} onClick={() => setTimerDuration(seconds)}
                                                     style={{
-                                                        ...styles.modeBtn,
-                                                        background: timerDuration === seconds ? '#00d4ff' : 'transparent',
-                                                        color: timerDuration === seconds ? '#000' : '#aaa',
-                                                        borderColor: timerDuration === seconds ? '#00d4ff' : '#333',
-                                                        padding: '5px 15px',
-                                                        fontSize: '0.9rem'
-                                                    }}
-                                                >
+                                                        ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent',
+                                                        color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333',
+                                                        padding: '5px 15px', fontSize: '0.9rem'
+                                                    }}>
                                                     {seconds}s
                                                 </button>
                                             ))}
@@ -1243,85 +1011,37 @@ export default function App() {
                                     placeholder="https://discord.com/api/webhooks/..."
                                 />
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                    <button
-                                        onClick={() => {
-                                            fetch(`${SOCKET_URL}/api/admin/webhook/set`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ secret: adminSecret, webhookUrl: adminWebhook })
-                                            })
-                                                .then(r => r.json())
-                                                .then(data => {
-                                                    if (data.success) {
-                                                        setWebhookTestStatus({ success: true, message: 'Webhook saved successfully!' });
-                                                        setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                    } else {
-                                                        setWebhookTestStatus({ success: false, message: data.error || 'Failed to save' });
-                                                        setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                    }
-                                                })
-                                                .catch(() => {
-                                                    setWebhookTestStatus({ success: false, message: 'Network error' });
-                                                    setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                });
-                                        }}
-                                        style={{ ...styles.modeBtn, flex: 1, background: '#00d4ff', color: '#000' }}
-                                    >
-                                        SAVE
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            if (!adminWebhook.trim()) return;
-                                            setWebhookTestStatus({ success: null, message: 'Testing...' });
-                                            fetch(`${SOCKET_URL}/api/admin/webhook/test`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ secret: adminSecret, webhookUrl: adminWebhook })
-                                            })
-                                                .then(r => r.json())
-                                                .then(data => {
-                                                    if (data.success) {
-                                                        setWebhookTestStatus({ success: true, message: 'Test sent! Check Discord.' });
-                                                        setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                    } else {
-                                                        setWebhookTestStatus({ success: false, message: data.error || 'Test failed' });
-                                                        setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                    }
-                                                })
-                                                .catch(() => {
-                                                    setWebhookTestStatus({ success: false, message: 'Network error' });
-                                                    setTimeout(() => setWebhookTestStatus(null), 3000);
-                                                });
-                                        }}
-                                        style={{ ...styles.modeBtn, flex: 1, background: '#ffa500', color: '#000' }}
-                                    >
-                                        TEST
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setAdminWebhook('');
-                                            fetch(`${SOCKET_URL}/api/admin/webhook/set`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ secret: adminSecret, webhookUrl: '' })
+                                    <button onClick={() => {
+                                        fetch(`${SOCKET_URL}/api/admin/webhook/set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret, webhookUrl: adminWebhook }) })
+                                            .then(r => r.json()).then(data => {
+                                                setWebhookTestStatus({ success: data.success, message: data.success ? 'Webhook saved successfully!' : data.error || 'Failed to save' });
+                                                setTimeout(() => setWebhookTestStatus(null), 3000);
+                                            }).catch(() => {
+                                                setWebhookTestStatus({ success: false, message: 'Network error' });
+                                                setTimeout(() => setWebhookTestStatus(null), 3000);
                                             });
-                                        }}
-                                        style={{ ...styles.modeBtn, flex: 1, background: '#ff4444', color: '#fff' }}
-                                    >
-                                        CLEAR
-                                    </button>
+                                    }} style={{ ...styles.modeBtn, flex: 1, background: '#00d4ff', color: '#000' }}>SAVE</button>
+                                    
+                                    <button onClick={() => {
+                                        if (!adminWebhook.trim()) return;
+                                        setWebhookTestStatus({ success: null, message: 'Testing...' });
+                                        fetch(`${SOCKET_URL}/api/admin/webhook/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret, webhookUrl: adminWebhook }) })
+                                            .then(r => r.json()).then(data => {
+                                                setWebhookTestStatus({ success: data.success, message: data.success ? 'Test sent! Check Discord.' : data.error || 'Test failed' });
+                                                setTimeout(() => setWebhookTestStatus(null), 3000);
+                                            }).catch(() => {
+                                                setWebhookTestStatus({ success: false, message: 'Network error' });
+                                                setTimeout(() => setWebhookTestStatus(null), 3000);
+                                            });
+                                    }} style={{ ...styles.modeBtn, flex: 1, background: '#ffa500', color: '#000' }}>TEST</button>
+
+                                    <button onClick={() => {
+                                        setAdminWebhook('');
+                                        fetch(`${SOCKET_URL}/api/admin/webhook/set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret, webhookUrl: '' }) });
+                                    }} style={{ ...styles.modeBtn, flex: 1, background: '#ff4444', color: '#fff' }}>CLEAR</button>
                                 </div>
                                 {webhookTestStatus && (
-                                    <div style={{
-                                        marginTop: '15px',
-                                        padding: '10px',
-                                        borderRadius: '5px',
-                                        background: webhookTestStatus.success === null ? 'rgba(0, 212, 255, 0.1)' : webhookTestStatus.success ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)',
-                                        border: `1px solid ${webhookTestStatus.success === null ? '#00d4ff' : webhookTestStatus.success ? '#00ff00' : '#ff4444'}`,
-                                        color: webhookTestStatus.success === null ? '#00d4ff' : webhookTestStatus.success ? '#00ff00' : '#ff4444',
-                                        fontSize: '0.9rem',
-                                        textAlign: 'center'
-                                    }}>
+                                    <div style={{ marginTop: '15px', padding: '10px', borderRadius: '5px', background: webhookTestStatus.success === null ? 'rgba(0, 212, 255, 0.1)' : webhookTestStatus.success ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)', border: `1px solid ${webhookTestStatus.success === null ? '#00d4ff' : webhookTestStatus.success ? '#00ff00' : '#ff4444'}`, color: webhookTestStatus.success === null ? '#00d4ff' : webhookTestStatus.success ? '#00ff00' : '#ff4444', fontSize: '0.9rem', textAlign: 'center' }}>
                                         {webhookTestStatus.message}
                                     </div>
                                 )}
@@ -1348,7 +1068,10 @@ export default function App() {
                                                 <button onClick={() => deleteMatch(match.id)} style={{ background: 'transparent', color: '#ff4444', border: 'none', cursor: 'pointer' }}><TrashIcon /></button>
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '5px' }}>{new Date(match.date).toLocaleString()}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '5px' }}>
+                                            {/* 🛡️ GLOBAL READINESS FIX: Ensure dates use a consistent timezone standard */}
+                                            {new Date(match.date).toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC'}
+                                        </div>
                                         {match.keys && (
                                             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                                 <button onClick={() => openInNewTab(`/?room=${match.id}&key=${match.keys.admin}`)} style={styles.adminLinkBadge}>OPEN</button>
@@ -1377,43 +1100,17 @@ export default function App() {
                 <h1 style={styles.neonTitle}>VETO ARCHIVE</h1>
                 <button onClick={() => setView('home')} style={styles.backBtn}>← RETURN HOME</button>
 
-                {/* PAGINATION CONTROLS (TOP) */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                    <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.5 : 1 }}
-                    >
-                        PREV
-                    </button>
+                    <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.5 : 1 }}>PREV</button>
                     <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>PAGE {currentPage} / {totalPages}</span>
-                    <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.5 : 1 }}
-                    >
-                        NEXT
-                    </button>
+                    <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.5 : 1 }}>NEXT</button>
                 </div>
 
-                <div style={styles.historyList}>{historyData.map((match, i) => (<div key={i} style={styles.historyCard}><div style={styles.historyHeader}><div><span style={{ color: '#00d4ff' }}>{match.teamA}</span> vs <span style={{ color: '#ff0055' }}>{match.teamB}</span></div><span style={styles.formatTag}>{match.format}</span></div><div style={{ fontSize: '0.8rem', color: '#888' }}>{new Date(match.date).toLocaleString()}</div><div style={styles.logBox}>{match.logs.map((l, idx) => <div key={idx} style={styles.logLine}>{l}</div>)}</div></div>))}</div>
+                <div style={styles.historyList}>{historyData.map((match, i) => (<div key={i} style={styles.historyCard}><div style={styles.historyHeader}><div><span style={{ color: '#00d4ff' }}>{match.teamA}</span> vs <span style={{ color: '#ff0055' }}>{match.teamB}</span></div><span style={styles.formatTag}>{match.format}</span></div><div style={{ fontSize: '0.8rem', color: '#888' }}>{new Date(match.date).toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC'}</div><div style={styles.logBox}>{match.logs.map((l, idx) => <div key={idx} style={styles.logLine}>{l}</div>)}</div></div>))}</div>
 
-                {/* PAGINATION CONTROLS (BOTTOM) */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', marginTop: '20px' }}>
-                    <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.5 : 1 }}
-                    >
-                        PREV
-                    </button>
-                    <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.5 : 1 }}
-                    >
-                        NEXT
-                    </button>
+                    <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.5 : 1 }}>PREV</button>
+                    <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} style={{ ...styles.modeBtn, padding: '10px 20px', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.5 : 1 }}>NEXT</button>
                 </div>
 
                 <div style={styles.footer}>LOTGaming System | Made by &lt;3 kancha@lotgaming.xyz</div>
@@ -1427,7 +1124,6 @@ export default function App() {
             <div style={styles.container}>
                 <AnimatedBackground />
                 <div style={styles.glassPanel}>
-                    {/* UPDATED HEADER LAYOUT */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '20px', position: 'relative' }}>
                         <img src={LOGO_URL} alt="Logo" style={styles.logo} />
                         <h1 style={styles.neonTitle}>LOT GAMING</h1>
@@ -1435,7 +1131,6 @@ export default function App() {
 
                     <h3 style={{ color: '#aaa', letterSpacing: '4px', marginBottom: '30px', fontSize: isMobile ? '0.8rem' : '1rem' }}>COUNTER STRIKE MAP VETO SYSTEM</h3>
 
-                    {/* VETO MODE SWITCHER - NOW RESPONSIVE */}
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', gap: '10px', flexWrap: 'wrap' }}>
                         <button onClick={() => setVetoMode('vrs')} style={vetoMode === 'vrs' ? styles.modeBtnActive : styles.modeBtn}>VRS VETO</button>
                         <button onClick={() => setVetoMode('faceit')} style={vetoMode === 'faceit' ? styles.modeBtnActive : styles.modeBtn}>FACEIT STYLE</button>
@@ -1445,9 +1140,8 @@ export default function App() {
 
                     <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
 
-                    {/* FILE UPLOAD A */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                        <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/*" onChange={(e) => handleLogoUpload(e, 'A')} />
+                        <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp" onChange={(e) => handleLogoUpload(e, 'A')} />
                         <button onClick={() => fileInputA.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                             <UploadIcon /> {teamALogo ? "CHANGE LOGO A" : "ATTACH LOGO A"}
                         </button>
@@ -1456,9 +1150,8 @@ export default function App() {
 
                     <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
 
-                    {/* FILE UPLOAD B */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                        <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/*" onChange={(e) => handleLogoUpload(e, 'B')} />
+                        <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp" onChange={(e) => handleLogoUpload(e, 'B')} />
                         <button onClick={() => fileInputB.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                             <UploadIcon /> {teamBLogo ? "CHANGE LOGO B" : "ATTACH LOGO B"}
                         </button>
@@ -1473,18 +1166,8 @@ export default function App() {
                         {useTimer && (
                             <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                 {[30, 45, 60, 90, 120].map(seconds => (
-                                    <button
-                                        key={seconds}
-                                        onClick={() => setTimerDuration(seconds)}
-                                        style={{
-                                            ...styles.modeBtn,
-                                            background: timerDuration === seconds ? '#00d4ff' : 'transparent',
-                                            color: timerDuration === seconds ? '#000' : '#aaa',
-                                            borderColor: timerDuration === seconds ? '#00d4ff' : '#333',
-                                            padding: '5px 15px',
-                                            fontSize: '0.9rem'
-                                        }}
-                                    >
+                                    <button key={seconds} onClick={() => setTimerDuration(seconds)}
+                                        style={{ ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent', color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333', padding: '5px 15px', fontSize: '0.9rem' }}>
                                         {seconds}s
                                     </button>
                                 ))}
@@ -1492,37 +1175,18 @@ export default function App() {
                         )}
                     </div>
 
-                    {/* NEW: COIN FLIP TOGGLE */}
                     <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#ffd700', fontSize: '0.9rem' }}>
                         <input type="checkbox" checked={useCoinFlip} onChange={e => setUseCoinFlip(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
                         <span>Enable Coin Flip</span>
                     </div>
 
-                    {/* NEW: DISCORD WEBHOOK INPUT */}
                     <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                        <label style={{ color: '#00d4ff', fontSize: '0.9rem', marginBottom: '5px', display: 'block' }}>
-                            Discord Webhook (Optional)
-                            <span style={{ color: '#888', fontSize: '0.75rem', marginLeft: '5px' }} title="Get notifications for bans, picks, and match events in Discord">ℹ️</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={tempWebhook}
-                            onChange={e => setTempWebhook(e.target.value)}
-                            placeholder="https://discord.com/api/webhooks/..."
-                            style={{
-                                width: '90%',
-                                maxWidth: '500px',
-                                padding: '8px',
-                                background: 'rgba(0,0,0,0.3)',
-                                border: '1px solid #333',
-                                borderRadius: '5px',
-                                color: '#fff',
-                                fontSize: '0.85rem'
-                            }}
+                        <label style={{ color: '#00d4ff', fontSize: '0.9rem', marginBottom: '5px', display: 'block' }}>Discord Webhook (Optional)</label>
+                        <input type="text" value={tempWebhook} onChange={e => setTempWebhook(e.target.value)} placeholder="https://discord.com/api/webhooks/..."
+                            style={{ width: '90%', maxWidth: '500px', padding: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', borderRadius: '5px', color: '#fff', fontSize: '0.85rem' }}
                         />
                     </div>
 
-                    {/* MODE SELECTION LOGIC */}
                     {vetoMode !== 'custom' ? (
                         <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
                             <button style={styles.modeBtn} onClick={() => createMatch('bo1')}>Bo1</button>
@@ -1532,32 +1196,19 @@ export default function App() {
                     ) : (
                         <div style={{ marginTop: '40px', textAlign: 'left', borderTop: '1px solid #333', paddingTop: '30px' }}>
                             <h4 style={{ color: '#00d4ff', marginBottom: '15px' }}>1. SELECT MAP POOL</h4>
-
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '15px' }}>
                                 {availableMaps.map(m => (
                                     <div key={m.name} onClick={() => toggleMapSelection(m.name)}
-                                        style={{
-                                            padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem',
-                                            border: customSelectedMaps.includes(m.name) ? '1px solid #00ff00' : '1px solid #333',
-                                            color: customSelectedMaps.includes(m.name) ? '#fff' : '#666',
-                                            background: customSelectedMaps.includes(m.name) ? 'rgba(0,255,0,0.1)' : 'transparent'
-                                        }}>
+                                        style={{ padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', border: customSelectedMaps.includes(m.name) ? '1px solid #00ff00' : '1px solid #333', color: customSelectedMaps.includes(m.name) ? '#fff' : '#666', background: customSelectedMaps.includes(m.name) ? 'rgba(0,255,0,0.1)' : 'transparent' }}>
                                         {m.name}
                                     </div>
                                 ))}
                             </div>
-
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
                                 <span style={{ fontSize: '0.8rem', color: '#aaa' }}>ADD CUSTOM MAP:</span>
-                                <input
-                                    style={{ ...styles.input, margin: 0, width: '150px', fontSize: '0.9rem', padding: '5px', height: '35px', textAlign: 'left' }}
-                                    placeholder="Map Name"
-                                    value={userCustomMap}
-                                    onChange={e => setUserCustomMap(e.target.value)}
-                                />
+                                <input style={{ ...styles.input, margin: 0, width: '150px', fontSize: '0.9rem', padding: '5px', height: '35px', textAlign: 'left' }} placeholder="Map Name" value={userCustomMap} onChange={e => setUserCustomMap(e.target.value)} />
                                 <button onClick={addUserMap} style={{ ...styles.tinyBtn, height: '35px', border: '1px solid #00ff00', color: '#00ff00', padding: '0 15px', fontWeight: 'bold' }}>ADD</button>
                             </div>
-
                             <h4 style={{ color: '#00d4ff' }}>2. DEFINE BAN ORDER</h4>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
                                 <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'ban')}>+ A BAN</button>
@@ -1575,7 +1226,6 @@ export default function App() {
                                     </span>
                                 ))}
                             </div>
-
                             <button style={{ ...styles.modeBtn, width: '100%', marginTop: '20px', borderColor: '#00ff00', color: '#00ff00' }} onClick={() => createMatch('custom')}>GENERATE CUSTOM MATCH</button>
                         </div>
                     )}
@@ -1601,18 +1251,11 @@ export default function App() {
     // --- RENDER VETO ---
     if (!gameState) return <div style={styles.container}><AnimatedBackground /><h1 style={styles.neonTitle}>INITIALIZING...</h1></div>;
 
-    // COIN FLIP OVERLAY
     if (gameState.useCoinFlip && gameState.coinFlip.status !== 'done') {
         return (
             <div style={styles.container}>
                 <AnimatedBackground />
-                <CoinFlipOverlay
-                    gameState={gameState}
-                    myRole={myRole}
-                    onCall={handleCoinCall}
-                    onDecide={handleCoinDecide}
-                    soundEnabled={soundEnabled}
-                />
+                <CoinFlipOverlay gameState={gameState} myRole={myRole} onCall={handleCoinCall} onDecide={handleCoinDecide} soundEnabled={soundEnabled} />
             </div>
         );
     }
@@ -1625,10 +1268,7 @@ export default function App() {
     let sidePickMapName = gameState.lastPickedMap;
     if (!sidePickMapName && isSideStep) { const decider = gameState.maps.find(m => m.status === 'available'); if (decider) sidePickMapName = decider.name; }
 
-    // Check if current user needs to click READY
     const showReadyButton = gameState.useTimer && !gameState.finished && (myRole === 'A' || myRole === 'B') && !gameState.ready[myRole];
-
-    // ROLE DATA
     const roleData = getRoleLabel();
 
     return (
@@ -1642,30 +1282,18 @@ export default function App() {
                     localStorage.setItem('soundEnabled', newState);
                 }}
                 style={{
-                    position: 'absolute',
-                    top: isMobile ? '10px' : '20px',
-                    right: isMobile ? '10px' : '20px',
+                    position: 'absolute', top: isMobile ? '10px' : '20px', right: isMobile ? '10px' : '20px',
                     background: soundEnabled ? 'rgba(0, 212, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                    border: `1px solid ${soundEnabled ? '#00d4ff' : '#666'}`,
-                    color: soundEnabled ? '#00d4ff' : '#888',
-                    padding: '8px 15px',
-                    borderRadius: '5px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    zIndex: 100,
-                    fontFamily: "'Rajdhani', sans-serif"
+                    border: `1px solid ${soundEnabled ? '#00d4ff' : '#666'}`, color: soundEnabled ? '#00d4ff' : '#888',
+                    padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem',
+                    display: 'flex', alignItems: 'center', gap: '5px', zIndex: 100, fontFamily: "'Rajdhani', sans-serif"
                 }}
-                title={soundEnabled ? "Disable Sounds" : "Enable Sounds"}
             >
                 {soundEnabled ? '🔊' : '🔇'} {soundEnabled ? 'SOUND ON' : 'SOUND OFF'}
             </button>
             {showRules && <RulesModal format={gameState.format} isMobile={isMobile} onClose={() => setShowRules(false)} />}
             <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
 
-            {/* UPDATED SCOREBOARD WITH LOGOS */}
             <div style={styles.scoreboard}>
                 <div style={{ ...styles.teamName, color: '#00d4ff', display: 'flex', alignItems: 'center', gap: '15px' }}>
                     {gameState.teamALogo && <img src={gameState.teamALogo} alt="" style={styles.teamLogo} />}
@@ -1681,12 +1309,10 @@ export default function App() {
             <div style={{ ...styles.statusBar, borderColor: isMyTurn ? actionColor : '#333', boxShadow: isMyTurn ? `0 0 10px ${actionColor}22` : 'none' }}>
                 <h2>
                     {getInstruction()}
-                    {/* TIMER DISPLAY */}
                     {!gameState.finished && <Countdown endsAt={gameState.timerEndsAt} soundEnabled={soundEnabled} />}
                 </h2>
             </div>
 
-            {/* READY BUTTON OVERLAY OR INSERTION */}
             {showReadyButton && (
                 <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                     <button onClick={handleReady} style={{ ...styles.modeBtn, fontSize: '1.5rem', background: '#00d4ff', color: '#000', border: 'none', padding: '15px 40px', boxShadow: '0 0 20px rgba(0, 212, 255, 0.5)' }}>
@@ -1716,7 +1342,6 @@ export default function App() {
                     {gameState.maps.map(map => {
                         const areTeamsReady = !gameState.useTimer || (gameState.ready.A && gameState.ready.B);
                         const isInteractive = areTeamsReady && isMyTurn && isActionStep && map.status === 'available';
-
                         const isHovered = hoveredItem === map.name;
                         const logData = getMapLogData(map.name);
                         const playIndex = gameState.playedMaps ? gameState.playedMaps.indexOf(map.name) : -1;
@@ -1724,32 +1349,17 @@ export default function App() {
 
                         return (
                             <MapCard
-                                key={map.name}
-                                map={map}
-                                isInteractive={isInteractive}
-                                isHovered={isHovered}
-                                onMouseEnter={() => setHoveredItem(map.name)}
-                                onMouseLeave={() => setHoveredItem(null)}
+                                key={map.name} map={map} isInteractive={isInteractive} isHovered={isHovered}
+                                onMouseEnter={() => setHoveredItem(map.name)} onMouseLeave={() => setHoveredItem(null)}
                                 onClick={() => isInteractive ? handleAction(map.name) : null}
-                                actionColor={actionColor}
-                                logData={logData}
-                                mapOrderLabel={mapOrderLabel}
-                                styles={styles}
+                                actionColor={actionColor} logData={logData} mapOrderLabel={mapOrderLabel} styles={styles}
                             />
                         );
                     })}
                 </div>
             )}
 
-            {/* --- INSERTED ROLE BADGE HERE --- */}
-            <div style={{
-                marginTop: '20px', marginBottom: '10px',
-                padding: '10px 30px', borderRadius: '50px',
-                background: 'rgba(0,0,0,0.5)', border: `2px solid ${roleData.color}`,
-                color: roleData.color, fontSize: '1.2rem', fontWeight: 'bold',
-                textTransform: 'uppercase', letterSpacing: '2px',
-                boxShadow: `0 0 15px ${roleData.color}44`
-            }}>
+            <div style={{ marginTop: '20px', marginBottom: '10px', padding: '10px 30px', borderRadius: '50px', background: 'rgba(0,0,0,0.5)', border: `2px solid ${roleData.color}`, color: roleData.color, fontSize: '1.2rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', boxShadow: `0 0 15px ${roleData.color}44` }}>
                 {roleData.text}
             </div>
 
@@ -1765,9 +1375,7 @@ export default function App() {
 // --- DYNAMIC STYLES ---
 const getStyles = (isMobile) => ({
     container: { minHeight: '100vh', color: '#fff', fontFamily: "'Rajdhani', sans-serif", display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: '50px', overflowX: 'hidden' },
-    // UPDATED LOGO STYLE
     logo: { width: isMobile ? '50px' : '80px', filter: 'drop-shadow(0 0 10px rgba(0, 212, 255, 0.4))' },
-
     generatingBox: { marginTop: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
     spinner: { width: '40px', height: '40px', border: '4px solid rgba(0, 212, 255, 0.3)', borderTop: '4px solid #00d4ff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
     homeBtn: { position: 'absolute', top: isMobile ? '10px' : '20px', left: isMobile ? '10px' : '20px', background: 'rgba(0,0,0,0.5)', border: '1px solid #444', color: '#fff', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', transition: '0.2s', zIndex: 100 },
@@ -1795,45 +1403,23 @@ const getStyles = (isMobile) => ({
     sideImg: { width: '100%', height: isMobile ? '120px' : '220px', objectFit: 'contain', filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.2))', padding: '20px' },
     sideLabelCT: { fontSize: isMobile ? '1.2rem' : '1.5rem', color: '#4facfe', fontWeight: 'bold', letterSpacing: '2px' },
     sideLabelT: { fontSize: isMobile ? '1.2rem' : '1.5rem', color: '#ff9a9e', fontWeight: 'bold', letterSpacing: '2px' },
-
-    // LOG BOX STYLES
     logContainer: { width: isMobile ? '95%' : '80%', maxWidth: '800px', background: '#0a0d14', border: '1px solid #333', borderRadius: '10px', marginTop: '30px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', overflow: 'hidden' },
     logHeader: { padding: '15px 20px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', color: '#fff' },
     logScroll: { padding: '20px', maxHeight: '300px', overflowY: 'auto', background: '#05070a' },
     logRow: { marginBottom: '8px', display: 'flex', alignItems: 'flex-start', lineHeight: '1.5' },
     copyBtn: { background: '#00d4ff', border: 'none', padding: '5px 12px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', color: '#000', display: 'flex', alignItems: 'center', fontSize: '0.8rem', transition: '0.2s' },
-
     historyBtn: { marginTop: '30px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid #666', color: '#fff', padding: '12px 30px', borderRadius: '30px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', letterSpacing: '2px', transition: 'all 0.3s ease', boxShadow: '0 5px 15px rgba(0,0,0,0.3)', fontFamily: "'Rajdhani', sans-serif", textTransform: 'uppercase' },
     historyList: { width: isMobile ? '95%' : '80%', maxWidth: '800px', marginTop: '40px' },
     historyCard: { background: 'rgba(20, 25, 35, 0.9)', marginBottom: '15px', padding: '20px', borderRadius: '10px', borderLeft: '4px solid #00d4ff', boxShadow: '0 5px 20px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', textAlign: 'left' },
     historyHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: isMobile ? '1.2rem' : '1.4rem', fontWeight: 'bold', textTransform: 'uppercase', width: '100%' },
-
     backBtn: { background: 'none', border: '1px solid #444', color: '#fff', padding: '10px 20px', cursor: 'pointer', marginBottom: '20px' },
     footer: { marginTop: 'auto', padding: '20px', color: '#444', fontSize: '0.8rem', letterSpacing: '1px', textAlign: 'center' },
-
-    // NEW STYLES
     teamLogo: { height: '50px', width: '50px', objectFit: 'contain', borderRadius: '5px', background: 'rgba(255,255,255,0.1)', padding: '2px' },
-    mapOrderBadge: {
-        position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)',
-        background: 'rgba(0, 0, 0, 0.8)', border: '1px solid #00d4ff', color: '#fff',
-        padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '0.9rem',
-        boxShadow: '0 0 10px rgba(0, 212, 255, 0.5)', zIndex: 10
-    },
-
-    // UPDATED LINK BOX STYLES
+    mapOrderBadge: { position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0, 0, 0, 0.8)', border: '1px solid #00d4ff', color: '#fff', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '0.9rem', boxShadow: '0 0 10px rgba(0, 212, 255, 0.5)', zIndex: 10 },
     linksBox: { marginTop: '30px', padding: '25px', background: 'rgba(15, 20, 30, 0.95)', borderRadius: '15px', border: '1px solid rgba(0, 212, 255, 0.2)', boxShadow: '0 0 30px rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(10px)', width: '100%', boxSizing: 'border-box', animation: 'fadeIn 0.5s ease-out' },
     linkRow: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px', background: 'rgba(0, 0, 0, 0.3)', padding: '10px 15px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' },
     linkInput: { flex: 1, background: 'transparent', border: 'none', color: '#00d4ff', fontFamily: "'Consolas', monospace", fontSize: '0.9rem', cursor: 'pointer', outline: 'none', textOverflow: 'ellipsis' },
     iconBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', padding: '5px', marginLeft: '5px', display: 'flex', alignItems: 'center', transition: '0.2s' },
-
-    adminLinkBadge: {
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        background: 'rgba(255, 255, 255, 0.05)', border: '1px dashed #fff', color: '#fff',
-        padding: '5px 10px', borderRadius: '4px', fontSize: '0.8rem', textDecoration: 'none', cursor: 'pointer'
-    },
-    copyLinkBadge: {
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        background: 'rgba(0,0,0,0.3)', border: '1px solid',
-        padding: '5px 10px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer'
-    }
+    adminLinkBadge: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(255, 255, 255, 0.05)', border: '1px dashed #fff', color: '#fff', padding: '5px 10px', borderRadius: '4px', fontSize: '0.8rem', textDecoration: 'none', cursor: 'pointer' },
+    copyLinkBadge: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.3)', border: '1px solid', padding: '5px 10px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }
 });
