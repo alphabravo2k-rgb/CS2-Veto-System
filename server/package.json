@@ -1,8 +1,11 @@
 {
   "name": "cs2-mapveto-server",
   "version": "1.0.0",
-  "description": "Backend server for CS2 Map Veto System - Real-time match veto management with Socket.IO and SQLite",
+  "description": "Backend server for CS2 Map Veto System",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
@@ -10,7 +13,6 @@
   },
   "keywords": [
     "cs2",
-    "counter-strike",
     "map-veto",
     "socket.io",
     "sqlite",
@@ -22,9 +24,10 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "mysql2": "^3.16.1",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
