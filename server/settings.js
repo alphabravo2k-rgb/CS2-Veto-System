@@ -10,19 +10,26 @@
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v2.0.0 (DEPENDENCY-INJECTED)
+ * VERSION       : v2.1.0 (STRICT-ENUMERATION)
  * STATUS        : ENFORCED
  *
  * FEATURES:
  * - Dependency Injection: Uses the primary DB handle to prevent SQLite locking.
  * - Deep Defense: SSRF Webhook validation enforced before DB commit.
  * - Auditing: added `updated_at` timestamps for tracing configuration changes.
+ * - Strict Enumeration: Hardcoded Set of allowed keys prevents DB injection bloat.
  * =============================================================================
  */
 
 const { isValidDiscordWebhook } = require('./discord-webhook');
 
 let db = null;
+
+// 🛡️ SECURITY FIX: Enumerate valid keys to prevent arbitrary config injection
+// If you ever need to add a new global setting, simply add its key name to this Set.
+const VALID_KEYS = new Set([
+    'admin_webhook'
+]);
 
 // 🛡️ ARCHITECTURE FIX: Inject the database connection instead of creating a duplicate handle
 function initSettingsTable(database) {
@@ -52,14 +59,17 @@ function initSettingsTable(database) {
     });
 }
 
-// Get admin webhook URL
-function getAdminWebhook() {
+/**
+ * 🧠 INTERNAL ENGINE: Generic Safe Getter
+ */
+function getSetting(key) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
+        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key requested - ${key}`));
 
-        db.get('SELECT value FROM settings WHERE key = ?', ['admin_webhook'], (err, row) => {
+        db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row) => {
             if (err) {
-                console.error('[SETTINGS] Error getting admin webhook:', err);
+                console.error(`[SETTINGS] Error getting ${key}:`, err);
                 reject(err);
             } else {
                 resolve(row ? row.value : null);
@@ -68,15 +78,13 @@ function getAdminWebhook() {
     });
 }
 
-// Set admin webhook URL
-function setAdminWebhook(url) {
+/**
+ * 🧠 INTERNAL ENGINE: Generic Safe Setter
+ */
+function setSetting(key, value) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-
-        // 🛡️ SECURITY FIX: SSRF Validation enforced at the lowest storage layer
-        if (url && !isValidDiscordWebhook(url)) {
-            return reject(new Error('Invalid Discord webhook URL'));
-        }
+        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key injection attempted - ${key}`));
 
         // 🛡️ MAINTAINABILITY FIX: True UPSERT with timestamp updating
         const query = `
@@ -84,20 +92,41 @@ function setAdminWebhook(url) {
             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
         `;
 
-        db.run(query, ['admin_webhook', url], (err) => {
+        db.run(query, [key, value], (err) => {
             if (err) {
-                console.error('[SETTINGS] Error setting admin webhook:', err);
+                console.error(`[SETTINGS] Error setting ${key}:`, err);
                 reject(err);
             } else {
-                console.log('[SETTINGS] Admin webhook updated successfully');
+                console.log(`[SETTINGS] ${key} updated successfully`);
                 resolve();
             }
         });
     });
 }
 
+// ============================================================================
+// 🌐 PUBLIC API WRAPPERS
+// ============================================================================
+
+function getAdminWebhook() {
+    return getSetting('admin_webhook');
+}
+
+function setAdminWebhook(url) {
+    // 🛡️ SECURITY FIX: SSRF Validation enforced at the lowest storage layer
+    if (url && !isValidDiscordWebhook(url)) {
+        return Promise.reject(new Error('Invalid Discord webhook URL'));
+    }
+
+    // Store empty string if url is falsy to allow clearing the webhook safely
+    return setSetting('admin_webhook', url || '');
+}
+
 module.exports = {
     initSettingsTable,
     getAdminWebhook,
-    setAdminWebhook
+    setAdminWebhook,
+    // Exposing the generic engines makes the module infinitely scalable in the future
+    getSetting, 
+    setSetting
 };
