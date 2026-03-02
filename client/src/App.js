@@ -1,3 +1,26 @@
+// File: src/App.jsx (or whatever your main entry point is named)
+/**
+ * ⚡ COMP-OS — VETO ENGINE CLIENT
+ * =============================================================================
+ * FILE          : App.jsx
+ * RESPONSIBILITY: React Client for Map Veto Interface
+ * LAYER         : Frontend UI
+ * RISK LEVEL    : MEDIUM
+ * =============================================================================
+ *
+ * RELEASE METADATA
+ * -----------------------------------------------------------------------------
+ * VERSION       : v4.2.0 (AUDIO-ENGINE-OPTIMIZED)
+ * STATUS        : ENFORCED
+ *
+ * FEATURES:
+ * - Singleton AudioContext (Prevents browser context exhaustion).
+ * - Autoplay Policy handling (Wakes up suspended contexts on interaction).
+ * - React Component & Style Memoization.
+ * - Secure URL Token Scrubbing.
+ * =============================================================================
+ */
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import io from 'socket.io-client';
 
@@ -24,7 +47,6 @@ const getMapNameWithPrefix = (mapName) => {
 
     const lowerName = mapName.toLowerCase();
 
-    // 🛡️ BUG FIX: Removed `m.includes(lowerName)` which caused false positives (e.g. 'e' matching 'inferno')
     if (defusalMaps.some(m => lowerName.includes(m))) return `de_${lowerName}`;
     if (hostageMaps.some(m => lowerName.includes(m))) return `cs_${lowerName}`;
     if (aimMaps.some(m => lowerName.includes(m))) return `aim_${lowerName}`;
@@ -63,8 +85,6 @@ const getMapImageUrl = (mapName, customImage = null) => {
     return { primary: primaryUrl, fallbacks: secondaryUrls };
 };
 
-// --- UTILITIES ---
-// 🛡️ SECURITY FIX: Read the key, save to session, and immediately scrub it from the URL
 const getParams = () => {
     const params = new URLSearchParams(window.location.search);
     let room = params.get('room');
@@ -81,48 +101,58 @@ const getParams = () => {
 
 const openInNewTab = (url) => window.open(url, '_blank', 'noopener,noreferrer');
 
-// --- SOUND SYSTEM ---
+// 🛡️ ARCHITECTURE FIX: Audio Engine Singleton to prevent browser context exhaustion limits
+let globalAudioContext = null;
+
 const playSound = (type = 'action') => {
     try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        if (!globalAudioContext) {
+            globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Resume context if suspended by browser autoplay policies
+        if (globalAudioContext.state === 'suspended') {
+            globalAudioContext.resume();
+        }
+
+        const oscillator = globalAudioContext.createOscillator();
+        const gainNode = globalAudioContext.createGain();
 
         oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(globalAudioContext.destination);
 
         switch (type) {
             case 'ban':
                 oscillator.frequency.value = 220; 
                 oscillator.type = 'sine'; 
-                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.15);
+                gainNode.gain.setValueAtTime(0.08, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.15); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.15);
                 break;
             case 'pick':
                 oscillator.frequency.value = 330; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.08, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.12);
+                gainNode.gain.setValueAtTime(0.08, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.12); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.12);
                 break;
             case 'side':
                 oscillator.frequency.value = 275; 
                 oscillator.type = 'sine'; 
-                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.07, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.1); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.1);
                 break;
             case 'ready':
                 oscillator.frequency.value = 440; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.06, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.08);
+                gainNode.gain.setValueAtTime(0.06, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.08); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.08);
                 break;
             case 'coin':
                 const baseFreq = 200;
@@ -130,13 +160,13 @@ const playSound = (type = 'action') => {
                 const wobbleSpeed = 15; 
                 const totalDuration = 0.1; 
                 for (let i = 0; i < 3; i++) {
-                    const osc = audioContext.createOscillator();
-                    const gain = audioContext.createGain();
+                    const osc = globalAudioContext.createOscillator();
+                    const gain = globalAudioContext.createGain();
                     osc.connect(gain);
-                    gain.connect(audioContext.destination);
-                    osc.frequency.setValueAtTime(baseFreq + (i * 50), audioContext.currentTime);
+                    gain.connect(globalAudioContext.destination);
+                    osc.frequency.setValueAtTime(baseFreq + (i * 50), globalAudioContext.currentTime);
                     osc.type = i === 0 ? 'sine' : 'triangle'; 
-                    const startTime = audioContext.currentTime + (i * 0.03);
+                    const startTime = globalAudioContext.currentTime + (i * 0.03);
                     gain.gain.setValueAtTime(0, startTime);
                     gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + 0.01);
                     gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + totalDuration - 0.01);
@@ -155,17 +185,17 @@ const playSound = (type = 'action') => {
                 const wobbleSpeed2 = 12;
                 const cycleDuration = 0.15;
                 for (let i = 0; i < 4; i++) {
-                    const osc = audioContext.createOscillator();
-                    const gain = audioContext.createGain();
-                    const filter = audioContext.createBiquadFilter();
+                    const osc = globalAudioContext.createOscillator();
+                    const gain = globalAudioContext.createGain();
+                    const filter = globalAudioContext.createBiquadFilter();
                     osc.connect(filter);
                     filter.connect(gain);
-                    gain.connect(audioContext.destination);
+                    gain.connect(globalAudioContext.destination);
                     filter.type = 'lowpass';
                     filter.frequency.value = 500 + (i * 100);
                     const freq = baseFreq2 + (i * 40);
                     osc.type = i === 0 ? 'sine' : (i === 1 ? 'triangle' : 'sawtooth');
-                    const startTime2 = audioContext.currentTime;
+                    const startTime2 = globalAudioContext.currentTime;
                     gain.gain.setValueAtTime(0.03 - (i * 0.005), startTime2);
                     gain.gain.linearRampToValueAtTime(0, startTime2 + cycleDuration);
                     for (let t = 0; t < cycleDuration; t += 0.01) {
@@ -179,25 +209,24 @@ const playSound = (type = 'action') => {
             case 'countdown':
                 oscillator.frequency.value = 400; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.05, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.05);
+                gainNode.gain.setValueAtTime(0.05, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.05); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.05);
                 break;
             default:
                 oscillator.frequency.value = 300; 
                 oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.07, audioContext.currentTime); 
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12); 
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.12);
+                gainNode.gain.setValueAtTime(0.07, globalAudioContext.currentTime); 
+                gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.12); 
+                oscillator.start(globalAudioContext.currentTime);
+                oscillator.stop(globalAudioContext.currentTime + 0.12);
         }
     } catch (e) {
         // Sound playback failed silently
     }
 };
 
-// --- COUNTDOWN COMPONENT ---
 const Countdown = ({ endsAt, soundEnabled = false }) => {
     const [timeLeft, setTimeLeft] = useState(0);
     const prevTimeRef = useRef(null);
@@ -243,15 +272,15 @@ const UploadIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="
 const RefreshIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>);
 const UndoIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>);
 
-
-// --- ANIMATED BACKGROUND ---
-const AnimatedBackground = () => (
+// 🛡️ SCALABILITY FIX: Pure Component to prevent DOM Thrashing
+const AnimatedBackground = React.memo(() => (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, background: 'radial-gradient(circle at center, #1b2838 0%, #0b0f19 100%)' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '200%', backgroundImage: 'linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.25) 50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(255,0,0,0.03))', backgroundSize: '100% 2px, 3px 100%', animation: 'scanline 10s linear infinite' }} />
     </div>
-);
+));
 
-const RulesModal = ({ format, onClose }) => {
+// 🛡️ SCALABILITY FIX: Component Memoization
+const RulesModal = React.memo(({ format, onClose }) => {
     const getRules = () => {
         if (format.includes('wingman_bo1')) return ["WINGMAN Bo1:", "1. Team A Bans", "2. Team B Bans", "3. Team A Bans", "4. Team B Bans", "5. Team A Bans", "6. Last Map (Knife for Side)"];
         if (format.includes('wingman_bo3')) return ["WINGMAN Bo3:", "1. Team A Bans 2 maps", "2. Team A Picks 1 map (Team B picks side)", "3. Team B Picks 1 map (Team A picks side)", "4. Team B Bans 1 map", "5. Last Decider Map (Knife for Side)"];
@@ -272,10 +301,10 @@ const RulesModal = ({ format, onClose }) => {
             </div>
         </div>
     );
-};
+});
 
-// --- LOG PARSER ---
-const LogLineRenderer = ({ log, teamA, teamB }) => {
+// 🛡️ SCALABILITY FIX: Component Memoization
+const LogLineRenderer = React.memo(({ log, teamA, teamB }) => {
     const splitIndex = log.indexOf('(');
     let mainPart = log;
     let sidePart = "";
@@ -305,10 +334,10 @@ const LogLineRenderer = ({ log, teamA, teamB }) => {
             )}
         </div>
     );
-};
+});
 
-// --- MAP CARD COMPONENT WITH IMAGE ERROR HANDLING ---
-const MapCard = ({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, actionColor, logData, mapOrderLabel, styles }) => {
+// 🛡️ SCALABILITY FIX: Component Memoization
+const MapCard = React.memo(({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, actionColor, logData, mapOrderLabel, styles }) => {
     const mapImageUrls = getMapImageUrl(map.name, map.customImage);
     const initialUrl = mapImageUrls.primary;
     const [imageUrl, setImageUrl] = useState(initialUrl);
@@ -417,10 +446,10 @@ const MapCard = ({ map, isInteractive, onMouseEnter, onMouseLeave, onClick, acti
             </div>
         </div>
     );
-};
+});
 
-// --- COIN FLIP COMPONENT (FIXED VISUALS) ---
-const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = true }) => {
+// 🛡️ SCALABILITY FIX: Component Memoization
+const CoinFlipOverlay = React.memo(({ gameState, myRole, onCall, onDecide, soundEnabled = true }) => {
     const [isFlipping, setIsFlipping] = useState(false);
     const [showResult, setShowResult] = useState(false);
     const [flipAnimation, setFlipAnimation] = useState(null);
@@ -543,7 +572,7 @@ const CoinFlipOverlay = ({ gameState, myRole, onCall, onDecide, soundEnabled = t
             )}
         </div>
     );
-};
+});
 
 export default function App() {
     const [params] = useState(getParams());
@@ -552,7 +581,6 @@ export default function App() {
     const [view, setView] = useState('home');
     const [historyData, setHistoryData] = useState([]);
 
-    // --- PAGINATION STATE ---
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -565,7 +593,6 @@ export default function App() {
     const [inputError, setInputError] = useState(false);
 
     const isAdminRoute = window.location.pathname === '/admin';
-    // 🛡️ SECURITY FIX: Store Admin Secret in sessionStorage instead of localStorage to prevent permanent XSS hijacking
     const [adminSecret, setAdminSecret] = useState(sessionStorage.getItem('adminSecret') || '');
     const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
@@ -603,7 +630,6 @@ export default function App() {
     const fileInputA = useRef(null);
     const fileInputB = useRef(null);
 
-    // 🛡️ SCALABILITY FIX: Memoize Styles so React doesn't regenerate the object 60x a second during countdowns
     const styles = useMemo(() => getStyles(isMobile), [isMobile]);
 
     const fetchAdminHistory = useCallback((secret) => {
@@ -688,7 +714,6 @@ export default function App() {
             }
         });
 
-        // 🛡️ MEMORY LEAK FIX: Ensure all Socket listeners are cleaned up when the component unmounts
         return () => { 
             socket.off('update_state'); 
             socket.off('role_assigned'); 
@@ -707,8 +732,17 @@ export default function App() {
             
             const reader = new FileReader();
             reader.onloadend = () => {
-                if (team === 'A') setTeamALogo(reader.result);
-                else setTeamBLogo(reader.result);
+                const base64String = reader.result;
+                // 🛡️ SECURITY FIX: Deep MIME-Type Validation on Base64 Header to prevent SVG script injection
+                if (!base64String.startsWith('data:image/jpeg') && 
+                    !base64String.startsWith('data:image/png') && 
+                    !base64String.startsWith('data:image/webp') &&
+                    !base64String.startsWith('data:image/gif')) {
+                    return alert("Security Error: Only valid image payloads are accepted.");
+                }
+
+                if (team === 'A') setTeamALogo(base64String);
+                else setTeamBLogo(base64String);
             };
             reader.readAsDataURL(file);
         }
@@ -739,7 +773,6 @@ export default function App() {
             if (customSequence.length === 0) return alert("Please define at least one step in the sequence.");
         }
 
-        // 🛡️ SECURITY FIX: Basic Client SSRF Webhook Validation
         const webhookVal = tempWebhook.trim();
         if (webhookVal && !webhookVal.startsWith('https://discord.com/api/webhooks/') && !webhookVal.startsWith('https://discordapp.com/api/webhooks/')) {
             return alert("Invalid Discord Webhook format.");
@@ -762,7 +795,7 @@ export default function App() {
         setTempWebhook(''); 
     };
 
-    const handleAction = (data) => {
+    const handleAction = useCallback((data) => {
         if (!gameState || gameState.finished) return;
         if (soundEnabled) {
             const currentStep = gameState.sequence[gameState.step];
@@ -773,22 +806,22 @@ export default function App() {
             }
         }
         socket.emit('action', { roomId: params.room, data, key: params.key });
-    };
+    }, [gameState, soundEnabled, params.room, params.key]);
 
-    const handleReady = () => {
+    const handleReady = useCallback(() => {
         if (soundEnabled) playSound('ready');
         socket.emit('team_ready', { roomId: params.room, key: params.key });
-    };
+    }, [soundEnabled, params.room, params.key]);
 
-    const handleCoinCall = (call) => {
+    const handleCoinCall = useCallback((call) => {
         if (soundEnabled) playSound('coin');
         socket.emit('coin_call', { roomId: params.room, call, key: params.key });
-    };
+    }, [soundEnabled, params.room, params.key]);
 
-    const handleCoinDecide = (decision) => {
+    const handleCoinDecide = useCallback((decision) => {
         if (soundEnabled) playSound('coin');
         socket.emit('coin_decision', { roomId: params.room, decision, key: params.key });
-    };
+    }, [soundEnabled, params.room, params.key]);
 
     const fetchPublicHistory = (page = 1) => {
         fetch(`${SOCKET_URL}/api/history?page=${page}&limit=10`)
@@ -874,7 +907,6 @@ export default function App() {
         return { text: 'SPECTATOR VIEW', color: '#888' };
     };
 
-    // 🛡️ SCALABILITY FIX: Wraps the loop in a callback so it doesn't recalculate functions repeatedly
     const getMapLogData = useCallback((mapName) => {
         if (!gameState || !gameState.logs) return null;
         const banLog = gameState.logs.find(l => l.includes(`banned ${mapName}`));
@@ -917,11 +949,7 @@ export default function App() {
             <div style={{ ...styles.container, background: '#05070a' }}>
                 <h1 style={{ ...styles.neonTitle, marginTop: '20px', fontSize: '2.5rem' }}>CONTROL PANEL</h1>
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: '8px', color: '#00ff00', fontSize: '0.9rem',
-                        fontWeight: 'bold', background: 'rgba(0, 0, 0, 0.6)', padding: '6px 12px',
-                        borderRadius: '5px', border: '1px solid #00ff00', fontFamily: "'Rajdhani', sans-serif"
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00ff00', fontSize: '0.9rem', fontWeight: 'bold', background: 'rgba(0, 0, 0, 0.6)', padding: '6px 12px', borderRadius: '5px', border: '1px solid #00ff00', fontFamily: "'Rajdhani', sans-serif" }}>
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff00', boxShadow: '0 0 10px #00ff00', animation: 'pulse 2s infinite' }}></div>
                         <span>Total: {userCount}</span>
                     </div>
@@ -951,11 +979,7 @@ export default function App() {
                                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                             {[30, 45, 60, 90, 120].map(seconds => (
                                                 <button key={seconds} onClick={() => setTimerDuration(seconds)}
-                                                    style={{
-                                                        ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent',
-                                                        color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333',
-                                                        padding: '5px 15px', fontSize: '0.9rem'
-                                                    }}>
+                                                    style={{ ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent', color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333', padding: '5px 15px', fontSize: '0.9rem' }}>
                                                     {seconds}s
                                                 </button>
                                             ))}
@@ -1004,12 +1028,7 @@ export default function App() {
                                 <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '15px' }}>
                                     Configure a permanent webhook that fires for ALL matches
                                 </div>
-                                <input
-                                    style={{ ...styles.input, width: '100%', fontSize: '0.9rem', textAlign: 'left' }}
-                                    value={adminWebhook}
-                                    onChange={e => setAdminWebhook(e.target.value)}
-                                    placeholder="https://discord.com/api/webhooks/..."
-                                />
+                                <input style={{ ...styles.input, width: '100%', fontSize: '0.9rem', textAlign: 'left' }} value={adminWebhook} onChange={e => setAdminWebhook(e.target.value)} placeholder="https://discord.com/api/webhooks/..." />
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                                     <button onClick={() => {
                                         fetch(`${SOCKET_URL}/api/admin/webhook/set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret, webhookUrl: adminWebhook }) })
@@ -1069,7 +1088,6 @@ export default function App() {
                                             </div>
                                         </div>
                                         <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '5px' }}>
-                                            {/* 🛡️ GLOBAL READINESS FIX: Ensure dates use a consistent timezone standard */}
                                             {new Date(match.date).toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC'}
                                         </div>
                                         {match.keys && (
