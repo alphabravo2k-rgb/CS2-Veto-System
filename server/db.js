@@ -10,7 +10,7 @@
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v2.0.0 (SECURE-PERSISTENCE)
+ * VERSION       : v2.1.0 (SECURE-PERSISTENCE-LINKED)
  * STATUS        : ENFORCED
  *
  * FEATURES:
@@ -18,6 +18,7 @@
  * - Bounded Memory: Server boot only loads active (unfinished) matches.
  * - High-Performance: WAL Mode enabled + Date/Status indexing.
  * - Payload Caps: Enforces size limits on Base64 image uploads.
+ * - Singleton Export: getRawInstance() exported to prevent dual-connections.
  * =============================================================================
  */
 
@@ -193,7 +194,7 @@ function loadAllMatches() {
                 console.error('[DB] Error loading matches:', err);
                 return reject(err);
             }
-            resolve(rows.map(row => rowToMatch(row, true))); // Include keys so active matches can be joined
+            resolve(rows.map(row => rowToMatch(row, true))); 
         });
     });
 }
@@ -268,6 +269,9 @@ function closeDatabase() {
     });
 }
 
+// 🛡️ ARCHITECTURE FIX: Export a raw instance getter so settings.js can share the connection
+const getRawInstance = () => db;
+
 module.exports = {
     initDatabase,
     saveMatch,
@@ -275,5 +279,6 @@ module.exports = {
     getPaginatedMatches,
     getAllMatches,
     deleteMatch,
-    closeDatabase
+    closeDatabase,
+    getRawInstance
 };
