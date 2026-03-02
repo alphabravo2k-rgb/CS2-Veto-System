@@ -10,15 +10,14 @@
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v5.0.0 (ENTERPRISE-GRADE)
+ * VERSION       : v6.0.0 (INFRASTRUCTURE-HARDENED)
  * STATUS        : ENFORCED
  *
  * FEATURES:
- * - Constant-Time String Comparison for Admin Secrets.
- * - Socket-level Rate Limiting to prevent memory exhaustion.
- * - SSRF Protections on dynamic Discord webhooks.
- * - Strict Enum Validation for ALL WebSocket Payloads.
- * - Proper Dependency Injection for Database instances.
+ * - IP-Based Rate Limiting (Defends against reconnect-spam Layer 7 DDoS).
+ * - TTL Garbage Collection (Prevents OOM crashes from abandoned ghost rooms).
+ * - 100% Asynchronous Disk I/O (Prevents Event-Loop hijacking and server freezes).
+ * - Constant-Time String Comparison & SSRF Webhook Protections.
  * =============================================================================
  */
 
@@ -27,16 +26,15 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const fs = require('fs');
+const fsPromises = require('fs').promises; // 🛡️ SCALABILITY FIX: Non-blocking I/O
 const path = require('path');
 const crypto = require('crypto');
 
 require('dotenv').config();
 
-// Load webhook modules
 const discordWebhook = require('./discord-webhook');
 const settings = require('./settings');
 
-// Load database module with error handling
 let db;
 let dbError = null;
 try {
@@ -52,7 +50,6 @@ try {
 
 const app = express();
 
-// 🛡️ SECURITY FIX: Lock CORS to intended domains in production to prevent hijack connections
 const allowedOrigins = process.env.NODE_ENV === 'production' 
     ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []) 
     : "*";
@@ -63,7 +60,6 @@ app.use(express.json());
 const MAPS_FILE = path.join(__dirname, 'maps.json');
 const HISTORY_FILE = path.join(__dirname, 'match_history.json'); 
 
-// 🛡️ SECURITY FIX: Refuse to boot if production is missing a secret
 const IS_PROD = process.env.NODE_ENV === 'production';
 if (IS_PROD && !process.env.ADMIN_SECRET) {
     console.error('[SERVER] ❌ FATAL: ADMIN_SECRET must be set in production!');
@@ -73,13 +69,11 @@ const MASTER_SECRET = process.env.ADMIN_SECRET || "default_secret";
 
 let rooms = {};
 
-// --- 5v5 MAPS ---
 const DEFAULT_MAPS = [
     { name: "Dust2" }, { name: "Inferno" }, { name: "Mirage" },
     { name: "Overpass" }, { name: "Nuke" }, { name: "Anubis" }, { name: "Ancient" }
 ];
 
-// --- WINGMAN MAPS ---
 const WINGMAN_MAPS = [
     { name: "Vertigo" }, { name: "Nuke" }, { name: "Inferno" },
     { name: "Overpass" }, { name: "Sanctum" }, { name: "Poseidon" }
@@ -87,7 +81,6 @@ const WINGMAN_MAPS = [
 
 let activeMaps = [...DEFAULT_MAPS];
 
-// 🛡️ SECURITY FIX: Constant-time comparison prevents timing attacks on admin endpoints
 function safeCompare(a, b) {
     if (typeof a !== 'string' || typeof b !== 'string') return false;
     const aBuf = Buffer.from(a);
@@ -96,7 +89,6 @@ function safeCompare(a, b) {
     return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-// 🛡️ SECURITY FIX: Centralized Authorization logic
 function authorize(room, key, requiredTeam = null) {
     if (!room || !key || typeof key !== 'string') return false;
     if (safeCompare(key, room.keys.admin)) return true;
@@ -104,17 +96,15 @@ function authorize(room, key, requiredTeam = null) {
     return false;
 }
 
-// 🛡️ SECURITY FIX: SSRF Validation for Webhooks
 function isValidWebhook(url) {
     if (!url || typeof url !== 'string') return false;
     return url.startsWith('https://discord.com/api/webhooks/') || url.startsWith('https://discordapp.com/api/webhooks/');
 }
 
-// --- LOAD DATA ---
+// --- LOAD DATA (FULLY ASYNCHRONOUS) ---
 async function loadData() {
     try {
         await db.initDatabase();
-        // 🛡️ CRITICAL FIX: Successfully pass the DB handle to settings using the correct exported method
         await settings.initSettingsTable(db.getRawInstance ? db.getRawInstance() : null);
 
         const savedMatches = await db.loadAllMatches();
@@ -122,9 +112,11 @@ async function loadData() {
             rooms[match.id] = match;
         });
 
-        if (fs.existsSync(HISTORY_FILE) && savedMatches.length === 0) {
-            try {
-                const savedData = JSON.parse(fs.readFileSync(HISTORY_FILE));
+        // 🛡️ SCALABILITY FIX: Async Disk I/O for JSON Migration
+        try {
+            await fsPromises.access(HISTORY_FILE);
+            if (savedMatches.length === 0) {
+                const savedData = JSON.parse(await fsPromises.readFile(HISTORY_FILE, 'utf8'));
                 for (const match of savedData) {
                     const matchData = {
                         ...match,
@@ -134,24 +126,27 @@ async function loadData() {
                     await db.saveMatch(matchData);
                     rooms[match.id] = matchData;
                 }
-            } catch (jsonError) {
-                console.error("[MIGRATION] Error loading from JSON:", jsonError);
             }
+        } catch (e) {
+            // File doesn't exist, proceed normally
         }
+
+        // 🛡️ SCALABILITY FIX: Async Disk I/O for Maps
+        try {
+            await fsPromises.access(MAPS_FILE);
+            activeMaps = JSON.parse(await fsPromises.readFile(MAPS_FILE, 'utf8'));
+        } catch (e) {
+            await fsPromises.writeFile(MAPS_FILE, JSON.stringify(activeMaps, null, 2));
+        }
+
     } catch (e) {
-        // Handled silently
+        console.error('[SERVER] Startup data load error:', e);
     }
 }
 
 loadData().catch(error => {
-    console.error('[SERVER] ❌ Failed to initialize database on startup:', error.message);
+    console.error('[SERVER] ❌ Failed to initialize on startup:', error.message);
 });
-
-if (fs.existsSync(MAPS_FILE)) {
-    try { activeMaps = JSON.parse(fs.readFileSync(MAPS_FILE)); } catch (e) { }
-} else {
-    fs.writeFileSync(MAPS_FILE, JSON.stringify(activeMaps, null, 2));
-}
 
 async function saveHistory(roomId = null) {
     try {
@@ -167,9 +162,9 @@ async function saveHistory(roomId = null) {
     }
 }
 
-function saveMaps() {
+async function saveMaps() {
     try {
-        fs.writeFileSync(MAPS_FILE, JSON.stringify(activeMaps, null, 2));
+        await fsPromises.writeFile(MAPS_FILE, JSON.stringify(activeMaps, null, 2));
     } catch (e) {
         console.error("Error saving maps:", e);
     }
@@ -217,11 +212,18 @@ app.post('/api/admin/delete', async (req, res) => {
     } catch (error) { res.status(500).json({ error: "Failed to delete match" }); }
 });
 
-app.post('/api/admin/reset', (req, res) => {
+app.post('/api/admin/reset', async (req, res) => {
     if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     Object.values(rooms).forEach(r => { if (r.timerHandle) clearTimeout(r.timerHandle); });
     rooms = {};
-    if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
+    
+    // 🛡️ SCALABILITY FIX: Async Unlink prevents blocking the event loop on reset
+    try {
+        await fsPromises.unlink(HISTORY_FILE);
+    } catch (e) {
+        // File may not exist, safe to ignore
+    }
+    
     res.json({ success: true });
 });
 
@@ -230,11 +232,11 @@ app.post('/api/admin/maps/get', (req, res) => {
     res.json(activeMaps);
 });
 
-app.post('/api/admin/maps/update', (req, res) => {
+app.post('/api/admin/maps/update', async (req, res) => {
     if (!safeCompare(req.body.secret, MASTER_SECRET)) return res.status(403).json({ error: "Invalid Key" });
     if (!Array.isArray(req.body.maps)) return res.status(400).json({ error: "Invalid Data" });
     activeMaps = req.body.maps;
-    saveMaps();
+    await saveMaps();
     res.json({ success: true, maps: activeMaps });
 });
 
@@ -272,17 +274,23 @@ const io = new Server(server, { cors: { origin: allowedOrigins } });
 let connectedUsers = 0;
 const roomUserCounts = {};
 
+// 🛡️ SECURITY FIX: IP-Based Rate Limiting prevents bot-reconnect abuse
 const rateLimits = new Map();
-function isRateLimited(socketId) {
+
+function getClientIp(socket) {
+    return socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim() || socket.handshake.address;
+}
+
+function isRateLimited(ip) {
     const now = Date.now();
-    const limit = rateLimits.get(socketId) || { count: 0, resetAt: now + 60000 };
+    const limit = rateLimits.get(ip) || { count: 0, resetAt: now + 60000 };
     if (now > limit.resetAt) {
         limit.count = 0;
         limit.resetAt = now + 60000;
     }
     if (limit.count >= 40) return true; 
     limit.count++;
-    rateLimits.set(socketId, limit);
+    rateLimits.set(ip, limit);
     return false;
 }
 
@@ -303,7 +311,6 @@ const SEQUENCES = {
     wingman_bo3: [{ t: 'A', a: 'ban' }, { t: 'A', a: 'ban' }, { t: 'A', a: 'pick' }, { t: 'B', a: 'side' }, { t: 'B', a: 'pick' }, { t: 'A', a: 'side' }, { t: 'B', a: 'ban' }, { t: 'System', a: 'knife' }]
 };
 
-// 🛡️ SECURITY FIX: Strict Set constraints for all WebSocket payloads
 const VALID_SIDES = new Set(['CT', 'T']);
 const VALID_CALLS = new Set(['heads', 'tails']);
 const VALID_DECISIONS = new Set(['first', 'second']);
@@ -408,12 +415,14 @@ async function notifyWebhook(roomId, eventType, data) {
 
 io.on('connection', (socket) => {
     socket.currentRoom = null;
+    const clientIp = getClientIp(socket);
+
     connectedUsers++;
     socket.emit('user_count', connectedUsers);
     broadcastUserCount();
 
     socket.on('create_match', ({ teamA, teamB, teamALogo, teamBLogo, format, customMapNames, customSequence, useTimer, useCoinFlip, timerDuration, tempWebhookUrl }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         
         const safeWebhook = isValidWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
 
@@ -455,7 +464,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_room', ({ roomId, key }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         if (!rooms[roomId]) return socket.emit('error', 'Match not found');
 
         if (socket.currentRoom && socket.currentRoom !== roomId) {
@@ -481,7 +490,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('team_ready', ({ roomId, key }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         const room = rooms[roomId];
         if (!room || room.finished || !room.useTimer) return;
         
@@ -507,9 +516,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('coin_call', ({ roomId, call, key }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         
-        // 🛡️ CRITICAL FIX: Safe string casting and strict enumeration validation
         const safeCall = String(call).toLowerCase();
         if (!VALID_CALLS.has(safeCall)) return socket.emit('error', 'Invalid coin call payload');
 
@@ -534,9 +542,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('coin_decision', ({ roomId, decision, key }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
 
-        // 🛡️ CRITICAL FIX: Safe string casting and strict enumeration validation
         const safeDecision = String(decision).toLowerCase();
         if (!VALID_DECISIONS.has(safeDecision)) return socket.emit('error', 'Invalid coin decision payload');
 
@@ -572,7 +579,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('action', ({ roomId, data, key }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         const room = rooms[roomId];
         if (!room || room.finished) return;
         if (room.useTimer && (!room.ready.A || !room.ready.B)) return;
@@ -647,7 +654,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('admin_reset_match', ({ roomId, secret }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         const room = rooms[roomId];
         if (!room || !safeCompare(secret, MASTER_SECRET)) return;
         if (room.timerHandle) clearTimeout(room.timerHandle);
@@ -667,7 +674,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('admin_undo_step', ({ roomId, secret }) => {
-        if (isRateLimited(socket.id)) return socket.emit('error', 'Rate limit exceeded');
+        if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
         const room = rooms[roomId];
         // 🛡️ SECURITY FIX: Used constant-time string comparison for the secret
         if (!room || !safeCompare(secret, MASTER_SECRET) || room.step === 0) return;
@@ -716,8 +723,31 @@ io.on('connection', (socket) => {
         }
         connectedUsers = Math.max(0, connectedUsers - 1);
         broadcastUserCount();
-        rateLimits.delete(socket.id); // Clear memory on disconnect
     });
 });
+
+// 🛡️ SCALABILITY FIX: Automated Garbage Collection for Ghost Rooms
+// Runs every hour, purges rooms older than 24 hours from RAM to prevent Out-Of-Memory crashes
+setInterval(() => {
+    const now = Date.now();
+    const TTL = 24 * 60 * 60 * 1000; // 24 Hours
+    let purgedCount = 0;
+
+    for (const [roomId, room] of Object.entries(rooms)) {
+        const roomAge = now - new Date(room.date).getTime();
+        if (roomAge > TTL) {
+            if (room.timerHandle) clearTimeout(room.timerHandle);
+            delete rooms[roomId];
+            purgedCount++;
+        }
+    }
+    
+    // Periodically clean up rate limit memory mapping
+    rateLimits.clear();
+
+    if (purgedCount > 0) {
+        console.log(`[SERVER-GC] Successfully purged ${purgedCount} stale rooms from memory.`);
+    }
+}, 60 * 60 * 1000);
 
 server.listen(3001, () => { console.log('Server running on port 3001'); });
