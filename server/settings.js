@@ -1,16 +1,15 @@
-// File: settings.js
 /**
  * ⚡ COMP-OS — SETTINGS PERSISTENCE
  * =============================================================================
  * FILE          : settings.js
  * RESPONSIBILITY: Stores global server configurations in SQLite
  * LAYER         : Backend Persistence
- * RISK LEVEL    : LOW/MEDIUM
+ * RISK LEVEL    : LOW
  * =============================================================================
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v2.1.0 (STRICT-ENUMERATION)
+ * VERSION       : v2.2.0 (SEALED-ENCAPSULATION)
  * STATUS        : ENFORCED
  *
  * FEATURES:
@@ -18,6 +17,7 @@
  * - Deep Defense: SSRF Webhook validation enforced before DB commit.
  * - Auditing: added `updated_at` timestamps for tracing configuration changes.
  * - Strict Enumeration: Hardcoded Set of allowed keys prevents DB injection bloat.
+ * - Sealed Module: Internal generic setters are hidden to prevent validation bypass.
  * =============================================================================
  */
 
@@ -60,7 +60,7 @@ function initSettingsTable(database) {
 }
 
 /**
- * 🧠 INTERNAL ENGINE: Generic Safe Getter
+ * 🧠 INTERNAL ENGINE: Generic Safe Getter (STRICTLY PRIVATE)
  */
 function getSetting(key) {
     return new Promise((resolve, reject) => {
@@ -79,7 +79,7 @@ function getSetting(key) {
 }
 
 /**
- * 🧠 INTERNAL ENGINE: Generic Safe Setter
+ * 🧠 INTERNAL ENGINE: Generic Safe Setter (STRICTLY PRIVATE)
  */
 function setSetting(key, value) {
     return new Promise((resolve, reject) => {
@@ -122,11 +122,9 @@ function setAdminWebhook(url) {
     return setSetting('admin_webhook', url || '');
 }
 
+// 🛡️ SECURITY FIX: Module Sealed. Internal engines are no longer exported.
 module.exports = {
     initSettingsTable,
     getAdminWebhook,
-    setAdminWebhook,
-    // Exposing the generic engines makes the module infinitely scalable in the future
-    getSetting, 
-    setSetting
+    setAdminWebhook
 };
