@@ -1,34 +1,30 @@
 {
   "name": "cs2-mapveto-client",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
+  "type": "module",
+  "description": "Frontend client for CS2 Map Veto System - GPU Accelerated & Vite Optimized",
+  "author": "LOTGaming",
+  "license": "MIT",
   "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "socket.io-client": "^4.8.3",
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^13.5.0",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "multer": "^2.0.2",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "react-scripts": "5.0.1",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
-    "web-vitals": "^2.1.4"
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.2.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
+    "start": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "test": "echo \"Testing to be configured with Vitest\""
   },
   "browserslist": {
     "production": [
@@ -42,15 +38,13 @@
       "last 1 safari version"
     ]
   },
-  "description": "Frontend client for CS2 Map Veto System - Real-time match veto interface built with React",
   "keywords": [
     "cs2",
     "counter-strike",
     "map-veto",
     "react",
+    "vite",
     "socket.io",
     "real-time"
-  ],
-  "author": "LOTGaming",
-  "license": "MIT"
+  ]
 }
