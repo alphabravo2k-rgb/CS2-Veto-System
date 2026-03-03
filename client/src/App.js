@@ -1,4 +1,3 @@
-// File: src/App.jsx
 /**
  * ⚡ COMP-OS — VETO ENGINE CLIENT
  * =============================================================================
@@ -10,7 +9,7 @@
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v5.0.0 (LAZY-SOCKET-ENGINE)
+ * VERSION       : v5.1.0 (LIFECYCLE-STABLE)
  * STATUS        : ENFORCED
  *
  * FEATURES:
@@ -18,6 +17,7 @@
  * - O(1) Log Caching: Replaced O(N) array scans during render loops.
  * - Singleton AudioContext: Prevents browser context exhaustion.
  * - Secure URL Token Scrubbing.
+ * - Lifecycle Hardening: Sound toggles no longer cause socket disconnects.
  * =============================================================================
  */
 
@@ -611,7 +611,11 @@ export default function App() {
     const [useTimer, setUseTimer] = useState(false);
     const [timerDuration, setTimerDuration] = useState(60); 
     const [useCoinFlip, setUseCoinFlip] = useState(false);
+    
     const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('soundEnabled') !== 'false');
+    // 🛡️ LIFECYCLE FIX: Track sound setting in a ref to avoid tearing down the entire useEffect
+    const soundEnabledRef = useRef(soundEnabled);
+    
     const [userCount, setUserCount] = useState(0); 
 
     const prevLogsRef = useRef([]); 
@@ -626,6 +630,11 @@ export default function App() {
     const fileInputB = useRef(null);
 
     const styles = useMemo(() => getStyles(isMobile), [isMobile]);
+
+    // Keep the ref strictly synced with the state
+    useEffect(() => {
+        soundEnabledRef.current = soundEnabled;
+    }, [soundEnabled]);
 
     const mapLogCache = useMemo(() => {
         const cache = {};
@@ -684,10 +693,10 @@ export default function App() {
             .then(r => r.json()).then(data => { if (Array.isArray(data)) setMapPool(data); });
     }, []);
 
+    // 🛡️ INFRASTRUCTURE FIX: Main Application Mount Effect
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
-        const link = document.createElement('link'); link.href = 'https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap'; link.rel = 'stylesheet'; document.head.appendChild(link);
         document.title = "LOTGaming | CS2 Veto";
 
         fetch(`${SOCKET_URL}/api/maps`)
@@ -709,6 +718,7 @@ export default function App() {
             }).then(r => r.json()).then(data => { if (data.webhookUrl) setAdminWebhook(data.webhookUrl); }).catch(() => { });
         }
 
+        // 🛡️ BUG FIX: Removed duplicate user_count listener
         socket.on('user_count', (count) => {
             setUserCount(count);
         });
@@ -718,7 +728,8 @@ export default function App() {
             socket.emit('join_room', { roomId: params.room, key: params.key });
             
             socket.on('update_state', (data) => {
-                if (data && data.logs && prevLogsRef.current.length > 0 && soundEnabled) {
+                // Use the ref here to check if sound should play, avoiding effect tear-downs
+                if (data && data.logs && prevLogsRef.current.length > 0 && soundEnabledRef.current) {
                     const newLogs = data.logs.slice(prevLogsRef.current.length);
                     newLogs.forEach(log => {
                         if (log.includes('[BAN]')) playSound('ban');
@@ -738,15 +749,9 @@ export default function App() {
                 if (data && !data.finished && !rulesShownRef.current) { setShowRules(true); rulesShownRef.current = true; }
             });
             socket.on('role_assigned', (role) => setMyRole(role));
-        }
-
-        if (!params.room || isAdminRoute) {
+        } else if (!params.room || isAdminRoute) {
             socket.connect();
         }
-
-        socket.on('user_count', (count) => {
-            setUserCount(count);
-        });
 
         socket.on('match_created', ({ roomId, keys }) => {
             const links = {
@@ -771,7 +776,7 @@ export default function App() {
             socket.disconnect();
             window.removeEventListener('resize', handleResize); 
         };
-    }, [params.room, params.key, isAdminRoute, adminSecret, fetchAdminHistory, fetchMapPool, soundEnabled]);
+    }, [params.room, params.key, isAdminRoute, adminSecret, fetchAdminHistory, fetchMapPool]); // Removed soundEnabled
 
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
@@ -845,7 +850,7 @@ export default function App() {
 
     const handleAction = useCallback((data) => {
         if (!gameState || gameState.finished) return;
-        if (soundEnabled) {
+        if (soundEnabledRef.current) {
             const currentStep = gameState.sequence[gameState.step];
             if (currentStep) {
                 if (currentStep.a === 'ban') playSound('ban');
@@ -854,22 +859,22 @@ export default function App() {
             }
         }
         socket.emit('action', { roomId: params.room, data, key: params.key });
-    }, [gameState, soundEnabled, params.room, params.key]);
+    }, [gameState, params.room, params.key]);
 
     const handleReady = useCallback(() => {
-        if (soundEnabled) playSound('ready');
+        if (soundEnabledRef.current) playSound('ready');
         socket.emit('team_ready', { roomId: params.room, key: params.key });
-    }, [soundEnabled, params.room, params.key]);
+    }, [params.room, params.key]);
 
     const handleCoinCall = useCallback((call) => {
-        if (soundEnabled) playSound('coin');
+        if (soundEnabledRef.current) playSound('coin');
         socket.emit('coin_call', { roomId: params.room, call, key: params.key });
-    }, [soundEnabled, params.room, params.key]);
+    }, [params.room, params.key]);
 
     const handleCoinDecide = useCallback((decision) => {
-        if (soundEnabled) playSound('coin');
+        if (soundEnabledRef.current) playSound('coin');
         socket.emit('coin_decision', { roomId: params.room, decision, key: params.key });
-    }, [soundEnabled, params.room, params.key]);
+    }, [params.room, params.key]);
 
     const fetchPublicHistory = (page = 1) => {
         fetch(`${SOCKET_URL}/api/history?page=${page}&limit=10`)
@@ -1399,5 +1404,55 @@ export default function App() {
 
 // --- DYNAMIC STYLES ---
 const getStyles = (isMobile) => ({
-    // ... [Styles omitted for brevity, refer to previous output] ...
-});s
+    container: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'Rajdhani', sans-serif", color: 'white', padding: isMobile ? '10px' : '20px', boxSizing: 'border-box', position: 'relative' },
+    glassPanel: { background: 'rgba(15, 18, 25, 0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: isMobile ? '20px' : '40px', width: '100%', maxWidth: '600px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10 },
+    logo: { width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', borderRadius: '50%', border: '2px solid #00d4ff', boxShadow: '0 0 15px rgba(0, 212, 255, 0.5)' },
+    neonTitle: { fontSize: isMobile ? '2rem' : '3.5rem', fontWeight: '900', margin: '0', background: 'linear-gradient(to right, #fff, #00d4ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 0 20px rgba(0, 212, 255, 0.3)', letterSpacing: '2px' },
+    input: { width: '80%', padding: '15px', margin: '15px 0', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', borderRadius: '8px', color: 'white', fontSize: '1.2rem', textAlign: 'center', outline: 'none', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold' },
+    modeBtn: { background: 'transparent', border: '1px solid #333', color: '#888', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', transition: 'all 0.3s' },
+    modeBtnActive: { background: 'rgba(0, 212, 255, 0.1)', border: '1px solid #00d4ff', color: '#00d4ff', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', boxShadow: '0 0 10px rgba(0, 212, 255, 0.2)' },
+    generatingBox: { marginTop: '20px', padding: '20px', display: 'flex', justifyContent: 'center' },
+    spinner: { width: '40px', height: '40px', border: '4px solid rgba(0, 212, 255, 0.1)', borderTopColor: '#00d4ff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
+    linksBox: { marginTop: '25px', background: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'left', animation: 'fadeIn 0.5s ease-out' },
+    linkRow: { display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '10px' },
+    linkInput: { flex: 1, background: '#111', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer', outline: 'none' },
+    iconBtn: { background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' },
+    scoreboard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1200px', marginBottom: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px 30px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)', zIndex: 10 },
+    teamName: { fontSize: isMobile ? '1.5rem' : '2.5rem', fontWeight: '900', textTransform: 'uppercase', textShadow: '0 0 10px currentColor' },
+    teamLogo: { width: isMobile ? '30px' : '50px', height: isMobile ? '30px' : '50px', borderRadius: '50%', objectFit: 'contain', background: '#000' },
+    vsBadge: { background: '#fff', color: '#000', padding: '5px 15px', borderRadius: '20px', fontWeight: '900', fontSize: isMobile ? '1rem' : '1.5rem' },
+    statusBar: { background: 'rgba(0,0,0,0.8)', padding: '15px 30px', borderRadius: '50px', border: '2px solid #333', marginBottom: '30px', zIndex: 10 },
+    grid: { display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? '10px' : '20px', width: '100%', maxWidth: '1400px', zIndex: 10 },
+    mapCard: { backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '10px', height: isMobile ? '120px' : '250px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden', transition: 'all 0.2s ease', userSelect: 'none' },
+    cardContent: { padding: '15px', zIndex: 2, background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%)', textAlign: 'center' },
+    mapTitle: { fontSize: isMobile ? '1.2rem' : '1.8rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', textShadow: '0 2px 5px black' },
+    badgeBan: { background: '#ff4444', color: 'white', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
+    badgePick: { background: '#00ff00', color: 'black', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
+    badgeDecider: { background: '#ffa500', color: 'black', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
+    miniSideBadge: { background: '#000', color: '#fff', fontSize: '0.6rem', padding: '2px 5px', borderRadius: '3px', marginTop: '3px', border: '1px solid #333' },
+    mapOrderBadge: { position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', border: '1px solid #00ff00', color: '#00ff00', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold', zIndex: 3 },
+    sideSelectionContainer: { width: '100%', maxWidth: '800px', background: 'rgba(0,0,0,0.8)', border: '1px solid #333', borderRadius: '15px', padding: isMobile ? '20px' : '40px', textAlign: 'center', zIndex: 10 },
+    sideCard: { flex: 1, background: '#111', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease', position: 'relative' },
+    sideImg: { width: '100%', height: isMobile ? '150px' : '300px', objectFit: 'cover', opacity: 0.7 },
+    sideLabelCT: { position: 'absolute', bottom: '20px', left: '0', right: '0', fontSize: '2.5rem', fontWeight: '900', color: '#4facfe', textShadow: '0 0 10px #4facfe' },
+    sideLabelT: { position: 'absolute', bottom: '20px', left: '0', right: '0', fontSize: '2.5rem', fontWeight: '900', color: '#ff9a9e', textShadow: '0 0 10px #ff9a9e' },
+    logContainer: { width: '100%', maxWidth: '800px', background: 'rgba(0,0,0,0.8)', border: '1px solid #333', borderRadius: '10px', marginTop: '30px', overflow: 'hidden', zIndex: 10 },
+    logHeader: { background: '#111', padding: '15px 20px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#aaa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    copyBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '0.8rem', transition: 'background 0.2s' },
+    logScroll: { maxHeight: '200px', overflowY: 'auto', padding: '15px 20px', display: 'flex', flexDirection: 'column' },
+    logRow: { display: 'flex', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px', marginBottom: '6px' },
+    footer: { marginTop: '40px', color: '#444', fontSize: '0.8rem', zIndex: 10 },
+    notification: { position: 'fixed', bottom: '20px', left: '50%', marginLeft: '-125px', width: '250px', background: '#00ff00', color: '#000', padding: '10px 20px', borderRadius: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', zIndex: 4000, transition: 'all 0.3s ease' },
+    homeBtn: { position: 'absolute', top: isMobile ? '10px' : '20px', left: isMobile ? '10px' : '20px', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 100, fontSize: '0.9rem', fontFamily: "'Rajdhani', sans-serif" },
+    historyBtn: { marginTop: '30px', background: 'transparent', border: '1px solid #444', color: '#888', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontSize: '0.9rem', transition: 'all 0.3s' },
+    historyList: { width: '100%', maxWidth: '1000px', display: 'flex', flexDirection: 'column', gap: '15px', zIndex: 10 },
+    historyCard: { background: 'rgba(15, 18, 25, 0.8)', border: '1px solid #333', borderRadius: '10px', padding: '20px', textAlign: 'left' },
+    historyHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', fontSize: '1.2rem', fontWeight: 'bold' },
+    formatTag: { fontSize: '0.7rem', background: '#222', padding: '3px 8px', borderRadius: '12px', color: '#aaa', border: '1px solid #444' },
+    logBox: { background: '#000', padding: '10px', borderRadius: '5px', marginTop: '10px', maxHeight: '150px', overflowY: 'auto', fontSize: '0.85rem' },
+    logLine: { color: '#bbb', marginBottom: '4px', fontFamily: 'monospace' },
+    backBtn: { background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '8px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', marginBottom: '20px', zIndex: 10 },
+    adminLinkBadge: { background: 'rgba(255, 215, 0, 0.1)', color: '#ffd700', border: '1px solid #ffd700', padding: '5px 10px', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 'bold' },
+    copyLinkBadge: { background: 'rgba(255, 255, 255, 0.1)', color: '#fff', border: '1px solid #666', padding: '5px 10px', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 'bold' },
+    tinyBtn: { background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '2px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem', fontFamily: "'Rajdhani', sans-serif" },
+});
