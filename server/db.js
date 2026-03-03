@@ -10,18 +10,13 @@
 
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+// 🛡️ ARCHITECTURE FIX: Import the canonical validator from the Trust Chain
+const { isValidDiscordWebhook } = require('./discord-webhook'); 
 
 const DB_FILE = path.join(__dirname, 'match_history.db');
 
 let db = null;
 
-// 🛡️ SECURITY FIX: SSRF Validation for Webhooks at the DB level
-function isValidWebhook(url) {
-    if (!url || typeof url !== 'string') return false;
-    return url.startsWith('https://discord.com/api/webhooks/') || url.startsWith('https://discordapp.com/api/webhooks/');
-}
-
-// 🛡️ RELIABILITY FIX: Safe JSON parsing prevents a single corrupt row from crashing the server
 function safeJSONParse(data, fallback) {
     if (!data) return fallback;
     try {
@@ -32,7 +27,6 @@ function safeJSONParse(data, fallback) {
     }
 }
 
-// 🛡️ MAINTAINABILITY FIX: Centralized deserializer with crash-proof parsing
 function rowToMatch(row, includeKeys = false) {
     const match = {
         id: row.id,
@@ -64,7 +58,6 @@ function rowToMatch(row, includeKeys = false) {
     return match;
 }
 
-// Initialize database and create table if needed
 function initDatabase() {
     return new Promise((resolve, reject) => {
         db = new sqlite3.Database(DB_FILE, (err) => {
@@ -74,18 +67,23 @@ function initDatabase() {
             }
             console.log('[DB] Connected to SQLite database');
 
-            // 🛡️ SCALABILITY & RELIABILITY FIX: Serialize PRAGMAs and ensure they succeed
             db.serialize(() => {
-                db.run('PRAGMA integrity_check', (err) => {
-                    if (err) console.warn('[DB] ⚠️ Integrity check failed or skipped:', err);
+                // 🛡️ CORRECTNESS FIX: Actually read the result of the integrity check
+                db.all('PRAGMA integrity_check', [], (err, rows) => {
+                    if (err || !rows || rows[0]?.integrity_check !== 'ok') {
+                        console.error('[DB] ❌ CRITICAL: Integrity check FAILED:', rows);
+                    } else {
+                        console.log('[DB] Database integrity verified.');
+                    }
                 });
                 
                 db.run('PRAGMA journal_mode = WAL', (err) => {
                     if (err) console.error('[DB] ⚠️ Failed to enable WAL mode:', err);
                 });
                 
-                db.run('PRAGMA synchronous = NORMAL');
-                db.run('PRAGMA foreign_keys = ON');
+                // 🛡️ ARCHITECTURE FIX: Add error callbacks to prevent silent failures
+                db.run('PRAGMA synchronous = NORMAL', (err) => { if (err) console.error('[DB] Failed setting sync mode', err) });
+                db.run('PRAGMA foreign_keys = ON', (err) => { if (err) console.error('[DB] Failed setting foreign keys', err) });
 
                 db.run(`
                     CREATE TABLE IF NOT EXISTS match_history (
@@ -115,7 +113,6 @@ function initDatabase() {
                 `, (err) => {
                     if (err) return reject(err);
 
-                    // Indexes for high-performance querying
                     db.run('CREATE INDEX IF NOT EXISTS idx_finished ON match_history(finished)');
                     db.run('CREATE INDEX IF NOT EXISTS idx_date ON match_history(date DESC)', (indexErr) => {
                         if (indexErr) console.error('[DB] Error creating indexes:', indexErr);
@@ -128,7 +125,6 @@ function initDatabase() {
     });
 }
 
-// Save or update a match in database
 function saveMatch(match) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
@@ -139,16 +135,14 @@ function saveMatch(match) {
             useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys, tempWebhookUrl
         } = match;
 
-        // Ephemeral Keys
         const keysToStore = finished ? null : JSON.stringify(keys);
 
-        // 🛡️ SECURITY FIX: Enforce max size using actual byte length (~3.5MB cap)
         const getSafeLogo = (logo) => (logo && Buffer.byteLength(logo, 'utf8') < 3500000) ? logo : null;
         const safeLogoA = getSafeLogo(teamALogo);
         const safeLogoB = getSafeLogo(teamBLogo);
 
-        // SSRF validation checkpoint
-        const safeWebhook = isValidWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
+        // 🛡️ SECURITY FIX: Used the canonical validator
+        const safeWebhook = isValidDiscordWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
 
         const query = `
             INSERT INTO match_history (
@@ -185,12 +179,10 @@ function saveMatch(match) {
     });
 }
 
-// Load ACTIVE matches from database (For server startup)
 function loadAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        // 🛡️ SCALABILITY FIX: Removed arbitrary LIMIT 100 to prevent active match loss
         db.all('SELECT * FROM match_history WHERE finished = 0 ORDER BY date DESC', [], (err, rows) => {
             if (err) {
                 console.error('[DB] Error loading matches:', err);
@@ -201,7 +193,6 @@ function loadAllMatches() {
     });
 }
 
-// Get paginated matches (for public history)
 function getPaginatedMatches(page = 1, limit = 10) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
@@ -230,12 +221,10 @@ function getPaginatedMatches(page = 1, limit = 10) {
     });
 }
 
-// Get all matches (for admin dashboard)
 function getAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        // 🛡️ SCALABILITY FIX: Capped admin fetch to prevent OOM on massive databases
         db.all('SELECT * FROM match_history ORDER BY date DESC LIMIT 1000', [], (err, rows) => {
             if (err) return reject(err);
             resolve(rows.map(row => rowToMatch(row, false)));
@@ -243,21 +232,18 @@ function getAllMatches() {
     });
 }
 
-// Delete a match
 function deleteMatch(matchId) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        // 🛡️ CORRECTNESS FIX: Uses function(err) to access 'this.changes' and confirm deletion
         db.run('DELETE FROM match_history WHERE id = ?', [matchId], function(err) {
             if (err) return reject(err);
-            if (this.changes === 0) return resolve(false); // Match did not exist
+            if (this.changes === 0) return resolve(false); 
             resolve(true);
         });
     });
 }
 
-// Close database connection
 function closeDatabase() {
     return new Promise((resolve, reject) => {
         if (db) {
