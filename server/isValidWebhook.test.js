@@ -5,7 +5,7 @@ describe('Security: SSRF Guard (isValidWebhook)', () => {
         expect(isValidWebhook('https://discord.com/api/webhooks/123/token')).toBe(true);
     });
 
-    test('ACCEPTS valid discordapp.com webhook', () => {
+    test('ACCEPTS valid legacy discordapp.com webhook', () => {
         expect(isValidWebhook('https://discordapp.com/api/webhooks/123/token')).toBe(true);
     });
 
@@ -32,6 +32,11 @@ describe('Security: SSRF Guard (isValidWebhook)', () => {
         expect(isValidWebhook('https://evil.com/?r=https://discord.com/api/webhooks/')).toBe(false);
     });
 
+    test('REJECTS discord.com subdomain spoofing', () => {
+        // discord.com.evil.com starts with 'discord.com' but the path slash saves it
+        expect(isValidWebhook('https://discord.com.evil.com/api/webhooks/123/token')).toBe(false);
+    });
+
     test('REJECTS null, undefined, and numbers', () => {
         expect(isValidWebhook(null)).toBe(false);
         expect(isValidWebhook(undefined)).toBe(false);
@@ -40,5 +45,9 @@ describe('Security: SSRF Guard (isValidWebhook)', () => {
 
     test('REJECTS objects (Prototype Poisoning Defense)', () => {
         expect(isValidWebhook({ url: 'https://discord.com/api/webhooks/123' })).toBe(false);
+    });
+
+    test('REJECTS empty string', () => {
+        expect(isValidWebhook('')).toBe(false);
     });
 });
