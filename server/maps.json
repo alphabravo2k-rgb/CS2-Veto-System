@@ -1,24 +1,23 @@
 [
   {
-    "name": "Dust2"
+    "name": "dust2"
   },
   {
-    "name": "Inferno"
+    "name": "inferno"
   },
   {
-    "name": "Mirage"
+    "name": "mirage"
   },
   {
-    "name": "Overpass"
+    "name": "overpass"
   },
   {
-    "name": "Anubis"
+    "name": "anubis"
   },
   {
-    "name": "Ancient"
+    "name": "ancient"
   },
   {
-    "name": "Nuke",
-    "customImage": null
+    "name": "nuke"
   }
 ]
