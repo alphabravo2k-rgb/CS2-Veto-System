@@ -1,19 +1,21 @@
 import React from 'react';
 import { render } from '@testing-library/react';
+import io from 'socket.io-client';
 
 // 🛡️ Mock socket.io before App imports it at module level
 jest.mock('socket.io-client', () => {
-    const socket = {
-        emit: jest.fn(),
-        on: jest.fn(),
-        off: jest.fn(),
-        connect: jest.fn(),
-        disconnect: jest.fn(),
-    };
+    const emit = jest.fn();
+    const on = jest.fn();
+    const off = jest.fn();
+    const connect = jest.fn();
+    const disconnect = jest.fn();
+    const socket = { emit, on, off, connect, disconnect };
     return jest.fn(() => socket);
 });
 
-// 🛡️ Mock fetch to prevent useEffect API calls from throwing
+// 🛡️ Mock fetch to prevent useEffect API calls from throwing.
+// NOTE: This executes after imports, which is safe here because fetch 
+// is only called inside useEffect (post-render). Do not move inside beforeEach.
 global.fetch = jest.fn(() =>
     Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
 );
@@ -44,7 +46,16 @@ describe('Security: Client URL Token Scrubbing', () => {
     test('subsequent visit uses sessionStorage key when URL has no key', () => {
         sessionStorage.setItem('lot_key_match123', 'stored_key');
         window.history.pushState({}, '', '/?room=match123');
+        
         render(<App />);
+        
         expect(sessionStorage.getItem('lot_key_match123')).toBe('stored_key');
+        
+        // 🛡️ Verify the key was actually retrieved and used to join the room
+        const mockSocket = io();
+        expect(mockSocket.emit).toHaveBeenCalledWith('join_room', {
+            roomId: 'match123',
+            key: 'stored_key'
+        });
     });
 });
