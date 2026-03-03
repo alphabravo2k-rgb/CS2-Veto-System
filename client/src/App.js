@@ -6,19 +6,6 @@
  * LAYER         : Frontend UI
  * RISK LEVEL    : LOW (Hardened)
  * =============================================================================
- *
- * RELEASE METADATA
- * -----------------------------------------------------------------------------
- * VERSION       : v5.1.0 (LIFECYCLE-STABLE)
- * STATUS        : ENFORCED
- *
- * FEATURES:
- * - Lazy Socket Connection: Socket only connects when actively required.
- * - O(1) Log Caching: Replaced O(N) array scans during render loops.
- * - Singleton AudioContext: Prevents browser context exhaustion.
- * - Secure URL Token Scrubbing.
- * - Lifecycle Hardening: Sound toggles no longer cause socket disconnects.
- * =============================================================================
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -31,7 +18,7 @@ const SOCKET_URL = window.location.hostname === "localhost"
 
 const LOGO_URL = "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
 
-// 🛡️ SCALABILITY FIX: AutoConnect disabled. We only connect when necessary.
+// AutoConnect disabled. We only connect when necessary.
 const socket = io(SOCKET_URL, { autoConnect: false });
 
 // --- MAP PREFIX DETECTION ---
@@ -580,6 +567,8 @@ export default function App() {
     const [totalPages, setTotalPages] = useState(1);
 
     const [showNotification, setShowNotification] = useState(false);
+    const [serverError, setServerError] = useState(null); // 🛡️ ARCHITECTURE FIX: Server error state
+    
     const [hoveredItem, setHoveredItem] = useState(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [showRules, setShowRules] = useState(false);
@@ -613,10 +602,10 @@ export default function App() {
     const [useCoinFlip, setUseCoinFlip] = useState(false);
     
     const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('soundEnabled') !== 'false');
-    // 🛡️ LIFECYCLE FIX: Track sound setting in a ref to avoid tearing down the entire useEffect
     const soundEnabledRef = useRef(soundEnabled);
     
     const [userCount, setUserCount] = useState(0); 
+    const [roomUserCount, setRoomUserCount] = useState(0); // 🛡️ ARCHITECTURE FIX: Room user count state
 
     const prevLogsRef = useRef([]); 
 
@@ -631,7 +620,6 @@ export default function App() {
 
     const styles = useMemo(() => getStyles(isMobile), [isMobile]);
 
-    // Keep the ref strictly synced with the state
     useEffect(() => {
         soundEnabledRef.current = soundEnabled;
     }, [soundEnabled]);
@@ -680,47 +668,80 @@ export default function App() {
         return cache;
     }, [gameState?.logs]);
 
-    const fetchAdminHistory = useCallback((secret) => {
-        fetch(`${SOCKET_URL}/api/admin/history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret }) })
-            .then(res => res.json()).then(data => {
-                if (data.error) { if (!isAdminRoute) alert(data.error); }
-                else { setHistoryData(data); setIsAdminAuthenticated(true); sessionStorage.setItem('adminSecret', secret); }
-            });
-    }, [isAdminRoute]);
-
-    const fetchMapPool = useCallback((secret) => {
-        fetch(`${SOCKET_URL}/api/admin/maps/get`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret }) })
-            .then(r => r.json()).then(data => { if (Array.isArray(data)) setMapPool(data); });
-    }, []);
-
-    // 🛡️ INFRASTRUCTURE FIX: Main Application Mount Effect
+    // 🛡️ ARCHITECTURE FIX: Lifecycle Split 1 - Initialization & API Fetching
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
-        document.title = "LOTGaming | CS2 Veto";
-
+        
         fetch(`${SOCKET_URL}/api/maps`)
-            .then(r => {
-                if (!r.ok) throw new Error("Server Error");
-                return r.json();
-            })
+            .then(r => r.ok ? r.json() : [])
             .then(data => {
-                setAvailableMaps(data);
-                setCustomSelectedMaps(data.map(m => m.name));
-            })
-            .catch(() => { });
+                if (data.length > 0) {
+                    setAvailableMaps(data);
+                    setCustomSelectedMaps(data.map(m => m.name));
+                }
+            }).catch(() => { });
 
-        if (isAdminRoute && adminSecret) {
-            fetchAdminHistory(adminSecret);
-            fetchMapPool(adminSecret);
-            fetch(`${SOCKET_URL}/api/admin/webhook/get`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: adminSecret })
-            }).then(r => r.json()).then(data => { if (data.webhookUrl) setAdminWebhook(data.webhookUrl); }).catch(() => { });
-        }
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
-        // 🛡️ BUG FIX: Removed duplicate user_count listener
-        socket.on('user_count', (count) => {
-            setUserCount(count);
+    // 🛡️ ARCHITECTURE FIX: Lifecycle Split 2 - Admin Data Fetching (Only runs when route/secret changes)
+    useEffect(() => {
+        if (!isAdminRoute || !adminSecret) return;
+
+        const fetchAdminData = async () => {
+            try {
+                const histRes = await fetch(`${SOCKET_URL}/api/admin/history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) });
+                const histData = await histRes.json();
+                if (!histData.error) {
+                    setHistoryData(histData);
+                    setIsAdminAuthenticated(true);
+                    sessionStorage.setItem('adminSecret', adminSecret);
+                }
+
+                const poolRes = await fetch(`${SOCKET_URL}/api/admin/maps/get`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) });
+                const poolData = await poolRes.json();
+                if (Array.isArray(poolData)) setMapPool(poolData);
+
+                const webRes = await fetch(`${SOCKET_URL}/api/admin/webhook/get`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) });
+                const webData = await webRes.json();
+                if (webData.webhookUrl) setAdminWebhook(webData.webhookUrl);
+            } catch (e) {
+                console.error("Admin fetch error", e);
+            }
+        };
+
+        fetchAdminData();
+    }, [isAdminRoute, adminSecret]);
+
+    // 🛡️ ARCHITECTURE FIX: Lifecycle Split 3 - Socket Connection (Runs once based on room params)
+    useEffect(() => {
+        socket.on('user_count', (count) => setUserCount(count));
+        
+        // 🛡️ ARCHITECTURE FIX: Listen for room_user_count and bind to state
+        socket.on('room_user_count', ({ count }) => setRoomUserCount(count));
+
+        // 🛡️ ARCHITECTURE FIX: Catch server errors (Rate limits, invalid payloads)
+        socket.on('error', (msg) => {
+            setServerError(msg);
+            setTimeout(() => setServerError(null), 4000);
+        });
+
+        socket.on('match_created', ({ roomId, keys }) => {
+            const links = {
+                admin: `${window.location.origin}/?room=${roomId}&key=${keys.admin}`,
+                teamA: `${window.location.origin}/?room=${roomId}&key=${keys.A}`,
+                teamB: `${window.location.origin}/?room=${roomId}&key=${keys.B}`
+            };
+
+            if (isAdminRoute) {
+                setAdminLinks(links);
+                // Trigger an admin refresh here rather than using dependencies
+                fetch(`${SOCKET_URL}/api/admin/history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: sessionStorage.getItem('adminSecret') }) })
+                    .then(r => r.json()).then(d => { if (!d.error) setHistoryData(d); });
+            } else {
+                setTimeout(() => { setIsGenerating(false); setCreatedLinks(links); }, 800);
+            }
         });
 
         if (params.room && !isAdminRoute) {
@@ -728,7 +749,6 @@ export default function App() {
             socket.emit('join_room', { roomId: params.room, key: params.key });
             
             socket.on('update_state', (data) => {
-                // Use the ref here to check if sound should play, avoiding effect tear-downs
                 if (data && data.logs && prevLogsRef.current.length > 0 && soundEnabledRef.current) {
                     const newLogs = data.logs.slice(prevLogsRef.current.length);
                     newLogs.forEach(log => {
@@ -753,30 +773,16 @@ export default function App() {
             socket.connect();
         }
 
-        socket.on('match_created', ({ roomId, keys }) => {
-            const links = {
-                admin: `${window.location.origin}/?room=${roomId}&key=${keys.admin}`,
-                teamA: `${window.location.origin}/?room=${roomId}&key=${keys.A}`,
-                teamB: `${window.location.origin}/?room=${roomId}&key=${keys.B}`
-            };
-
-            if (isAdminRoute) {
-                setAdminLinks(links);
-                fetchAdminHistory(adminSecret);
-            } else {
-                setTimeout(() => { setIsGenerating(false); setCreatedLinks(links); }, 800);
-            }
-        });
-
         return () => { 
+            socket.off('user_count');
+            socket.off('room_user_count');
+            socket.off('error');
+            socket.off('match_created');
             socket.off('update_state'); 
             socket.off('role_assigned'); 
-            socket.off('user_count');
-            socket.off('match_created');
             socket.disconnect();
-            window.removeEventListener('resize', handleResize); 
         };
-    }, [params.room, params.key, isAdminRoute, adminSecret, fetchAdminHistory, fetchMapPool]); // Removed soundEnabled
+    }, [params.room, params.key, isAdminRoute]);
 
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
@@ -827,8 +833,16 @@ export default function App() {
         }
 
         const webhookVal = tempWebhook.trim();
-        if (webhookVal && !webhookVal.startsWith('https://discord.com/api/webhooks/') && !webhookVal.startsWith('https://discordapp.com/api/webhooks/')) {
-            return alert("Invalid Discord Webhook format.");
+        // 🛡️ SECURITY FIX: Used the URL parsing logic to match the server
+        if (webhookVal) {
+            try {
+                const parsed = new URL(webhookVal);
+                if ((parsed.hostname !== 'discord.com' && parsed.hostname !== 'discordapp.com') || !parsed.pathname.startsWith('/api/webhooks/')) {
+                    return alert("Invalid Discord Webhook format.");
+                }
+            } catch {
+                return alert("Invalid Discord Webhook format.");
+            }
         }
 
         if (!isFromAdmin) setIsGenerating(true);
@@ -900,8 +914,27 @@ export default function App() {
     const updateMapPool = (newMaps) => { fetch(`${SOCKET_URL}/api/admin/maps/update`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret, maps: newMaps }) }).then(r => r.json()).then(data => { if (data.success) setMapPool(data.maps); }); };
     const handleAddMap = () => { if (!newMapName.trim()) return; const newMap = { name: newMapName.trim(), customImage: newMapImage.trim() || null }; updateMapPool([...mapPool, newMap]); setNewMapName(''); setNewMapImage(''); };
     const handleDeleteMap = (idx) => { if (!window.confirm("Remove map?")) return; const updated = [...mapPool]; updated.splice(idx, 1); updateMapPool(updated); };
-    const deleteMatch = (id) => { if (!window.confirm("DELETE?")) return; fetch(`${SOCKET_URL}/api/admin/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, secret: adminSecret }) }).then(res => res.json()).then(data => { if (data.success) fetchAdminHistory(adminSecret); }); };
-    const nukeHistory = () => { if (!window.confirm("DELETE ALL?")) return; fetch(`${SOCKET_URL}/api/admin/reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) }).then(res => res.json()).then(data => { if (data.success) fetchAdminHistory(adminSecret); }); };
+    
+    // Admin Delete
+    const deleteMatch = (id) => { 
+        if (!window.confirm("DELETE?")) return; 
+        fetch(`${SOCKET_URL}/api/admin/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, secret: adminSecret }) })
+        .then(res => res.json()).then(data => { 
+            if (data.success) {
+                // Refresh local state without triggering full effect
+                setHistoryData(prev => prev.filter(m => m.id !== id));
+            }
+        }); 
+    };
+    
+    // Admin Nuke
+    const nukeHistory = () => { 
+        if (!window.confirm("DELETE ALL?")) return; 
+        fetch(`${SOCKET_URL}/api/admin/reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) })
+        .then(res => res.json()).then(data => { 
+            if (data.success) setHistoryData([]);
+        }); 
+    };
 
     const handleAdminReset = (roomId) => {
         if (!window.confirm("Reset this match completely?")) return;
@@ -978,15 +1011,15 @@ export default function App() {
                     <div style={styles.glassPanel}>
                         <h3 style={{ color: '#aaa', marginBottom: '20px' }}>AUTHENTICATE</h3>
                         <input type="password" style={styles.input} value={adminSecret} onChange={e => setAdminSecret(e.target.value)} placeholder="ENTER KEY" />
-                        <button onClick={() => { fetchAdminHistory(adminSecret); fetchMapPool(adminSecret); }} style={{ ...styles.modeBtn, width: '100%', marginTop: '20px' }}>ACCESS</button>
                     </div>
                 ) : (
                     <div style={{ width: '95%', maxWidth: '1200px', marginTop: '30px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '20px' }}>
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             <div style={{ background: '#0f1219', border: '1px solid #333', borderRadius: '10px', padding: '20px' }}>
                                 <h3 style={{ color: '#fff', borderBottom: '1px solid #333', paddingBottom: '10px', marginBottom: '20px' }}>QUICK CREATE</h3>
-                                <input style={{ ...styles.input, width: '100%', fontSize: '1rem', textAlign: 'left' }} value={adminTeamA} onChange={e => setAdminTeamA(e.target.value)} placeholder="Team A Name" />
-                                <input style={{ ...styles.input, width: '100%', fontSize: '1rem', textAlign: 'left' }} value={adminTeamB} onChange={e => setAdminTeamB(e.target.value)} placeholder="Team B Name" />
+                                {/* 🛡️ SECURITY FIX: Max length 50 on Team Names */}
+                                <input style={{ ...styles.input, width: '100%', fontSize: '1rem', textAlign: 'left' }} value={adminTeamA} maxLength={50} onChange={e => setAdminTeamA(e.target.value)} placeholder="Team A Name" />
+                                <input style={{ ...styles.input, width: '100%', fontSize: '1rem', textAlign: 'left' }} value={adminTeamB} maxLength={50} onChange={e => setAdminTeamB(e.target.value)} placeholder="Team B Name" />
                                 <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#aaa', fontSize: '0.9rem', flexDirection: 'column' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <input type="checkbox" checked={useTimer} onChange={e => setUseTimer(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
@@ -1085,7 +1118,11 @@ export default function App() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <h3 style={{ color: '#fff', margin: 0 }}>HISTORY</h3>
-                                    <button onClick={() => fetchAdminHistory(adminSecret)} style={{ background: 'transparent', border: '1px solid #444', borderRadius: '4px', color: '#00d4ff', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center' }} title="Force Refresh"><RefreshIcon /></button>
+                                    {/* 🛡️ REFACTOR: Admin fetch bound directly to button, not global effect */}
+                                    <button onClick={() => {
+                                        fetch(`${SOCKET_URL}/api/admin/history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret }) })
+                                        .then(r => r.json()).then(d => { if (!d.error) setHistoryData(d); });
+                                    }} style={{ background: 'transparent', border: '1px solid #444', borderRadius: '4px', color: '#00d4ff', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center' }} title="Force Refresh"><RefreshIcon /></button>
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: '#888' }}>ACTIVE: <span style={{ color: '#00ff00' }}>{activeCount}</span> | TOTAL: {historyData.length}</div>
                             </div>
@@ -1169,7 +1206,8 @@ export default function App() {
                         <button onClick={() => setVetoMode('custom')} style={vetoMode === 'custom' ? styles.modeBtnActive : styles.modeBtn}>CUSTOM VETO</button>
                     </div>
 
-                    <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
+                    {/* 🛡️ SECURITY FIX: Max length 50 on Team Names */}
+                    <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} maxLength={50} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
                         <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp" onChange={(e) => handleLogoUpload(e, 'A')} />
@@ -1179,7 +1217,7 @@ export default function App() {
                         {teamALogo && <img src={teamALogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
                     </div>
 
-                    <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
+                    <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} maxLength={50} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
                         <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp" onChange={(e) => handleLogoUpload(e, 'B')} />
@@ -1273,6 +1311,12 @@ export default function App() {
 
                     <button onClick={() => fetchPublicHistory(1)} style={styles.historyBtn}>VIEW PAST VETOS</button>
                 </div>
+                {/* 🛡️ ARCHITECTURE FIX: Render Server Errors */}
+                {serverError && (
+                    <div style={{ ...styles.notification, background: '#ff4444', color: '#fff' }}>
+                        ⚠️ {serverError}
+                    </div>
+                )}
                 <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
                 <div style={styles.footer}>LOTGaming System | Made by &lt;3 kancha@lotgaming.xyz</div>
             </div>
@@ -1285,6 +1329,11 @@ export default function App() {
         return (
             <div style={styles.container}>
                 <AnimatedBackground />
+                {serverError && (
+                    <div style={{ ...styles.notification, background: '#ff4444', color: '#fff' }}>
+                        ⚠️ {serverError}
+                    </div>
+                )}
                 <CoinFlipOverlay gameState={gameState} myRole={myRole} onCall={handleCoinCall} onDecide={handleCoinDecide} soundEnabled={soundEnabled} />
             </div>
         );
@@ -1321,7 +1370,21 @@ export default function App() {
             >
                 {soundEnabled ? '🔊' : '🔇'} {soundEnabled ? 'SOUND ON' : 'SOUND OFF'}
             </button>
+            
+            {/* 🛡️ ARCHITECTURE FIX: Display live viewers in the room */}
+            <div style={{ position: 'absolute', top: isMobile ? '50px' : '20px', right: isMobile ? '10px' : '180px', color: '#888', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff00', boxShadow: '0 0 5px #00ff00' }}></div>
+                {roomUserCount} in room
+            </div>
+
             {showRules && <RulesModal format={gameState.format} isMobile={isMobile} onClose={() => setShowRules(false)} />}
+            
+            {/* 🛡️ ARCHITECTURE FIX: Render Server Errors */}
+            {serverError && (
+                <div style={{ ...styles.notification, background: '#ff4444', color: '#fff', opacity: 1, transform: 'translateY(0)' }}>
+                    ⚠️ {serverError}
+                </div>
+            )}
             <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
 
             <div style={styles.scoreboard}>
