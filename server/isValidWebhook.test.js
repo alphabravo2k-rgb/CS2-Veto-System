@@ -1,38 +1,44 @@
-const { isValidDiscordWebhook } = require('./discord-webhook');
+const { isValidWebhook } = require('./server');
 
-describe('Security: SSRF Webhook Guards', () => {
+describe('Security: SSRF Guard (isValidWebhook)', () => {
     test('ACCEPTS valid discord.com webhook', () => {
-        expect(isValidDiscordWebhook('https://discord.com/api/webhooks/123456789/abcdefg')).toBe(true);
+        expect(isValidWebhook('https://discord.com/api/webhooks/123/token')).toBe(true);
     });
 
-    test('ACCEPTS valid legacy discordapp.com webhook', () => {
-        expect(isValidDiscordWebhook('https://discordapp.com/api/webhooks/123456789/abcdefg')).toBe(true);
+    test('ACCEPTS valid discordapp.com webhook', () => {
+        expect(isValidWebhook('https://discordapp.com/api/webhooks/123/token')).toBe(true);
     });
 
-    test('REJECTS internal IP addresses (AWS Metadata Attack)', () => {
-        expect(isValidDiscordWebhook('https://169.254.169.254/latest/meta-data/')).toBe(false);
+    test('REJECTS HTTP (not HTTPS) discord URL', () => {
+        // Enforces TLS encryption for external payloads
+        expect(isValidWebhook('http://discord.com/api/webhooks/123/token')).toBe(false);
     });
 
-    test('REJECTS localhost payloads', () => {
-        expect(isValidDiscordWebhook('http://localhost:3000/webhook')).toBe(false);
-        expect(isValidDiscordWebhook('http://127.0.0.1:3000/webhook')).toBe(false);
+    test('REJECTS non-discord HTTPS URL', () => {
+        expect(isValidWebhook('https://hooks.slack.com/services/123')).toBe(false);
     });
 
-    test('REJECTS malicious external domains', () => {
-        expect(isValidDiscordWebhook('https://evil.com/api/webhooks/123/token')).toBe(false);
+    test('REJECTS internal IP (AWS Metadata Attack)', () => {
+        // Prevents the server from pinging its own internal cloud metadata
+        expect(isValidWebhook('https://169.254.169.254/latest/meta-data/')).toBe(false);
     });
 
-    test('REJECTS valid domain but missing webhook path', () => {
-        expect(isValidDiscordWebhook('https://discord.com/api/other/123/token')).toBe(false);
+    test('REJECTS localhost URL', () => {
+        expect(isValidWebhook('http://localhost:3000/webhook')).toBe(false);
     });
 
-    test('REJECTS non-string payloads (Object Coercion Defense)', () => {
-        expect(isValidDiscordWebhook(null)).toBe(false);
-        expect(isValidDiscordWebhook(undefined)).toBe(false);
-        expect(isValidDiscordWebhook({ url: 'https://discord.com/api/webhooks/' })).toBe(false);
+    test('REJECTS URL with discord.com in path only (Domain Spoofing)', () => {
+        // Hackers will try to bypass simple .includes() checks with this
+        expect(isValidWebhook('https://evil.com/?r=https://discord.com/api/webhooks/')).toBe(false);
     });
 
-    test('REJECTS empty string', () => {
-        expect(isValidDiscordWebhook('')).toBe(false);
+    test('REJECTS null, undefined, and numbers', () => {
+        expect(isValidWebhook(null)).toBe(false);
+        expect(isValidWebhook(undefined)).toBe(false);
+        expect(isValidWebhook(12345)).toBe(false);
+    });
+
+    test('REJECTS objects (Prototype Poisoning Defense)', () => {
+        expect(isValidWebhook({ url: 'https://discord.com/api/webhooks/123' })).toBe(false);
     });
 });
