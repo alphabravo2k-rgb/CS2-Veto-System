@@ -51,11 +51,12 @@ describe('Security: Client URL Token Scrubbing', () => {
         
         expect(sessionStorage.getItem('lot_key_match123')).toBe('stored_key');
         
-        // 🛡️ Verify the key was actually retrieved and used to join the room
-        const mockSocket = io();
+        // 🛡️ SCALABILITY FIX: Retrieve the socket instance created by App.jsx without calling io() again, keeping the call history clean
+        const mockSocket = io.mock.results[0].value;
+        
         expect(mockSocket.emit).toHaveBeenCalledWith('join_room', {
             roomId: 'match123',
             key: 'stored_key'
         });
     });
-});
+});s
