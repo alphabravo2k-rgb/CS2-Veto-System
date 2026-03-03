@@ -6,19 +6,6 @@
  * LAYER         : Backend Persistence
  * RISK LEVEL    : LOW
  * =============================================================================
- *
- * RELEASE METADATA
- * -----------------------------------------------------------------------------
- * VERSION       : v2.2.0 (SEALED-ENCAPSULATION)
- * STATUS        : ENFORCED
- *
- * FEATURES:
- * - Dependency Injection: Uses the primary DB handle to prevent SQLite locking.
- * - Deep Defense: SSRF Webhook validation enforced before DB commit.
- * - Auditing: added `updated_at` timestamps for tracing configuration changes.
- * - Strict Enumeration: Hardcoded Set of allowed keys prevents DB injection bloat.
- * - Sealed Module: Internal generic setters are hidden to prevent validation bypass.
- * =============================================================================
  */
 
 const { isValidDiscordWebhook } = require('./discord-webhook');
@@ -26,13 +13,14 @@ const { isValidDiscordWebhook } = require('./discord-webhook');
 let db = null;
 
 // 🛡️ SECURITY FIX: Enumerate valid keys to prevent arbitrary config injection
-// If you ever need to add a new global setting, simply add its key name to this Set.
 const VALID_KEYS = new Set([
     'admin_webhook'
 ]);
 
-// 🛡️ ARCHITECTURE FIX: Inject the database connection instead of creating a duplicate handle
 function initSettingsTable(database) {
+    // 🛡️ ARCHITECTURE FIX: Guard against double-initialization
+    if (db) return Promise.resolve();
+    
     db = database; 
 
     return new Promise((resolve, reject) => {
@@ -40,7 +28,6 @@ function initSettingsTable(database) {
             return reject(new Error('[SETTINGS] Database connection is null'));
         }
 
-        // 🛡️ MAINTAINABILITY FIX: Added updated_at for audit trails
         db.run(`
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -65,11 +52,13 @@ function initSettingsTable(database) {
 function getSetting(key) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key requested - ${key}`));
+        
+        // 🛡️ SECURITY FIX: Do not log the raw key to prevent log injection
+        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key requested`));
 
         db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row) => {
             if (err) {
-                console.error(`[SETTINGS] Error getting ${key}:`, err);
+                console.error(`[SETTINGS] Error getting setting:`, err);
                 reject(err);
             } else {
                 resolve(row ? row.value : null);
@@ -84,9 +73,9 @@ function getSetting(key) {
 function setSetting(key, value) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key injection attempted - ${key}`));
+        
+        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key injection attempted`));
 
-        // 🛡️ MAINTAINABILITY FIX: True UPSERT with timestamp updating
         const query = `
             INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
@@ -94,10 +83,10 @@ function setSetting(key, value) {
 
         db.run(query, [key, value], (err) => {
             if (err) {
-                console.error(`[SETTINGS] Error setting ${key}:`, err);
+                console.error(`[SETTINGS] Error setting value:`, err);
                 reject(err);
             } else {
-                console.log(`[SETTINGS] ${key} updated successfully`);
+                console.log(`[SETTINGS] Key updated successfully`);
                 resolve();
             }
         });
@@ -113,7 +102,11 @@ function getAdminWebhook() {
 }
 
 function setAdminWebhook(url) {
-    // 🛡️ SECURITY FIX: SSRF Validation enforced at the lowest storage layer
+    // 🛡️ SECURITY FIX: Enforce absolute maximum length to prevent DB bloat/DoS
+    if (url && url.length > 500) {
+        return Promise.reject(new Error('Webhook URL exceeds maximum allowed length'));
+    }
+
     if (url && !isValidDiscordWebhook(url)) {
         return Promise.reject(new Error('Invalid Discord webhook URL'));
     }
@@ -122,7 +115,7 @@ function setAdminWebhook(url) {
     return setSetting('admin_webhook', url || '');
 }
 
-// 🛡️ SECURITY FIX: Module Sealed. Internal engines are no longer exported.
+// Module Sealed. Internal engines are no longer exported.
 module.exports = {
     initSettingsTable,
     getAdminWebhook,
