@@ -1,4 +1,3 @@
-// File: db.js
 /**
  * ⚡ COMP-OS — DATABASE ACCESS LAYER
  * =============================================================================
@@ -6,19 +5,6 @@
  * RESPONSIBILITY: SQLite Persistence for Veto Matches
  * LAYER         : Backend Persistence
  * RISK LEVEL    : CRITICAL
- * =============================================================================
- *
- * RELEASE METADATA
- * -----------------------------------------------------------------------------
- * VERSION       : v2.1.0 (SECURE-PERSISTENCE-LINKED)
- * STATUS        : ENFORCED
- *
- * FEATURES:
- * - Ephemeral Keys: Access keys are scrubbed upon match completion.
- * - Bounded Memory: Server boot only loads active (unfinished) matches.
- * - High-Performance: WAL Mode enabled + Date/Status indexing.
- * - Payload Caps: Enforces size limits on Base64 image uploads.
- * - Singleton Export: getRawInstance() exported to prevent dual-connections.
  * =============================================================================
  */
 
@@ -35,7 +21,18 @@ function isValidWebhook(url) {
     return url.startsWith('https://discord.com/api/webhooks/') || url.startsWith('https://discordapp.com/api/webhooks/');
 }
 
-// 🛡️ MAINTAINABILITY FIX: Centralized deserializer prevents triple-duplication
+// 🛡️ RELIABILITY FIX: Safe JSON parsing prevents a single corrupt row from crashing the server
+function safeJSONParse(data, fallback) {
+    if (!data) return fallback;
+    try {
+        return JSON.parse(data);
+    } catch (e) {
+        console.error('[DB] ⚠️ JSON Parse Error on row data. Returning safe fallback.');
+        return fallback;
+    }
+}
+
+// 🛡️ MAINTAINABILITY FIX: Centralized deserializer with crash-proof parsing
 function rowToMatch(row, includeKeys = false) {
     const match = {
         id: row.id,
@@ -45,24 +42,24 @@ function rowToMatch(row, includeKeys = false) {
         teamALogo: row.teamALogo,
         teamBLogo: row.teamBLogo,
         format: row.format,
-        sequence: JSON.parse(row.sequence),
+        sequence: safeJSONParse(row.sequence, []),
         step: row.step,
-        maps: JSON.parse(row.maps),
-        logs: JSON.parse(row.logs),
+        maps: safeJSONParse(row.maps, []),
+        logs: safeJSONParse(row.logs, []),
         finished: row.finished === 1,
         lastPickedMap: row.lastPickedMap,
-        playedMaps: JSON.parse(row.playedMaps),
+        playedMaps: safeJSONParse(row.playedMaps, []),
         useTimer: row.useTimer === 1,
-        ready: JSON.parse(row.ready),
+        ready: safeJSONParse(row.ready, { A: false, B: false }),
         timerEndsAt: row.timerEndsAt,
         timerDuration: row.timerDuration || 60,
         useCoinFlip: row.useCoinFlip === 1,
-        coinFlip: row.coinFlip ? JSON.parse(row.coinFlip) : null,
+        coinFlip: safeJSONParse(row.coinFlip, null),
         tempWebhookUrl: row.tempWebhookUrl
     };
 
     if (includeKeys && row.keys_data) {
-        try { match.keys = JSON.parse(row.keys_data); } catch (e) { match.keys = null; }
+        match.keys = safeJSONParse(row.keys_data, null);
     }
     return match;
 }
@@ -77,49 +74,54 @@ function initDatabase() {
             }
             console.log('[DB] Connected to SQLite database');
 
-            // 🛡️ SCALABILITY FIX: Enable WAL mode for concurrent reads/writes
-            db.run('PRAGMA journal_mode = WAL');
-            db.run('PRAGMA synchronous = NORMAL');
-            db.run('PRAGMA foreign_keys = ON');
-
-            // Create table if it doesn't exist
-            db.run(`
-                CREATE TABLE IF NOT EXISTS match_history (
-                    id TEXT PRIMARY KEY,
-                    date TEXT NOT NULL,
-                    teamA TEXT NOT NULL,
-                    teamB TEXT NOT NULL,
-                    teamALogo TEXT,
-                    teamBLogo TEXT,
-                    format TEXT NOT NULL,
-                    sequence TEXT NOT NULL,
-                    step INTEGER NOT NULL DEFAULT 0,
-                    maps TEXT NOT NULL,
-                    logs TEXT NOT NULL,
-                    finished INTEGER NOT NULL DEFAULT 0,
-                    lastPickedMap TEXT,
-                    playedMaps TEXT NOT NULL,
-                    useTimer INTEGER NOT NULL DEFAULT 0,
-                    ready TEXT NOT NULL,
-                    timerEndsAt INTEGER,
-                    timerDuration INTEGER NOT NULL DEFAULT 60,
-                    useCoinFlip INTEGER NOT NULL DEFAULT 0,
-                    coinFlip TEXT,
-                    keys_data TEXT,
-                    tempWebhookUrl TEXT
-                )
-            `, (err) => {
-                if (err) {
-                    console.error('[DB] Error creating table:', err);
-                    return reject(err);
-                } 
+            // 🛡️ SCALABILITY & RELIABILITY FIX: Serialize PRAGMAs and ensure they succeed
+            db.serialize(() => {
+                db.run('PRAGMA integrity_check', (err) => {
+                    if (err) console.warn('[DB] ⚠️ Integrity check failed or skipped:', err);
+                });
                 
-                // 🛡️ SCALABILITY FIX: Add performance indexes for faster querying
-                db.run('CREATE INDEX IF NOT EXISTS idx_finished ON match_history(finished)');
-                db.run('CREATE INDEX IF NOT EXISTS idx_date ON match_history(date DESC)', (indexErr) => {
-                    if (indexErr) console.error('[DB] Error creating indexes:', indexErr);
-                    else console.log('[DB] Table and indexes verified successfully');
-                    resolve();
+                db.run('PRAGMA journal_mode = WAL', (err) => {
+                    if (err) console.error('[DB] ⚠️ Failed to enable WAL mode:', err);
+                });
+                
+                db.run('PRAGMA synchronous = NORMAL');
+                db.run('PRAGMA foreign_keys = ON');
+
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS match_history (
+                        id TEXT PRIMARY KEY,
+                        date TEXT NOT NULL,
+                        teamA TEXT NOT NULL,
+                        teamB TEXT NOT NULL,
+                        teamALogo TEXT,
+                        teamBLogo TEXT,
+                        format TEXT NOT NULL,
+                        sequence TEXT NOT NULL,
+                        step INTEGER NOT NULL DEFAULT 0,
+                        maps TEXT NOT NULL,
+                        logs TEXT NOT NULL,
+                        finished INTEGER NOT NULL DEFAULT 0,
+                        lastPickedMap TEXT,
+                        playedMaps TEXT NOT NULL,
+                        useTimer INTEGER NOT NULL DEFAULT 0,
+                        ready TEXT NOT NULL,
+                        timerEndsAt INTEGER,
+                        timerDuration INTEGER NOT NULL DEFAULT 60,
+                        useCoinFlip INTEGER NOT NULL DEFAULT 0,
+                        coinFlip TEXT,
+                        keys_data TEXT,
+                        tempWebhookUrl TEXT
+                    )
+                `, (err) => {
+                    if (err) return reject(err);
+
+                    // Indexes for high-performance querying
+                    db.run('CREATE INDEX IF NOT EXISTS idx_finished ON match_history(finished)');
+                    db.run('CREATE INDEX IF NOT EXISTS idx_date ON match_history(date DESC)', (indexErr) => {
+                        if (indexErr) console.error('[DB] Error creating indexes:', indexErr);
+                        else console.log('[DB] Table and indexes verified successfully');
+                        resolve();
+                    });
                 });
             });
         });
@@ -137,17 +139,17 @@ function saveMatch(match) {
             useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys, tempWebhookUrl
         } = match;
 
-        // 🛡️ SECURITY FIX: Ephemeral Keys. Once a match is finished, permanently delete the keys from the database.
+        // Ephemeral Keys
         const keysToStore = finished ? null : JSON.stringify(keys);
 
-        // 🛡️ SECURITY FIX: Enforce max size for base64 logos (~3MB string length limit)
-        const safeLogoA = (teamALogo && teamALogo.length < 3500000) ? teamALogo : null;
-        const safeLogoB = (teamBLogo && teamBLogo.length < 3500000) ? teamBLogo : null;
+        // 🛡️ SECURITY FIX: Enforce max size using actual byte length (~3.5MB cap)
+        const getSafeLogo = (logo) => (logo && Buffer.byteLength(logo, 'utf8') < 3500000) ? logo : null;
+        const safeLogoA = getSafeLogo(teamALogo);
+        const safeLogoB = getSafeLogo(teamBLogo);
 
-        // 🛡️ SECURITY FIX: SSRF validation checkpoint
+        // SSRF validation checkpoint
         const safeWebhook = isValidWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
 
-        // 🛡️ MAINTAINABILITY FIX: Upgraded to true UPSERT to prevent rowid destruction
         const query = `
             INSERT INTO match_history (
                 id, date, teamA, teamB, teamALogo, teamBLogo, format,
@@ -188,8 +190,8 @@ function loadAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        // 🛡️ SCALABILITY FIX: Bounded startup load. Only load unfinished matches into memory!
-        db.all('SELECT * FROM match_history WHERE finished = 0 ORDER BY date DESC LIMIT 100', [], (err, rows) => {
+        // 🛡️ SCALABILITY FIX: Removed arbitrary LIMIT 100 to prevent active match loss
+        db.all('SELECT * FROM match_history WHERE finished = 0 ORDER BY date DESC', [], (err, rows) => {
             if (err) {
                 console.error('[DB] Error loading matches:', err);
                 return reject(err);
@@ -217,7 +219,7 @@ function getPaginatedMatches(page = 1, limit = 10) {
                     if (err) return reject(err);
                     
                     resolve({
-                        matches: rows.map(row => rowToMatch(row, false)), // 🛡️ SECURITY FIX: Strip keys from public API
+                        matches: rows.map(row => rowToMatch(row, false)),
                         totalMatches,
                         totalPages: Math.ceil(totalMatches / limit),
                         currentPage: page
@@ -233,9 +235,10 @@ function getAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        db.all('SELECT * FROM match_history ORDER BY date DESC', [], (err, rows) => {
+        // 🛡️ SCALABILITY FIX: Capped admin fetch to prevent OOM on massive databases
+        db.all('SELECT * FROM match_history ORDER BY date DESC LIMIT 1000', [], (err, rows) => {
             if (err) return reject(err);
-            resolve(rows.map(row => rowToMatch(row, false))); // 🛡️ SECURITY FIX: Admin panel doesn't need historical keys
+            resolve(rows.map(row => rowToMatch(row, false)));
         });
     });
 }
@@ -245,9 +248,11 @@ function deleteMatch(matchId) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
-        db.run('DELETE FROM match_history WHERE id = ?', [matchId], (err) => {
-            if (err) reject(err);
-            else resolve(true);
+        // 🛡️ CORRECTNESS FIX: Uses function(err) to access 'this.changes' and confirm deletion
+        db.run('DELETE FROM match_history WHERE id = ?', [matchId], function(err) {
+            if (err) return reject(err);
+            if (this.changes === 0) return resolve(false); // Match did not exist
+            resolve(true);
         });
     });
 }
@@ -269,7 +274,6 @@ function closeDatabase() {
     });
 }
 
-// 🛡️ ARCHITECTURE FIX: Export a raw instance getter so settings.js can share the connection
 const getRawInstance = () => db;
 
 module.exports = {
