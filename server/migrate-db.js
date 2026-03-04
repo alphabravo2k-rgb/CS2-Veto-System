@@ -23,7 +23,7 @@ const migrations = [
         run: (db) => new Promise((resolve, reject) => {
             db.all("PRAGMA table_info(match_history)", (err, rows) => {
                 if (err) return reject(err);
-                if (!rows || rows.length === 0) return resolve(); // Table doesn't exist yet, db.js will create it with the column
+                if (!rows || rows.length === 0) return resolve(); // Table doesn't exist yet, db.js will create it
 
                 const exists = rows.some(r => r.name === 'tempWebhookUrl');
                 if (exists) {
@@ -35,6 +35,64 @@ const migrations = [
                     if (err) return reject(err);
                     console.log(' ↳ [001] ✅ tempWebhookUrl column added successfully.');
                     resolve();
+                });
+            });
+        })
+    },
+    {
+        // 🛡️ ARCHITECTURE FIX: Execute the Multi-Tenant Relational Schema upgrade safely
+        id: '002_create_multi_tenant_schema',
+        run: (db) => new Promise((resolve, reject) => {
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION;');
+
+                // 1. Create Organizations
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS organizations (
+                        id TEXT PRIMARY KEY, 
+                        name TEXT NOT NULL,
+                        logoUrl TEXT,
+                        discordSupportLink TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                `, (err) => { if (err) { db.run('ROLLBACK;'); return reject(err); } });
+
+                // 2. Create Tournaments
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS tournaments (
+                        id TEXT PRIMARY KEY,
+                        org_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        defaultFormat TEXT DEFAULT 'bo1',
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+                    )
+                `, (err) => { if (err) { db.run('ROLLBACK;'); return reject(err); } });
+
+                // 3. Alter existing match_history (SQLite makes this hard, so we do it carefully)
+                db.all("PRAGMA table_info(match_history)", (err, rows) => {
+                    if (err) { db.run('ROLLBACK;'); return reject(err); }
+                    
+                    const hasTournamentId = rows.some(r => r.name === 'tournament_id');
+                    if (!hasTournamentId) {
+                        db.run(`ALTER TABLE match_history ADD COLUMN tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE`, (err) => {
+                            if (err) { db.run('ROLLBACK;'); return reject(err); }
+                        });
+                    }
+
+                    // Insert Default "Global" Org and Tournament to prevent orphaned matches
+                    db.run(`INSERT OR IGNORE INTO organizations (id, name) VALUES ('global', 'Global')`);
+                    db.run(`INSERT OR IGNORE INTO tournaments (id, org_id, name) VALUES ('default', 'global', 'Default Tournament')`);
+                    
+                    // Link old matches to the default tournament
+                    db.run(`UPDATE match_history SET tournament_id = 'default' WHERE tournament_id IS NULL`, (err) => {
+                         if (err) { db.run('ROLLBACK;'); return reject(err); }
+                         db.run('COMMIT;', (err) => {
+                             if(err) return reject(err);
+                             console.log(' ↳ [002] ✅ Multi-tenant schema applied.');
+                             resolve();
+                         });
+                    });
                 });
             });
         })
@@ -118,4 +176,4 @@ function closeAndExit(intendedCode) {
         }
         process.exit(intendedCode);
     });
-}s
+}
