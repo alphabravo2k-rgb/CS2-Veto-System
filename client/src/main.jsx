@@ -4,17 +4,19 @@
  * FILE          : src/main.jsx
  * RESPONSIBILITY: Mounts the React application to the DOM
  * LAYER         : Frontend Entry
- * VERSION       : v2.1.0 (RESILIENT-MOUNT)
+ * VERSION       : v2.2.0 (ROUTED-MOUNT)
  * * FEATURES:
  * - React 19 Concurrent Root API.
  * - StrictMode enforced for development side-effect catching.
  * - Global Error Boundary: Catches React render errors to prevent white-screens.
  * - XSS-Safe Resilience Guard: Fallback UI injected using secure DOM methods.
+ * - Multi-Tenant Routing: BrowserRouter injected for dynamic URL parsing.
  * =============================================================================
  */
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom'; // 🛡️ ARCHITECTURE FIX: Inject Router
 import App from './App';
 
 // 🛡️ RELIABILITY FIX: Global Error Boundary catches render-phase crashes
@@ -81,7 +83,9 @@ const root = ReactDOM.createRoot(container);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </ErrorBoundary>
   </React.StrictMode>
 );
