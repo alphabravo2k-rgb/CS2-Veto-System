@@ -8,11 +8,11 @@
 
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self';
+      script-src 'self' 'unsafe-inline';
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src https://fonts.gstatic.com;
       img-src 'self' data: blob: https://raw.githubusercontent.com https://image.gametracker.com https://i.ibb.co;
-      connect-src 'self' wss: ws: http://localhost:3001;
+      connect-src 'self' wss: ws: http://localhost:3001 https://cs2-veto-server-gh3n.onrender.com wss://cs2-veto-server-gh3n.onrender.com;
     " />
 
     <link rel="icon" href="/favicon.ico" />
