@@ -14,7 +14,7 @@ import io from 'socket.io-client';
 // --- CONFIGURATION ---
 const SOCKET_URL = window.location.hostname === "localhost"
     ? "http://localhost:3001"
-    : window.location.origin;
+    : "https://cs2-veto-server-gh3n.onrender.com";
 
 const LOGO_URL = "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
 
