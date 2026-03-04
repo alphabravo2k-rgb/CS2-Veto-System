@@ -9,10 +9,14 @@ const __dirname = path.dirname(__filename);
 export default defineConfig(({ mode }) => {
   const isProd = mode === 'production';
 
-  console.log(`\n🔍 [CS2-VETO] Build Context: ${mode.toUpperCase()}`);
+  // 🛡️ SECURITY FIX: Suppress build logs in CI/CD pipelines to prevent fingerprinting
+  if (!isProd) {
+    console.log(`\n🔍 [CS2-VETO] Build Context: ${mode.toUpperCase()}`);
+  }
 
   return {
-    // 🛡️ ARCHITECTURE FIX: Absolute path resolution for clean imports
+    // Explicitly define the base path to prevent asset 404s if deployed to a subfolder
+    base: '/',
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src")
@@ -21,16 +25,16 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      // 🛡️ INFRASTRUCTURE FIX: Proxy API and WebSockets to Express backend
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
-          secure: false,
+          secure: false, // ⚠️ DEV ONLY: Bypasses self-signed TLS errors during local dev
         },
         '/socket.io': {
           target: 'http://localhost:3001',
           ws: true,
+          changeOrigin: true, // 🛡️ ARCHITECTURE FIX: Inject host header to pass backend CORS
         },
       },
     },
@@ -41,7 +45,6 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
-          // 🛡️ PERFORMANCE FIX: Hyper-Granular Chunking (L3 Caching Strategy)
           manualChunks: (id) => {
             if (id.includes('node_modules')) {
               if (id.includes('react') || id.includes('react-dom')) return 'vendor-react';
@@ -52,12 +55,11 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    // 🛡️ SECURITY FIX: Vitest Environment Gate (Unblocks the test suite)
     test: {
       globals: true,
       environment: 'jsdom',
       setupFiles: './src/setupTests.js',
-      css: false, // Disable CSS processing in tests for execution speed
+      css: false,
     },
     plugins: [react()],
   };
