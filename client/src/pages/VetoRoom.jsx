@@ -1,17 +1,26 @@
+/**
+ * ⚡ COMP-OS — VETO ENGINE CLIENT
+ * =============================================================================
+ * FILE          : VetoRoom.jsx
+ * RESPONSIBILITY: Layout Orchestrator & State Consumer
+ * LAYER         : Frontend Page View
+ * RISK LEVEL    : SECURE (Fully Decoupled)
+ * =============================================================================
+ */
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useVetoStore from '../store/useVetoStore';
-import { AnimatedBackground, HomeIcon, CopyIcon, CheckIcon } from '../components/SharedUI';
 
-// 🛡️ ARCHITECTURE FIX: All components imported perfectly
+import { AnimatedBackground, HomeIcon, CopyIcon, CheckIcon } from '../components/SharedUI';
 import MapCard from '../components/veto/MapCard';
 import LogLineRenderer from '../components/veto/LogLineRenderer';
 import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
 import Countdown from '../components/veto/Countdown';
 
+// Web Audio Context Engine
 let globalAudioContext = null;
-
 const playSound = (type = 'action') => {
     try {
         if (!globalAudioContext) globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -50,8 +59,7 @@ const playSound = (type = 'action') => {
                     gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + 0.01); gain.gain.linearRampToValueAtTime(0.04 - (i * 0.01), startTime + totalDuration - 0.01); gain.gain.linearRampToValueAtTime(0, startTime + totalDuration);
                     for (let t = 0; t < totalDuration; t += 0.02) { osc.frequency.setValueAtTime(baseFreq + (i * 50) + Math.sin((t * wobbleSpeed) * Math.PI * 2) * wobbleAmount, startTime + t); }
                     osc.start(startTime); osc.stop(startTime + totalDuration);
-                }
-                return;
+                } return;
             case 'coinLoop':
                 const baseFreq2 = 180; const wobbleAmount2 = 25; const wobbleSpeed2 = 12; const cycleDuration = 0.15;
                 for (let i = 0; i < 4; i++) {
@@ -61,8 +69,7 @@ const playSound = (type = 'action') => {
                     const startTime2 = globalAudioContext.currentTime; gain.gain.setValueAtTime(0.03 - (i * 0.005), startTime2); gain.gain.linearRampToValueAtTime(0, startTime2 + cycleDuration);
                     for (let t = 0; t < cycleDuration; t += 0.01) { osc.frequency.setValueAtTime(baseFreq2 + (i * 40) + Math.sin((t * wobbleSpeed2) * Math.PI * 2) * wobbleAmount2, startTime2 + t); }
                     osc.start(startTime2); osc.stop(startTime2 + cycleDuration);
-                }
-                return;
+                } return;
             case 'countdown':
                 oscillator.frequency.value = 400; oscillator.type = 'sine';
                 gainNode.gain.setValueAtTime(0.05, globalAudioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.05); 
@@ -99,7 +106,6 @@ export default function VetoRoom() {
 
     useEffect(() => {
         if (!matchId) { navigate('/'); return; }
-        
         const storedKey = sessionStorage.getItem(`lot_key_${matchId}`);
         connectToRoom(matchId, storedKey);
 
@@ -110,11 +116,10 @@ export default function VetoRoom() {
             window.removeEventListener('resize', handleResize);
             disconnectRoom();
         };
-    }, [matchId]); 
+    }, [matchId, connectToRoom, disconnectRoom, navigate]); 
 
     useEffect(() => {
         if (!gameState?.logs || !soundEnabled) return;
-        
         if (gameState.logs.length > prevLogsLengthRef.current) {
             const newLogs = gameState.logs.slice(prevLogsLengthRef.current);
             newLogs.forEach(log => {
@@ -164,8 +169,7 @@ export default function VetoRoom() {
                 <CoinFlipOverlay gameState={gameState} myRole={myRole} 
                     onCall={(call) => sendCoinCall(matchId, call, sessionStorage.getItem(`lot_key_${matchId}`))} 
                     onDecide={(dec) => sendCoinDecide(matchId, dec, sessionStorage.getItem(`lot_key_${matchId}`))} 
-                    soundEnabled={soundEnabled} 
-                    playSound={playSound}
+                    soundEnabled={soundEnabled} playSound={playSound}
                 />
             </div>
         );
@@ -188,16 +192,17 @@ export default function VetoRoom() {
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.container}>
             <AnimatedBackground />
+            
             <button onClick={() => navigate('/')} style={styles.homeBtn}><HomeIcon /> EXIT</button>
             
+            {/* 🛡️ UI BUG FIX: Dynamic styling reapplied inline to properly reflect state */}
             <button
                 onClick={() => { const newState = !soundEnabled; setSoundEnabled(newState); localStorage.setItem('soundEnabled', newState); }}
                 style={{
-                    position: 'absolute', top: isMobile ? '10px' : '20px', right: isMobile ? '10px' : '20px',
+                    ...styles.soundToggle,
                     background: soundEnabled ? 'rgba(0, 212, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                    border: `1px solid ${soundEnabled ? '#00d4ff' : '#666'}`, color: soundEnabled ? '#00d4ff' : '#888',
-                    padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem',
-                    display: 'flex', alignItems: 'center', gap: '5px', zIndex: 100, fontFamily: "'Rajdhani', sans-serif"
+                    border: `1px solid ${soundEnabled ? '#00d4ff' : '#666'}`,
+                    color: soundEnabled ? '#00d4ff' : '#888'
                 }}
             >
                 {soundEnabled ? '🔊 SOUND ON' : '🔇 SOUND OFF'}
@@ -210,9 +215,7 @@ export default function VetoRoom() {
 
             <AnimatePresence>
                 {serverError && (
-                    <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} style={{ ...styles.notification, background: '#ff4444', color: '#fff' }}>
-                        ⚠️ {serverError}
-                    </motion.div>
+                    <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} style={{ ...styles.notification, background: '#ff4444', color: '#fff' }}>⚠️ {serverError}</motion.div>
                 )}
             </AnimatePresence>
 
@@ -227,13 +230,12 @@ export default function VetoRoom() {
             </div>
 
             {showReadyButton && (
-                <button onClick={() => sendReady(matchId, sessionStorage.getItem(`lot_key_${matchId}`))} style={{ background: '#00d4ff', color: '#000', border: 'none', padding: '15px 40px', fontSize: '1.5rem', fontWeight: 'bold', borderRadius: '10px', cursor: 'pointer', marginBottom: '20px' }}>
-                    CLICK TO READY UP
-                </button>
+                <button onClick={() => sendReady(matchId, sessionStorage.getItem(`lot_key_${matchId}`))} style={styles.readyBtn}>CLICK TO READY UP</button>
             )}
 
             {!isSideStep && (
-                <motion.div layout style={styles.grid}>
+                {/* 🛡️ UI BUG FIX: Removed 'layout' from the wrapper grid so it doesn't fight the MapCard animations */}
+                <div style={styles.grid}>
                     <AnimatePresence>
                         {gameState.maps.map(map => {
                             const isInteractive = (!gameState.useTimer || (gameState.ready.A && gameState.ready.B)) && isMyTurn && isActionStep && map.status === 'available';
@@ -246,7 +248,7 @@ export default function VetoRoom() {
                             );
                         })}
                     </AnimatePresence>
-                </motion.div>
+                </div>
             )}
 
             {isSideStep && (
@@ -278,6 +280,7 @@ export default function VetoRoom() {
                     </AnimatePresence>
                 </div>
             </div>
+            <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
         </motion.div>
     );
 }
@@ -287,21 +290,14 @@ const getStyles = (isMobile) => ({
     scoreboard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1200px', marginBottom: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px 30px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' },
     statusBar: { background: 'rgba(0,0,0,0.8)', padding: '15px 30px', borderRadius: '50px', border: '2px solid #333', marginBottom: '30px' },
     grid: { display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', width: '100%', maxWidth: '1400px' },
-    mapCard: { backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '10px', height: isMobile ? '120px' : '250px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden', position: 'relative' },
-    cardContent: { padding: '15px', background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%)', textAlign: 'center' },
-    mapTitle: { fontSize: '1.8rem', fontWeight: '900', textTransform: 'uppercase' },
-    badgeBan: { background: '#ff4444', color: 'white', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
-    badgePick: { background: '#00ff00', color: 'black', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
-    badgeDecider: { background: '#ffa500', color: 'black', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
     homeBtn: { position: 'absolute', top: '20px', left: '20px', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' },
+    soundToggle: { position: 'absolute', top: isMobile ? '10px' : '20px', right: isMobile ? '10px' : '20px', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 100, fontFamily: "'Rajdhani', sans-serif" },
+    readyBtn: { background: '#00d4ff', color: '#000', border: 'none', padding: '15px 40px', fontSize: '1.5rem', fontWeight: 'bold', borderRadius: '10px', cursor: 'pointer', marginBottom: '20px' },
     notification: { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: '#00ff00', color: '#000', padding: '10px 20px', borderRadius: '50px', fontWeight: 'bold', zIndex: 4000 },
-    mapOrderBadge: { position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', border: '1px solid #00ff00', color: '#00ff00', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold', zIndex: 3 },
-    miniSideBadge: { background: '#000', color: '#fff', fontSize: '0.6rem', padding: '2px 5px', borderRadius: '3px', marginTop: '3px', border: '1px solid #333' },
     logContainer: { width: '100%', maxWidth: '800px', background: 'rgba(0,0,0,0.8)', border: '1px solid #333', borderRadius: '10px', marginTop: '30px', overflow: 'hidden' },
     logHeader: { background: '#111', padding: '15px 20px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#aaa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     copyBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '0.8rem' },
     logScroll: { maxHeight: '200px', overflowY: 'auto', padding: '15px 20px', display: 'flex', flexDirection: 'column' },
-    logRow: { display: 'flex', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px', marginBottom: '6px' },
     sideSelectionContainer: { background: 'rgba(0,0,0,0.8)', border: '1px solid #333', borderRadius: '15px', padding: '40px', textAlign: 'center', width: '100%', maxWidth: '800px' },
     sideCard: { flex: 1, background: '#111', borderRadius: '10px', padding: '20px', cursor: 'pointer' },
     sideLabelCT: { color: '#4facfe', fontSize: '3rem', margin: 0, textShadow: '0 0 10px #4facfe' },
