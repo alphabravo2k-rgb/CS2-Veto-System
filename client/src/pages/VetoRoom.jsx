@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion'; // 🛡️ UI UPGRADE: Framer Motion added
-import useVetoStore from '../store/useVetoStore'; // 🛡️ ARCHITECTURE FIX: Importing the Zustand Engine
+import { motion, AnimatePresence } from 'framer-motion';
+import useVetoStore from '../store/useVetoStore';
 import { AnimatedBackground, HomeIcon, CopyIcon, CheckIcon } from '../components/SharedUI';
 
 let globalAudioContext = null;
@@ -113,12 +113,11 @@ const Countdown = ({ endsAt, soundEnabled = false }) => {
     return <span style={{ color: timeLeft < 10 ? '#ff4444' : '#00d4ff', fontWeight: 'bold', marginLeft: '10px' }}>({timeLeft}s)</span>;
 };
 
-// 🛡️ UI UPGRADE: Framer Motion added to MapCard
+// 🛡️ ARCHITECTURE FIX: Extracted MapCard with correct Framer properties
 const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData, mapOrderLabel, styles }) => {
     const mapImageUrls = getMapImageUrl(map.name, map.customImage);
     const [imageUrl, setImageUrl] = useState(mapImageUrls.primary);
     const [imageFailed, setImageFailed] = useState(false);
-    const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
         if (map.customImage) return;
@@ -138,25 +137,23 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
         return () => { testImage.onload = null; testImage.onerror = null; };
     }, [map.name, map.customImage]); 
 
+    // 🛡️ BUG FIX: Removed layout from grid container, kept whileHover for physics
     return (
         <motion.div 
-            layout // Framer Motion handles smooth grid reflows automatically
+            layout 
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{ opacity: map.status === 'banned' ? 0.3 : 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.5 }}
+            whileHover={isInteractive ? { scale: 1.05, y: -5 } : {}}
             transition={{ duration: 0.3 }}
-            onMouseEnter={() => { setIsHovered(true); }} 
-            onMouseLeave={() => { setIsHovered(false); }} 
             onClick={onClick} 
             style={{
                 ...styles.mapCard,
                 backgroundImage: imageFailed ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' : `linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%), url(${imageUrl})`,
-                opacity: map.status === 'banned' ? 0.3 : 1,
                 filter: map.status === 'banned' ? 'grayscale(100%)' : 'none',
                 border: map.status === 'picked' ? '3px solid #00ff00' : map.status === 'decider' ? '3px solid #ffa500' : isInteractive ? `2px solid ${actionColor}` : '1px solid rgba(255,255,255,0.1)',
                 cursor: (map.status === 'available' && isInteractive) ? 'pointer' : 'default',
-                boxShadow: (isInteractive && isHovered) ? `0 0 20px ${actionColor}` : '0 5px 15px rgba(0,0,0,0.5)',
-                transform: (isInteractive && isHovered) ? 'scale(1.05) translateY(-5px)' : 'scale(1)'
+                boxShadow: isInteractive ? `0 0 20px ${actionColor}` : '0 5px 15px rgba(0,0,0,0.5)'
             }}
         >
             {map.status === 'picked' && mapOrderLabel && <div style={styles.mapOrderBadge}>{mapOrderLabel}</div>}
@@ -291,7 +288,6 @@ export default function VetoRoom() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    // 🛡️ ARCHITECTURE FIX: Consuming Zustand Store instead of local Socket connection
     const { gameState, myRole, serverError, roomUserCount, connectToRoom, disconnectRoom, sendAction, sendReady, sendCoinCall, sendCoinDecide } = useVetoStore();
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -301,16 +297,18 @@ export default function VetoRoom() {
     const prevLogsLengthRef = useRef(0);
     const styles = useMemo(() => getStyles(isMobile), [isMobile]);
 
-    // 1. Connection Lifecycle
+    // 🛡️ BUG FIX: Split Key extraction from Socket Connection
     useEffect(() => {
-        if (!matchId) { navigate('/'); return; }
-        
         const key = searchParams.get('key');
         if (key) {
             sessionStorage.setItem(`lot_key_${matchId}`, key);
             window.history.replaceState({}, '', window.location.pathname);
         }
+    }, []); // Run ONCE on mount
 
+    useEffect(() => {
+        if (!matchId) { navigate('/'); return; }
+        
         const storedKey = sessionStorage.getItem(`lot_key_${matchId}`);
         connectToRoom(matchId, storedKey);
 
@@ -321,9 +319,9 @@ export default function VetoRoom() {
             window.removeEventListener('resize', handleResize);
             disconnectRoom();
         };
-    }, [matchId, connectToRoom, disconnectRoom, navigate, searchParams]);
+    }, [matchId]); // Dependencies narrowed to avoid race condition
 
-    // 2. Audio Processing (Decoupled from Store)
+    // Audio Processing
     useEffect(() => {
         if (!gameState?.logs || !soundEnabled) return;
         
@@ -434,7 +432,7 @@ export default function VetoRoom() {
             )}
 
             {!isSideStep && (
-                <motion.div layout style={styles.grid}>
+                <div style={styles.grid}>
                     <AnimatePresence>
                         {gameState.maps.map(map => {
                             const isInteractive = (!gameState.useTimer || (gameState.ready.A && gameState.ready.B)) && isMyTurn && isActionStep && map.status === 'available';
@@ -447,7 +445,7 @@ export default function VetoRoom() {
                             );
                         })}
                     </AnimatePresence>
-                </motion.div>
+                </div>
             )}
 
             {isSideStep && (
@@ -474,7 +472,7 @@ export default function VetoRoom() {
                 <div style={styles.logScroll}>
                     <AnimatePresence>
                         {gameState.logs.map((log, i) => (
-                            <LogLineRenderer key={i} log={log} teamA={gameState.teamA} teamB={gameState.teamB} i={i} />
+                            <LogLineRenderer key={`${i}-${log.slice(0, 20)}`} log={log} teamA={gameState.teamA} teamB={gameState.teamB} />
                         ))}
                     </AnimatePresence>
                 </div>
@@ -488,7 +486,7 @@ const getStyles = (isMobile) => ({
     scoreboard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1200px', marginBottom: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px 30px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' },
     statusBar: { background: 'rgba(0,0,0,0.8)', padding: '15px 30px', borderRadius: '50px', border: '2px solid #333', marginBottom: '30px' },
     grid: { display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', width: '100%', maxWidth: '1400px' },
-    mapCard: { backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '10px', height: isMobile ? '120px' : '250px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden', transition: 'all 0.2s ease', position: 'relative' },
+    mapCard: { backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '10px', height: isMobile ? '120px' : '250px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden', position: 'relative' },
     cardContent: { padding: '15px', background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%)', textAlign: 'center' },
     mapTitle: { fontSize: '1.8rem', fontWeight: '900', textTransform: 'uppercase' },
     badgeBan: { background: '#ff4444', color: 'white', padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '5px' },
