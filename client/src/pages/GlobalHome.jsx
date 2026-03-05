@@ -2,7 +2,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatedBackground } from '../components/SharedUI';
 
-const LOGO_URL = "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
+// 🛡️ ARCHITECTURE FIX: Moved to env variable for white-labeling, with a safe local fallback.
+const LOGO_URL = import.meta.env.VITE_ORG_LOGO_URL || "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
+const PLATFORM_NAME = import.meta.env.VITE_PLATFORM_NAME || "COMP-OS ENGINE";
 
 export default function GlobalHome() {
     const navigate = useNavigate();
@@ -13,8 +15,16 @@ export default function GlobalHome() {
             
             <div style={{ background: 'rgba(15, 18, 25, 0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: '40px', width: '100%', maxWidth: '500px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '20px' }}>
-                    <img src={LOGO_URL} alt="Logo" style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid #00d4ff', boxShadow: '0 0 15px rgba(0, 212, 255, 0.5)' }} />
-                    <h1 style={{ fontSize: '3rem', fontWeight: '900', margin: '0', background: 'linear-gradient(to right, #fff, #00d4ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>LOT GAMING</h1>
+                    {/* 🛡️ UX FIX: Added onError to prevent broken image icons if the CDN drops */}
+                    <img 
+                        src={LOGO_URL} 
+                        alt="Logo" 
+                        onError={e => { e.target.style.display = 'none'; }}
+                        style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid #00d4ff', boxShadow: '0 0 15px rgba(0, 212, 255, 0.5)' }} 
+                    />
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: '900', margin: '0', background: 'linear-gradient(to right, #fff, #00d4ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        {PLATFORM_NAME}
+                    </h1>
                 </div>
                 <h3 style={{ color: '#aaa', letterSpacing: '4px', marginBottom: '40px', fontSize: '0.9rem' }}>MULTI-TENANT VETO PORTAL</h3>
 
@@ -34,7 +44,7 @@ export default function GlobalHome() {
             </div>
             
             <div style={{ marginTop: '40px', color: '#444', fontSize: '0.8rem', zIndex: 10 }}>
-                LOTGaming System | Multi-Tenant Architecture
+                {PLATFORM_NAME} | Infrastructure Level 7
             </div>
         </div>
     );
