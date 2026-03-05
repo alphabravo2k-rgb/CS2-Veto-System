@@ -2,15 +2,14 @@
  * ⚡ COMP-OS — DATABASE ACCESS LAYER
  * =============================================================================
  * FILE          : db.js
- * RESPONSIBILITY: SQLite Persistence for Veto Matches
+ * RESPONSIBILITY: Multi-Tenant SQLite Persistence 
  * LAYER         : Backend Persistence
- * RISK LEVEL    : CRITICAL
+ * RISK LEVEL    : SECURED (Relational)
  * =============================================================================
  */
 
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-// 🛡️ ARCHITECTURE FIX: Import the canonical validator from the Trust Chain
 const { isValidDiscordWebhook } = require('./discord-webhook'); 
 
 const DB_FILE = path.join(__dirname, 'match_history.db');
@@ -30,6 +29,7 @@ function safeJSONParse(data, fallback) {
 function rowToMatch(row, includeKeys = false) {
     const match = {
         id: row.id,
+        tournament_id: row.tournament_id || 'default', // 🛡️ ARCHITECTURE FIX: Fallback to prevent crashes on legacy data
         date: row.date,
         teamA: row.teamA,
         teamB: row.teamB,
@@ -68,7 +68,6 @@ function initDatabase() {
             console.log('[DB] Connected to SQLite database');
 
             db.serialize(() => {
-                // 🛡️ CORRECTNESS FIX: Actually read the result of the integrity check
                 db.all('PRAGMA integrity_check', [], (err, rows) => {
                     if (err || !rows || rows[0]?.integrity_check !== 'ok') {
                         console.error('[DB] ❌ CRITICAL: Integrity check FAILED:', rows);
@@ -81,77 +80,112 @@ function initDatabase() {
                     if (err) console.error('[DB] ⚠️ Failed to enable WAL mode:', err);
                 });
                 
-                // 🛡️ ARCHITECTURE FIX: Add error callbacks to prevent silent failures
-                db.run('PRAGMA synchronous = NORMAL', (err) => { if (err) console.error('[DB] Failed setting sync mode', err) });
-                db.run('PRAGMA foreign_keys = ON', (err) => { if (err) console.error('[DB] Failed setting foreign keys', err) });
-
-                db.run(`
-                    CREATE TABLE IF NOT EXISTS match_history (
-                        id TEXT PRIMARY KEY,
-                        date TEXT NOT NULL,
-                        teamA TEXT NOT NULL,
-                        teamB TEXT NOT NULL,
-                        teamALogo TEXT,
-                        teamBLogo TEXT,
-                        format TEXT NOT NULL,
-                        sequence TEXT NOT NULL,
-                        step INTEGER NOT NULL DEFAULT 0,
-                        maps TEXT NOT NULL,
-                        logs TEXT NOT NULL,
-                        finished INTEGER NOT NULL DEFAULT 0,
-                        lastPickedMap TEXT,
-                        playedMaps TEXT NOT NULL,
-                        useTimer INTEGER NOT NULL DEFAULT 0,
-                        ready TEXT NOT NULL,
-                        timerEndsAt INTEGER,
-                        timerDuration INTEGER NOT NULL DEFAULT 60,
-                        useCoinFlip INTEGER NOT NULL DEFAULT 0,
-                        coinFlip TEXT,
-                        keys_data TEXT,
-                        tempWebhookUrl TEXT
-                    )
-                `, (err) => {
-                    if (err) return reject(err);
-
-                    db.run('CREATE INDEX IF NOT EXISTS idx_finished ON match_history(finished)');
-                    db.run('CREATE INDEX IF NOT EXISTS idx_date ON match_history(date DESC)', (indexErr) => {
-                        if (indexErr) console.error('[DB] Error creating indexes:', indexErr);
-                        else console.log('[DB] Table and indexes verified successfully');
-                        resolve();
-                    });
+                db.run('PRAGMA synchronous = NORMAL');
+                
+                // 🛡️ ARCHITECTURE FIX: Strictly enforce relational constraints
+                db.run('PRAGMA foreign_keys = ON', (err) => {
+                    if (err) console.error('[DB] Failed setting foreign keys', err);
+                    else resolve();
                 });
             });
         });
     });
 }
 
+// ============================================================================
+// MULTI-TENANT ORG & TOURNAMENT QUERIES
+// ============================================================================
+
+function createOrganization(id, name, logoUrl = null, discordSupportLink = null) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Database not initialized'));
+        db.run(
+            'INSERT INTO organizations (id, name, logoUrl, discordSupportLink) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, logoUrl=excluded.logoUrl, discordSupportLink=excluded.discordSupportLink',
+            [id, name, logoUrl, discordSupportLink],
+            (err) => {
+                if (err) return reject(err);
+                resolve();
+            }
+        );
+    });
+}
+
+function getOrganization(orgId) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Database not initialized'));
+        db.get('SELECT * FROM organizations WHERE id = ?', [orgId], (err, row) => {
+            if (err) return reject(err);
+            resolve(row || null);
+        });
+    });
+}
+
+function createTournament(id, org_id, name, defaultFormat = 'bo3') {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Database not initialized'));
+        db.run(
+            'INSERT INTO tournaments (id, org_id, name, defaultFormat) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, defaultFormat=excluded.defaultFormat',
+            [id, org_id, name, defaultFormat],
+            (err) => {
+                if (err) return reject(err);
+                resolve();
+            }
+        );
+    });
+}
+
+function getTournament(tournamentId) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Database not initialized'));
+        db.get('SELECT * FROM tournaments WHERE id = ?', [tournamentId], (err, row) => {
+            if (err) return reject(err);
+            resolve(row || null);
+        });
+    });
+}
+
+function getTournamentsByOrg(orgId) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Database not initialized'));
+        db.all('SELECT * FROM tournaments WHERE org_id = ? ORDER BY created_at DESC', [orgId], (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows || []);
+        });
+    });
+}
+
+// ============================================================================
+// MATCH QUERIES
+// ============================================================================
+
 function saveMatch(match) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
 
         const {
-            id, date, teamA, teamB, teamALogo, teamBLogo, format,
+            id, tournament_id, date, teamA, teamB, teamALogo, teamBLogo, format,
             sequence, step, maps, logs, finished, lastPickedMap, playedMaps,
             useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys, tempWebhookUrl
         } = match;
 
         const keysToStore = finished ? null : JSON.stringify(keys);
-
         const getSafeLogo = (logo) => (logo && Buffer.byteLength(logo, 'utf8') < 3500000) ? logo : null;
+        
         const safeLogoA = getSafeLogo(teamALogo);
         const safeLogoB = getSafeLogo(teamBLogo);
-
-        // 🛡️ SECURITY FIX: Used the canonical validator
         const safeWebhook = isValidDiscordWebhook(tempWebhookUrl) ? tempWebhookUrl : null;
+
+        // 🛡️ ARCHITECTURE FIX: Fallback to 'default' tournament if none is provided
+        const tId = tournament_id || 'default';
 
         const query = `
             INSERT INTO match_history (
-                id, date, teamA, teamB, teamALogo, teamBLogo, format,
+                id, tournament_id, date, teamA, teamB, teamALogo, teamBLogo, format,
                 sequence, step, maps, logs, finished, lastPickedMap, playedMaps,
                 useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys_data, tempWebhookUrl
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
-                date=excluded.date, teamA=excluded.teamA, teamB=excluded.teamB,
+                tournament_id=excluded.tournament_id, date=excluded.date, teamA=excluded.teamA, teamB=excluded.teamB,
                 teamALogo=excluded.teamALogo, teamBLogo=excluded.teamBLogo, format=excluded.format,
                 sequence=excluded.sequence, step=excluded.step, maps=excluded.maps, logs=excluded.logs,
                 finished=excluded.finished, lastPickedMap=excluded.lastPickedMap, playedMaps=excluded.playedMaps,
@@ -161,7 +195,7 @@ function saveMatch(match) {
         `;
 
         db.run(query, [
-            id, date, teamA, teamB, safeLogoA, safeLogoB, format,
+            id, tId, date, teamA, teamB, safeLogoA, safeLogoB, format,
             JSON.stringify(sequence), step, JSON.stringify(maps), JSON.stringify(logs),
             finished ? 1 : 0, lastPickedMap || null, JSON.stringify(playedMaps),
             useTimer ? 1 : 0, JSON.stringify(ready), timerEndsAt || null,
@@ -182,41 +216,44 @@ function saveMatch(match) {
 function loadAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-
         db.all('SELECT * FROM match_history WHERE finished = 0 ORDER BY date DESC', [], (err, rows) => {
-            if (err) {
-                console.error('[DB] Error loading matches:', err);
-                return reject(err);
-            }
+            if (err) return reject(err);
             resolve(rows.map(row => rowToMatch(row, true))); 
         });
     });
 }
 
-function getPaginatedMatches(page = 1, limit = 10) {
+function getPaginatedMatches(page = 1, limit = 10, tournamentId = null) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
         const offset = (page - 1) * limit;
 
-        db.get('SELECT COUNT(*) as total FROM match_history WHERE finished = 1', [], (err, countRow) => {
-            if (err) return reject(err);
+        let countQuery = 'SELECT COUNT(*) as total FROM match_history WHERE finished = 1';
+        let dataQuery = 'SELECT * FROM match_history WHERE finished = 1 ORDER BY date DESC LIMIT ? OFFSET ?';
+        let queryParams = [limit, offset];
+        let countParams = [];
 
+        // 🛡️ ARCHITECTURE FIX: Support filtering history by specific tournament
+        if (tournamentId) {
+            countQuery = 'SELECT COUNT(*) as total FROM match_history WHERE finished = 1 AND tournament_id = ?';
+            dataQuery = 'SELECT * FROM match_history WHERE finished = 1 AND tournament_id = ? ORDER BY date DESC LIMIT ? OFFSET ?';
+            queryParams = [tournamentId, limit, offset];
+            countParams = [tournamentId];
+        }
+
+        db.get(countQuery, countParams, (err, countRow) => {
+            if (err) return reject(err);
             const totalMatches = countRow.total;
 
-            db.all(
-                'SELECT * FROM match_history WHERE finished = 1 ORDER BY date DESC LIMIT ? OFFSET ?',
-                [limit, offset],
-                (err, rows) => {
-                    if (err) return reject(err);
-                    
-                    resolve({
-                        matches: rows.map(row => rowToMatch(row, false)),
-                        totalMatches,
-                        totalPages: Math.ceil(totalMatches / limit),
-                        currentPage: page
-                    });
-                }
-            );
+            db.all(dataQuery, queryParams, (err, rows) => {
+                if (err) return reject(err);
+                resolve({
+                    matches: rows.map(row => rowToMatch(row, false)),
+                    totalMatches,
+                    totalPages: Math.ceil(totalMatches / limit),
+                    currentPage: page
+                });
+            });
         });
     });
 }
@@ -224,7 +261,6 @@ function getPaginatedMatches(page = 1, limit = 10) {
 function getAllMatches() {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-
         db.all('SELECT * FROM match_history ORDER BY date DESC LIMIT 1000', [], (err, rows) => {
             if (err) return reject(err);
             resolve(rows.map(row => rowToMatch(row, false)));
@@ -235,7 +271,6 @@ function getAllMatches() {
 function deleteMatch(matchId) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error('Database not initialized'));
-
         db.run('DELETE FROM match_history WHERE id = ?', [matchId], function(err) {
             if (err) return reject(err);
             if (this.changes === 0) return resolve(false); 
@@ -270,5 +305,11 @@ module.exports = {
     getAllMatches,
     deleteMatch,
     closeDatabase,
-    getRawInstance
+    getRawInstance,
+    // Multi-tenant exports
+    createOrganization,
+    getOrganization,
+    createTournament,
+    getTournament,
+    getTournamentsByOrg
 };
