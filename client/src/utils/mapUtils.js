@@ -1,19 +1,18 @@
-// client/src/utils/mapUtils.js
-
 export const getMapNameWithPrefix = (mapName) => {
     if (!mapName) return mapName;
     if (mapName.includes('_')) return mapName.toLowerCase();
     
-    const defusalMaps = ['dust2', 'inferno', 'mirage', 'overpass', 'nuke', 'anubis', 'ancient', 'vertigo', 'cache', 'train', 'cobblestone', 'tuscan'];
     const lowerName = mapName.toLowerCase();
+    const hostageMaps = ['office', 'assault', 'italy', 'militia'];
+    const defusalMaps = ['dust2', 'inferno', 'mirage', 'overpass', 'nuke', 'anubis', 'ancient', 'vertigo', 'cache', 'train', 'cobblestone', 'tuscan', 'sanctum', 'poseidon'];
     
+    if (hostageMaps.some(m => lowerName.includes(m))) return `cs_${lowerName}`;
     if (defusalMaps.some(m => lowerName.includes(m))) return `de_${lowerName}`;
     return `de_${lowerName}`;
 };
 
 export const getMapImageUrl = (mapName, customImage = null) => {
     if (customImage) return { primary: customImage, fallbacks: [] };
-    
     const baseName = getMapNameWithPrefix(mapName).toLowerCase();
     return { 
         primary: `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.png`, 
