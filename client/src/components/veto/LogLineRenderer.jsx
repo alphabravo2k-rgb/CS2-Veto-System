@@ -12,19 +12,28 @@ const LogLineRenderer = React.memo(({ log, teamA, teamB }) => {
     }
 
     const renderWord = (word, i) => {
-        let style = { color: '#aaa' };
-        if (['banned', 'picked'].includes(word.toLowerCase())) style = { color: '#666' };
-        if (word === teamA) style = { color: '#00d4ff', fontWeight: 'bold' };
-        if (word === teamB) style = { color: '#ff0055', fontWeight: 'bold' };
-        if (word.includes('[BAN]')) style = { color: '#ff4444', fontWeight: 'bold' };
-        if (word.includes('[PICK]')) style = { color: '#00ff00', fontWeight: 'bold' };
-        return <span key={i} style={style}>{word} </span>;
+        // 🛡️ LOGIC FIX: Explicit priority returns to prevent color overlap bugs
+        if (word.includes('[BAN]') || word.includes('[AUTO-BAN]')) return <span key={i} style={{ color: '#ff4444', fontWeight: 'bold' }}>{word} </span>;
+        if (word.includes('[PICK]') || word.includes('[AUTO-PICK]')) return <span key={i} style={{ color: '#00ff00', fontWeight: 'bold' }}>{word} </span>;
+        if (word.includes('[SIDE]') || word.includes('[AUTO-SIDE]')) return <span key={i} style={{ color: '#4facfe', fontWeight: 'bold' }}>{word} </span>;
+        if (word.includes('[DECIDER]')) return <span key={i} style={{ color: '#ffa500', fontWeight: 'bold' }}>{word} </span>;
+        if (word.includes('[SYSTEM]') || word.includes('[COIN]')) return <span key={i} style={{ color: '#ffd700', fontWeight: 'bold' }}>{word} </span>;
+        if (word.includes('[READY]')) return <span key={i} style={{ color: '#00ff00', fontWeight: 'bold' }}>{word} </span>;
+
+        if (word === teamA) return <span key={i} style={{ color: '#00d4ff', fontWeight: 'bold' }}>{word} </span>;
+        if (word === teamB) return <span key={i} style={{ color: '#ff0055', fontWeight: 'bold' }}>{word} </span>;
+        
+        if (['banned', 'picked'].includes(word.toLowerCase())) return <span key={i} style={{ color: '#666' }}>{word} </span>;
+        
+        return <span key={i} style={{ color: '#aaa' }}>{word} </span>;
     };
 
     return (
         <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            // 🛡️ UI/UX FIX: Forces a clean slide-in instead of a springy bounce
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             style={{ marginBottom: '6px', fontFamily: "'Consolas', monospace", fontSize: '0.9rem', lineHeight: '1.5' }}
         >
             {mainPart.split(' ').map((w, i) => renderWord(w, i))}
