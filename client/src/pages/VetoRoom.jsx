@@ -4,6 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import useVetoStore from '../store/useVetoStore';
 import { AnimatedBackground, HomeIcon, CopyIcon, CheckIcon } from '../components/SharedUI';
 
+// 🛡️ ARCHITECTURE FIX: All components imported perfectly
+import MapCard from '../components/veto/MapCard';
+import LogLineRenderer from '../components/veto/LogLineRenderer';
+import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
+import Countdown from '../components/veto/Countdown';
+
 let globalAudioContext = null;
 
 const playSound = (type = 'action') => {
@@ -69,220 +75,6 @@ const playSound = (type = 'action') => {
     } catch (e) { /* silent fail */ }
 };
 
-const getMapNameWithPrefix = (mapName) => {
-    if (!mapName) return mapName;
-    if (mapName.includes('_')) return mapName.toLowerCase();
-    const defusalMaps = ['dust2', 'inferno', 'mirage', 'overpass', 'nuke', 'anubis', 'ancient', 'vertigo', 'cache', 'train', 'cobblestone', 'tuscan'];
-    const lowerName = mapName.toLowerCase();
-    if (defusalMaps.some(m => lowerName.includes(m))) return `de_${lowerName}`;
-    return `de_${lowerName}`;
-};
-
-const getMapImageUrl = (mapName, customImage = null) => {
-    if (customImage) return { primary: customImage, fallbacks: [] };
-    const baseName = getMapNameWithPrefix(mapName).toLowerCase();
-    return { 
-        primary: `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.png`, 
-        fallbacks: [`https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.jpg`, `https://image.gametracker.com/images/maps/160x120/csgo/${baseName}.jpg`] 
-    };
-};
-
-const Countdown = ({ endsAt, soundEnabled = false }) => {
-    const [timeLeft, setTimeLeft] = useState(0);
-    const prevTimeRef = useRef(null);
-
-    useEffect(() => {
-        if (!endsAt) { prevTimeRef.current = null; return; }
-        const endsAtTime = typeof endsAt === 'number' ? endsAt : new Date(endsAt).getTime();
-        const initialTimeLeft = Math.max(0, Math.floor((endsAtTime - Date.now()) / 1000));
-        prevTimeRef.current = initialTimeLeft;
-        setTimeLeft(initialTimeLeft);
-
-        const interval = setInterval(() => {
-            const diff = Math.max(0, Math.floor((endsAtTime - Date.now()) / 1000));
-            if (soundEnabled && prevTimeRef.current !== null && diff <= 10 && diff >= 0 && diff < prevTimeRef.current) {
-                playSound('countdown');
-            }
-            prevTimeRef.current = diff;
-            setTimeLeft(diff);
-        }, 1000);
-        return () => clearInterval(interval);
-    }, [endsAt, soundEnabled]);
-
-    if (!endsAt || timeLeft <= 0) return null;
-    return <span style={{ color: timeLeft < 10 ? '#ff4444' : '#00d4ff', fontWeight: 'bold', marginLeft: '10px' }}>({timeLeft}s)</span>;
-};
-
-// 🛡️ ARCHITECTURE FIX: Extracted MapCard with correct Framer properties
-const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData, mapOrderLabel, styles }) => {
-    const mapImageUrls = getMapImageUrl(map.name, map.customImage);
-    const [imageUrl, setImageUrl] = useState(mapImageUrls.primary);
-    const [imageFailed, setImageFailed] = useState(false);
-
-    useEffect(() => {
-        if (map.customImage) return;
-        let testImage = new Image(); 
-        let currentIndex = 0; 
-        const allUrls = [mapImageUrls.primary, ...mapImageUrls.fallbacks]; 
-
-        const tryNextUrl = () => {
-            if (currentIndex >= allUrls.length) { setImageFailed(true); return; }
-            testImage.src = allUrls[currentIndex];
-        };
-
-        testImage.onload = () => { setImageUrl(allUrls[currentIndex]); setImageFailed(false); };
-        testImage.onerror = () => { currentIndex++; tryNextUrl(); };
-        tryNextUrl();
-
-        return () => { testImage.onload = null; testImage.onerror = null; };
-    }, [map.name, map.customImage]); 
-
-    // 🛡️ BUG FIX: Removed layout from grid container, kept whileHover for physics
-    return (
-        <motion.div 
-            layout 
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: map.status === 'banned' ? 0.3 : 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.5 }}
-            whileHover={isInteractive ? { scale: 1.05, y: -5 } : {}}
-            transition={{ duration: 0.3 }}
-            onClick={onClick} 
-            style={{
-                ...styles.mapCard,
-                backgroundImage: imageFailed ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' : `linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%), url(${imageUrl})`,
-                filter: map.status === 'banned' ? 'grayscale(100%)' : 'none',
-                border: map.status === 'picked' ? '3px solid #00ff00' : map.status === 'decider' ? '3px solid #ffa500' : isInteractive ? `2px solid ${actionColor}` : '1px solid rgba(255,255,255,0.1)',
-                cursor: (map.status === 'available' && isInteractive) ? 'pointer' : 'default',
-                boxShadow: isInteractive ? `0 0 20px ${actionColor}` : '0 5px 15px rgba(0,0,0,0.5)'
-            }}
-        >
-            {map.status === 'picked' && mapOrderLabel && <div style={styles.mapOrderBadge}>{mapOrderLabel}</div>}
-            <div style={styles.cardContent}>
-                <span style={styles.mapTitle}>{map.name}</span>
-                {map.status === 'banned' && <div style={styles.badgeBan}>BANNED BY {logData?.team || '...'}</div>}
-                {map.status === 'picked' && <div style={styles.badgePick}>PICKED BY {logData?.team || '...'} <div style={styles.miniSideBadge}>{logData?.sideText || 'WAITING...'}</div></div>}
-                {map.status === 'decider' && <div style={styles.badgeDecider}>DECIDER <div style={styles.miniSideBadge}>{logData?.sideText || 'WAITING FOR SIDE'}</div></div>}
-            </div>
-        </motion.div>
-    );
-});
-
-const LogLineRenderer = React.memo(({ log, teamA, teamB }) => {
-    const splitIndex = log.indexOf('(');
-    let mainPart = log;
-    let sidePart = "";
-
-    if (splitIndex !== -1) {
-        mainPart = log.substring(0, splitIndex).trim();
-        sidePart = log.substring(splitIndex).trim();
-    }
-
-    const renderWord = (word, i) => {
-        let style = { color: '#aaa' };
-        if (['banned', 'picked'].includes(word.toLowerCase())) style = { color: '#666' };
-        if (word === teamA) style = { color: '#00d4ff', fontWeight: 'bold' };
-        if (word === teamB) style = { color: '#ff0055', fontWeight: 'bold' };
-        if (word.includes('[BAN]')) style = { color: '#ff4444', fontWeight: 'bold' };
-        if (word.includes('[PICK]')) style = { color: '#00ff00', fontWeight: 'bold' };
-        return <span key={i} style={style}>{word} </span>;
-    };
-
-    return (
-        <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            style={{ marginBottom: '6px', fontFamily: "'Consolas', monospace", fontSize: '0.9rem', lineHeight: '1.5' }}
-        >
-            {mainPart.split(' ').map((w, i) => renderWord(w, i))}
-            {sidePart && <span style={{ color: '#00ff00', fontWeight: 'bold', marginLeft: '5px' }}>{sidePart}</span>}
-        </motion.div>
-    );
-});
-
-const CoinFlipOverlay = React.memo(({ gameState, myRole, onCall, onDecide, soundEnabled }) => {
-    const [isFlipping, setIsFlipping] = useState(false);
-    const [showResult, setShowResult] = useState(false);
-    const [flipAnimation, setFlipAnimation] = useState(null);
-    const soundIntervalRef = useRef(null);
-
-    useEffect(() => {
-        if (gameState.coinFlip.result && gameState.coinFlip.status === 'deciding') {
-            const randomRotations = Math.floor(Math.random() * 1800) + 1800; 
-            const randomDuration = (Math.random() * 1.5) + 2.5; 
-            
-            setFlipAnimation({ rotations: randomRotations, duration: randomDuration });
-            setIsFlipping(true);
-
-            if (soundEnabled) {
-                playSound('coin');
-                soundIntervalRef.current = setInterval(() => playSound('coinLoop'), 150);
-            }
-
-            setTimeout(() => {
-                if (soundIntervalRef.current) { clearInterval(soundIntervalRef.current); soundIntervalRef.current = null; }
-                setIsFlipping(false); setShowResult(true);
-            }, randomDuration * 1000);
-        }
-        return () => { if (soundIntervalRef.current) clearInterval(soundIntervalRef.current); };
-    }, [gameState.coinFlip.result, gameState.coinFlip.status, soundEnabled]);
-
-    const isCaller = myRole === 'A';
-    const isWinner = myRole === gameState.coinFlip.winner;
-
-    return (
-        <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#1e293b', zIndex: 3000, display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}
-        >
-            <style>
-                {flipAnimation && `
-                    @keyframes coinFlip3D {
-                        0% { transform: rotateY(0deg) scale(1); filter: brightness(1); }
-                        50% { transform: rotateY(${flipAnimation.rotations / 2}deg) scale(1.5); filter: brightness(1.5); }
-                        100% { transform: rotateY(${flipAnimation.rotations}deg) scale(1); filter: brightness(1); }
-                    }
-                    .coin-3d { animation: coinFlip3D ${flipAnimation.duration}s cubic-bezier(0.4, 0.0, 0.2, 1) forwards; }
-                `}
-            </style>
-            <h1 style={{ color: '#ffd700', fontSize: '3rem', marginBottom: '30px', textShadow: '0 0 20px #ffd700', fontFamily: "'Rajdhani', sans-serif" }}>COIN TOSS</h1>
-
-            {gameState.coinFlip.status === 'waiting_call' && (
-                <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ color: '#fff', marginBottom: '20px', fontFamily: "'Rajdhani', sans-serif" }}>{isCaller ? "CALL THE TOSS" : `WAITING FOR ${gameState.teamA}...`}</h2>
-                    {isCaller && (
-                        <div style={{ display: 'flex', gap: '20px' }}>
-                            <button onClick={() => onCall('heads')} style={{ padding: '20px 40px', fontSize: '1.5rem', background: 'transparent', border: '2px solid #ffd700', color: '#ffd700', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontFamily: "'Rajdhani', sans-serif" }}>HEADS</button>
-                            <button onClick={() => onCall('tails')} style={{ padding: '20px 40px', fontSize: '1.5rem', background: 'transparent', border: '2px solid #fff', color: '#fff', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontFamily: "'Rajdhani', sans-serif" }}>TAILS</button>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {(isFlipping || showResult) && (
-                <div style={{ perspective: '2000px', marginBottom: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div className={isFlipping ? 'coin-3d' : ''} style={{ width: '180px', height: '180px', borderRadius: '50%', border: '6px solid rgba(255, 255, 255, 0.9)', background: gameState.coinFlip.result === 'heads' ? '#ffd700' : '#cbd5e1', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '5rem', fontWeight: '900', color: '#fff', fontFamily: "'Rajdhani', sans-serif" }}>
-                        {isFlipping ? '?' : (gameState.coinFlip.result === 'heads' ? 'H' : 'T')}
-                    </div>
-                    {!isFlipping && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ background: '#fff', color: '#000', padding: '12px 45px', borderRadius: '50px', fontSize: '2.2rem', fontWeight: '900' }}>{gameState.coinFlip.result}</motion.div>}
-                </div>
-            )}
-
-            {showResult && gameState.coinFlip.status === 'deciding' && (
-                <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ color: '#00ff00', fontSize: '2rem', marginBottom: '10px', fontFamily: "'Rajdhani', sans-serif" }}>{gameState.coinFlip.winner === 'A' ? gameState.teamA : gameState.teamB} WON!</h2>
-                    <h3 style={{ color: '#aaa', marginBottom: '20px', fontFamily: "'Rajdhani', sans-serif" }}>{isWinner ? "CHOOSE WHO BANS FIRST" : "WAITING FOR DECISION..."}</h3>
-                    {isWinner && (
-                        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-                            <button onClick={() => onDecide('first')} style={{ padding: '15px 30px', background: '#00d4ff', border: 'none', color: '#000', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', fontFamily: "'Rajdhani', sans-serif" }}>WE START</button>
-                            <button onClick={() => onDecide('second')} style={{ padding: '15px 30px', background: '#ff0055', border: 'none', color: '#fff', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', fontFamily: "'Rajdhani', sans-serif" }}>THEY START</button>
-                        </div>
-                    )}
-                </div>
-            )}
-        </motion.div>
-    );
-});
-
 export default function VetoRoom() {
     const { matchId } = useParams();
     const [searchParams] = useSearchParams();
@@ -297,14 +89,13 @@ export default function VetoRoom() {
     const prevLogsLengthRef = useRef(0);
     const styles = useMemo(() => getStyles(isMobile), [isMobile]);
 
-    // 🛡️ BUG FIX: Split Key extraction from Socket Connection
     useEffect(() => {
         const key = searchParams.get('key');
         if (key) {
             sessionStorage.setItem(`lot_key_${matchId}`, key);
             window.history.replaceState({}, '', window.location.pathname);
         }
-    }, []); // Run ONCE on mount
+    }, []);
 
     useEffect(() => {
         if (!matchId) { navigate('/'); return; }
@@ -319,9 +110,8 @@ export default function VetoRoom() {
             window.removeEventListener('resize', handleResize);
             disconnectRoom();
         };
-    }, [matchId]); // Dependencies narrowed to avoid race condition
+    }, [matchId]); 
 
-    // Audio Processing
     useEffect(() => {
         if (!gameState?.logs || !soundEnabled) return;
         
@@ -358,6 +148,12 @@ export default function VetoRoom() {
         return cache;
     }, [gameState?.logs]);
 
+    const handleCopyLogs = useCallback((text) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setShowNotification(true); setTimeout(() => setShowNotification(false), 3000);
+        });
+    }, []);
+
     if (!gameState) return <div style={styles.container}><AnimatedBackground /><h1 style={{fontSize:'2rem', fontWeight:'bold', color:'#00d4ff'}}>SYNCING ROOM...</h1></div>;
 
     if (gameState.useCoinFlip && gameState.coinFlip?.status !== 'done') {
@@ -365,7 +161,12 @@ export default function VetoRoom() {
             <div style={styles.container}>
                 <AnimatedBackground />
                 {serverError && <div style={{ ...styles.notification, background: '#ff4444', color: '#fff', opacity: 1 }}>⚠️ {serverError}</div>}
-                <CoinFlipOverlay gameState={gameState} myRole={myRole} onCall={(call) => sendCoinCall(matchId, call, sessionStorage.getItem(`lot_key_${matchId}`))} onDecide={(dec) => sendCoinDecide(matchId, dec, sessionStorage.getItem(`lot_key_${matchId}`))} soundEnabled={soundEnabled} />
+                <CoinFlipOverlay gameState={gameState} myRole={myRole} 
+                    onCall={(call) => sendCoinCall(matchId, call, sessionStorage.getItem(`lot_key_${matchId}`))} 
+                    onDecide={(dec) => sendCoinDecide(matchId, dec, sessionStorage.getItem(`lot_key_${matchId}`))} 
+                    soundEnabled={soundEnabled} 
+                    playSound={playSound}
+                />
             </div>
         );
     }
@@ -422,7 +223,7 @@ export default function VetoRoom() {
             </div>
 
             <div style={{ ...styles.statusBar, borderColor: isMyTurn ? actionColor : '#333', boxShadow: isMyTurn ? `0 0 10px ${actionColor}22` : 'none' }}>
-                <h2>{instruction} {!gameState.finished && <Countdown endsAt={gameState.timerEndsAt} soundEnabled={soundEnabled} />}</h2>
+                <h2>{instruction} {!gameState.finished && <Countdown endsAt={gameState.timerEndsAt} soundEnabled={soundEnabled} playSound={playSound} />}</h2>
             </div>
 
             {showReadyButton && (
@@ -432,7 +233,7 @@ export default function VetoRoom() {
             )}
 
             {!isSideStep && (
-                <div style={styles.grid}>
+                <motion.div layout style={styles.grid}>
                     <AnimatePresence>
                         {gameState.maps.map(map => {
                             const isInteractive = (!gameState.useTimer || (gameState.ready.A && gameState.ready.B)) && isMyTurn && isActionStep && map.status === 'available';
@@ -445,7 +246,7 @@ export default function VetoRoom() {
                             );
                         })}
                     </AnimatePresence>
-                </div>
+                </motion.div>
             )}
 
             {isSideStep && (
@@ -467,7 +268,7 @@ export default function VetoRoom() {
             <div style={styles.logContainer}>
                 <div style={styles.logHeader}>
                     <span>VETO LOGS</span>
-                    {gameState.finished && <button onClick={() => { navigator.clipboard.writeText(gameState.logs.join('\n')); setShowNotification(true); setTimeout(() => setShowNotification(false), 3000); }} style={styles.copyBtn}><span style={{ marginRight: '5px' }}>COPY</span> <CopyIcon /></button>}
+                    {gameState.finished && <button onClick={() => handleCopyLogs(gameState.logs.join('\n'))} style={styles.copyBtn}><span style={{ marginRight: '5px' }}>COPY</span> <CopyIcon /></button>}
                 </div>
                 <div style={styles.logScroll}>
                     <AnimatePresence>
