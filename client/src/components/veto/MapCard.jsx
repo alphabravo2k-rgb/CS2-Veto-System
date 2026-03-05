@@ -1,17 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { getMapImageUrl } from '../../utils/mapUtils'; // 🛡️ ARCHITECTURE FIX: Centralized utility
+import { getMapImageUrl } from '../../utils/mapUtils';
 
 const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData, mapOrderLabel, styles = {} }) => {
-    const mapImageUrls = getMapImageUrl(map.name, map.customImage);
+    // 🛡️ ARCHITECTURE FIX: Memoize to prevent infinite dependency re-renders
+    const mapImageUrls = useMemo(() => getMapImageUrl(map.name, map.customImage), [map.name, map.customImage]);
     const [imageUrl, setImageUrl] = useState(mapImageUrls.primary);
     const [imageFailed, setImageFailed] = useState(false);
-    
-    // 🛡️ BUG FIX: Removed unused React hover state. Hover is now entirely handled by Framer Motion.
 
     useEffect(() => {
         if (map.customImage) return;
-        
         let testImage = new Image(); 
         let currentIndex = 0; 
         let timer = null;
@@ -19,15 +17,10 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
 
         const tryNextUrl = () => {
             if (currentIndex >= allUrls.length) { setImageFailed(true); return; }
-            
-            // 🛡️ UX FIX: Re-added the 3-second timeout so bad connections don't hang infinitely
             timer = setTimeout(() => {
-                testImage.onload = null;
-                testImage.onerror = null;
-                currentIndex++;
-                tryNextUrl();
+                testImage.onload = null; testImage.onerror = null;
+                currentIndex++; tryNextUrl();
             }, 3000);
-
             testImage.src = allUrls[currentIndex];
         };
 
@@ -35,12 +28,8 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
         testImage.onerror = () => { clearTimeout(timer); currentIndex++; tryNextUrl(); };
         tryNextUrl();
 
-        return () => { 
-            clearTimeout(timer);
-            testImage.onload = null; 
-            testImage.onerror = null; 
-        };
-    }, [map.name, map.customImage, mapImageUrls.primary, mapImageUrls.fallbacks]); 
+        return () => { clearTimeout(timer); testImage.onload = null; testImage.onerror = null; };
+    }, [map.name, map.customImage, mapImageUrls]); 
 
     return (
         <motion.div 
@@ -48,7 +37,6 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: map.status === 'banned' ? 0.3 : 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.5 }}
-            // 🛡️ UX FIX: Framer Motion now handles BOTH the scale and the glow simultaneously
             whileHover={isInteractive ? { scale: 1.05, y: -5, boxShadow: `0 0 20px ${actionColor}` } : {}}
             transition={{ duration: 0.3 }}
             onClick={onClick} 
@@ -58,7 +46,7 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
                 filter: map.status === 'banned' ? 'grayscale(100%)' : 'none',
                 border: map.status === 'picked' ? '3px solid #00ff00' : map.status === 'decider' ? '3px solid #ffa500' : isInteractive ? `2px solid ${actionColor}` : '1px solid rgba(255,255,255,0.1)',
                 cursor: (map.status === 'available' && isInteractive) ? 'pointer' : 'default',
-                boxShadow: '0 5px 15px rgba(0,0,0,0.5)' // Default resting shadow
+                boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
             }}
         >
             {map.status === 'picked' && mapOrderLabel && <div style={styles.mapOrderBadge}>{mapOrderLabel}</div>}
