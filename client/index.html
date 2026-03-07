@@ -12,7 +12,7 @@
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src https://fonts.gstatic.com;
       img-src 'self' data: blob: https://raw.githubusercontent.com https://image.gametracker.com https://i.ibb.co;
-      connect-src 'self' wss: ws: http://localhost:3001 https://cs2-veto-server-gh3n.onrender.com wss://cs2-veto-server-gh3n.onrender.com;
+      connect-src 'self' wss: ws: http://localhost:3001 %VITE_SOCKET_URL%;
     " />
 
     <link rel="icon" href="/favicon.ico" />
