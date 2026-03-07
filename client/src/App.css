@@ -4,7 +4,7 @@
  * =============================================================================
  * FILE          : client/src/App.css
  * LAYER         : UI / Styling
- * VERSION       : v2.1.0 (SAFARI-COMPATIBLE)
+ * VERSION       : v2.1.1 (SAFARI-COMPATIBLE)
  * * FEATURES:
  * - Boilerplate Purged: Removed default CRA logo and styles.
  * - Hardware Acceleration: Keyframes moved from JS DOM-injection to native CSS.
@@ -73,7 +73,7 @@ body {
 
 .coin-3d {
   transform-style: preserve-3d;
-  backface-visibility: hidden;
+  /* 🛡️ BUG FIX: Removed backface-visibility so the single-sided coin doesn't vanish mid-spin */
   animation: 
     coinFlip3D var(--flip-duration, 3s) cubic-bezier(0.4, 0.0, 0.2, 1) forwards,
     coinShadow var(--flip-duration, 3s) ease-in-out infinite;
