@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // 🛡️ CRASH FIX: useCallback imported
 import { useParams, useNavigate } from 'react-router-dom';
 import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon } from '../components/SharedUI';
-import useVetoStore from '../store/useVetoStore'; // 🛡️ ARCHITECTURE FIX: Importing the global store
+import useVetoStore from '../store/useVetoStore'; 
 
 const API_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 const LOGO_URL = import.meta.env.VITE_ORG_LOGO_URL || "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
@@ -10,7 +10,6 @@ export default function TournamentDashboard() {
     const { orgId, tournamentId } = useParams();
     const navigate = useNavigate();
     
-    // 🛡️ ARCHITECTURE FIX: Pulling createMatch and serverError from the Store
     const { createMatch: storeCreateMatch, serverError } = useVetoStore();
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -22,6 +21,7 @@ export default function TournamentDashboard() {
     const [useTimer, setUseTimer] = useState(false);
     const [timerDuration, setTimerDuration] = useState(60);
     const [useCoinFlip, setUseCoinFlip] = useState(false);
+    const [tempWebhook, setTempWebhook] = useState(''); // 🛡️ FEATURE RESTORE: Custom per-match webhooks
     
     const [isGenerating, setIsGenerating] = useState(false);
     const [inputError, setInputError] = useState(false);
@@ -66,7 +66,6 @@ export default function TournamentDashboard() {
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
         if (file) {
-            // 🛡️ SECURITY FIX: Enforce MIME Validation
             const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
             if (!ALLOWED_TYPES.includes(file.type)) return alert("Invalid file type. Only JPG, PNG, WEBP, or GIF.");
             if (file.size > 2000000) return alert("File too large. Max 2MB.");
@@ -100,7 +99,6 @@ export default function TournamentDashboard() {
 
         setIsGenerating(true);
         
-        // 🛡️ BUG FIX: Dispatching to the global store, passing a callback to clear the form ONLY on success
         storeCreateMatch({
             orgId, 
             tournamentId, 
@@ -113,7 +111,8 @@ export default function TournamentDashboard() {
             customSequence: format === 'custom' ? customSequence : null,
             useTimer, 
             useCoinFlip, 
-            timerDuration: useTimer ? parseInt(timerDuration) : 60
+            timerDuration: useTimer ? parseInt(timerDuration) : 60,
+            tempWebhookUrl: tempWebhook.trim() // 🛡️ FEATURE RESTORE
         }, (response) => {
             const baseUrl = `${window.location.origin}/${orgId}/${tournamentId}/veto/${response.roomId}`;
             setCreatedLinks({
@@ -122,7 +121,7 @@ export default function TournamentDashboard() {
                 teamB: `${baseUrl}?key=${response.keys.B}`
             });
             setIsGenerating(false);
-            setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false);
+            setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false); setTempWebhook('');
             fetchHistory(); 
         });
     };
@@ -140,7 +139,6 @@ export default function TournamentDashboard() {
 
     const addUserMap = () => {
         if (!userCustomMap.trim()) return;
-        // 🛡️ SECURITY FIX: Sliced the custom map input to prevent massive string injection
         const newName = userCustomMap.trim().slice(0, 50);
         setAvailableMaps([...availableMaps, { name: newName }]);
         setCustomSelectedMaps([...customSelectedMaps, newName]);
@@ -154,7 +152,6 @@ export default function TournamentDashboard() {
         <div style={styles.container}>
             <AnimatedBackground />
             
-            {/* 🛡️ UI UX FIX: Inline keyframes for missing animations */}
             <style>
                 {`
                     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -183,7 +180,7 @@ export default function TournamentDashboard() {
                 <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} maxLength={50} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputA} style={{ display: 'none' }} onChange={(e) => handleLogoUpload(e, 'A')} />
+                    <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'A')} />
                     <button onClick={() => fileInputA.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <UploadIcon /> {teamALogo ? "CHANGE LOGO A" : "ATTACH LOGO A"}
                     </button>
@@ -193,12 +190,14 @@ export default function TournamentDashboard() {
                 <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} maxLength={50} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputB} style={{ display: 'none' }} onChange={(e) => handleLogoUpload(e, 'B')} />
+                    <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'B')} />
                     <button onClick={() => fileInputB.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <UploadIcon /> {teamBLogo ? "CHANGE LOGO B" : "ATTACH LOGO B"}
                     </button>
                     {teamBLogo && <img src={teamBLogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
                 </div>
+
+                <input style={{ ...styles.input, fontSize: '0.9rem', padding: '10px', marginBottom: '15px' }} value={tempWebhook} onChange={e => setTempWebhook(e.target.value)} placeholder="OPTIONAL: Custom Discord Webhook URL" />
 
                 <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#aaa', fontSize: '0.9rem', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -300,7 +299,6 @@ export default function TournamentDashboard() {
     );
 }
 
-// --- STYLES ---
 const getStyles = (isMobile) => ({
     container: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'Rajdhani', sans-serif", color: 'white', padding: isMobile ? '20px 10px' : '40px 20px', boxSizing: 'border-box', position: 'relative' },
     glassPanel: { background: 'rgba(15, 18, 25, 0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: isMobile ? '20px' : '40px', width: '100%', maxWidth: '600px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10 },
