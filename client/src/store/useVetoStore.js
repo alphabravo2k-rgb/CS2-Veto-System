@@ -14,7 +14,7 @@ import io from 'socket.io-client';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 
 const useVetoStore = create((set, get) => ({
-    _socket: null, // 🛡️ ARCHITECTURE FIX: Socket instance is now strictly managed in state
+    _socket: null, 
     gameState: null,
     myRole: null,
     serverError: null,
@@ -22,7 +22,6 @@ const useVetoStore = create((set, get) => ({
     isConnected: false,
 
     connectToRoom: (matchId, key) => {
-        // 🛡️ ARCHITECTURE FIX: Tear down any ghost connections before opening a new one
         const existingSocket = get()._socket;
         if (existingSocket) {
             existingSocket.removeAllListeners();
@@ -31,7 +30,6 @@ const useVetoStore = create((set, get) => ({
 
         const socket = io(SOCKET_URL, { autoConnect: true });
 
-        // 🛡️ ARCHITECTURE FIX: Only emit join_room once the socket physically connects
         socket.on('connect', () => {
             set({ isConnected: true });
             socket.emit('join_room', { roomId: matchId, key });
@@ -60,6 +58,52 @@ const useVetoStore = create((set, get) => ({
             socket.disconnect();
         }
         set({ _socket: null, isConnected: false, gameState: null, myRole: null, roomUserCount: 0 });
+    },
+
+    // 🛡️ ARCHITECTURE FIX: Temporary/Reused socket specifically for Match Creation
+    createMatch: (payload, onSuccess) => {
+        let socket = get()._socket;
+        let ownSocket = false;
+
+        // If no socket exists in state, spin up a temporary one
+        if (!socket || !get().isConnected) {
+            socket = io(SOCKET_URL, { autoConnect: true });
+            ownSocket = true;
+        }
+
+        const handleCreated = (response) => {
+            if (onSuccess) onSuccess(response);
+            set({ serverError: null });
+            
+            // Instantly kill the temp socket to prevent ghosting
+            if (ownSocket) {
+                socket.removeAllListeners();
+                socket.disconnect();
+            }
+        };
+
+        const handleError = (msg) => {
+            set({ serverError: msg });
+            setTimeout(() => set({ serverError: null }), 4000);
+            
+            // Kill temp socket on failure
+            if (ownSocket) {
+                socket.removeAllListeners();
+                socket.disconnect();
+            }
+        };
+
+        if (ownSocket) {
+            // 🛡️ PERFORMANCE FIX: Using .once() prevents duplicate callbacks across multiple creations
+            socket.once('connect', () => {
+                socket.emit('create_match', payload);
+            });
+        } else {
+            socket.emit('create_match', payload);
+        }
+
+        socket.once('match_created', handleCreated);
+        socket.once('error', handleError);
     },
 
     sendAction: (matchId, actionData, key) => {
