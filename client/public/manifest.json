@@ -1,10 +1,10 @@
 {
-  "short_name": "LOT Veto",
-  "name": "LOTGaming CS2 Map Veto",
+  "short_name": "CS2 Veto",
+  "name": "COMP-OS Map Veto Engine",
   "description": "Professional Counter Strike 2 Map Veto System",
   "icons": [
     {
-      "src": "favicon.ico",
+      "src": "/favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
       "type": "image/x-icon"
     }
