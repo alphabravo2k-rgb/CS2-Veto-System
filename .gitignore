@@ -53,3 +53,9 @@ Thumbs.db
 client/coverage/
 server/coverage/
 .nyc_output/
+
+# Render / deployment
+.render/
+
+# Vitest
+*.snap
