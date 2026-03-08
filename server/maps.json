@@ -1,9 +1,34 @@
 [
-  { "name": "dust2", "customImage": null },
-  { "name": "inferno", "customImage": null },
-  { "name": "mirage", "customImage": null },
-  { "name": "overpass", "customImage": null },
-  { "name": "anubis", "customImage": null },
-  { "name": "ancient", "customImage": null },
-  { "name": "nuke", "customImage": null }
+  {
+    "name": "dust2",
+    "customImage": "/maps/dust2.jpg"
+  },
+  {
+    "name": "inferno",
+    "customImage": "/maps/inferno.jpg"
+  },
+  {
+    "name": "mirage",
+    "customImage": "/maps/mirage.jpg"
+  },
+  {
+    "name": "overpass",
+    "customImage": "/maps/overpass.jpg"
+  },
+  {
+    "name": "anubis",
+    "customImage": null
+  },
+  {
+    "name": "ancient",
+    "customImage": "/maps/ancient.jpg"
+  },
+  {
+    "name": "nuke",
+    "customImage": "/maps/nuke.jpg"
+  },
+  {
+    "name": "train",
+    "customImage": "/maps/train.jpg"
+  }
 ]
