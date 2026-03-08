@@ -108,7 +108,7 @@ async function loadData() {
         await db.initDatabase();
         await settings.initSettingsTable(db.getRawInstance ? db.getRawInstance() : null);
 
-        const savedMatches = await db.loadAllMatches();
+        const savedMatches = await db.loadActiveMatches(); // 🛡️ FIX: Updated to match db.js export name
         savedMatches.forEach(match => {
             rooms[match.id] = match;
         });
@@ -259,14 +259,22 @@ app.post('/api/admin/reset', async (req, res) => {
     
     try { await fsPromises.unlink(HISTORY_FILE); } catch (e) { }
 
-    // 🛡️ SECURITY FIX: Properly clear the SQLite table
-    if (typeof db.resetAllMatches === 'function') {
-        await db.resetAllMatches();
-    } else if (db.getRawInstance) {
-        db.getRawInstance().run('DELETE FROM match_history');
+    // 🛡️ DATA FIX: Promisified the raw delete to ensure it completes before returning success
+    try {
+        if (typeof db.resetAllMatches === 'function') {
+            await db.resetAllMatches();
+        } else if (db.getRawInstance) {
+            await new Promise((resolve, reject) => {
+                db.getRawInstance().run('DELETE FROM match_history', (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        }
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to reset database" });
     }
-    
-    res.json({ success: true });
 });
 
 app.post('/api/admin/maps/get', (req, res) => {
