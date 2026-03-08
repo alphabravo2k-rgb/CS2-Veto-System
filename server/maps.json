@@ -1,23 +1,9 @@
 [
-  {
-    "name": "dust2"
-  },
-  {
-    "name": "inferno"
-  },
-  {
-    "name": "mirage"
-  },
-  {
-    "name": "overpass"
-  },
-  {
-    "name": "anubis"
-  },
-  {
-    "name": "ancient"
-  },
-  {
-    "name": "nuke"
-  }
+  { "name": "dust2", "customImage": null },
+  { "name": "inferno", "customImage": null },
+  { "name": "mirage", "customImage": null },
+  { "name": "overpass", "customImage": null },
+  { "name": "anubis", "customImage": null },
+  { "name": "ancient", "customImage": null },
+  { "name": "nuke", "customImage": null }
 ]
