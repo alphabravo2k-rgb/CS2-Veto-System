@@ -1,16 +1,15 @@
-// File: discord-webhook.js
 /**
  * ⚡ COMP-OS — DISCORD INTEGRATION KERNEL
  * =============================================================================
  * FILE          : discord-webhook.js
  * RESPONSIBILITY: Secure outbound notifications to Discord API
  * LAYER         : Backend / External Integrations
- * RISK LEVEL    : MEDIUM
+ * RISK LEVEL    : SECURE
  * =============================================================================
  *
  * RELEASE METADATA
  * -----------------------------------------------------------------------------
- * VERSION       : v2.1.0 (LIVE-ACTION-READY)
+ * VERSION       : v2.2.0 (LIVE-ACTION-READY + UNHANDLED REJECTION FIX)
  * STATUS        : ENFORCED
  *
  * FEATURES:
@@ -18,6 +17,7 @@
  * - Outbound Resilience: 5000ms hard timeout to prevent thread hanging.
  * - Payload Caps: Enforces Discord's strict 1024 character limit on embeds.
  * - Memory Safety: Rejects upstream responses larger than 10KB.
+ * - Promise Safety: Prevents Unhandled Promise Rejections on edge-case timeouts.
  * =============================================================================
  */
 
@@ -97,6 +97,8 @@ function isValidDiscordWebhook(url) {
  */
 function sendWebhookRequest(webhookUrl, payload) {
     return new Promise((resolve, reject) => {
+        let isFinished = false; // 🛡️ RELIABILITY FIX: Prevents double resolve/reject crashes
+
         const url = new URL(webhookUrl);
         const data = JSON.stringify(payload);
 
@@ -116,12 +118,15 @@ function sendWebhookRequest(webhookUrl, payload) {
             res.on('data', (chunk) => {
                 responseData += chunk;
                 // 🛡️ SCALABILITY & OOM FIX: Hard cap response to 10KB to prevent memory exhaustion attacks
-                if (responseData.length > 10000) {
+                if (responseData.length > 10000 && !isFinished) {
+                    isFinished = true;
                     req.destroy(new Error('Response body too large'));
                 }
             });
 
             res.on('end', () => {
+                if (isFinished) return;
+                isFinished = true;
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                     resolve();
                 } else {
@@ -131,11 +136,15 @@ function sendWebhookRequest(webhookUrl, payload) {
         });
 
         req.on('error', (error) => {
+            if (isFinished) return;
+            isFinished = true;
             reject(error);
         });
 
         // 🛡️ RELIABILITY FIX: Prevent indefinite hangs if Discord API is unresponsive
         req.setTimeout(5000, () => {
+            if (isFinished) return;
+            isFinished = true;
             req.destroy(new Error('Webhook request timeout'));
         });
 
