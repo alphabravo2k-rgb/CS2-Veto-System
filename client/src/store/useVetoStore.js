@@ -65,36 +65,41 @@ const useVetoStore = create((set, get) => ({
         let socket = get()._socket;
         let ownSocket = false;
 
-        // If no socket exists in state, spin up a temporary one
         if (!socket || !get().isConnected) {
             socket = io(SOCKET_URL, { autoConnect: true });
             ownSocket = true;
         }
 
-        const handleCreated = (response) => {
-            if (onSuccess) onSuccess(response);
-            set({ serverError: null });
-            
-            // Instantly kill the temp socket to prevent ghosting
-            if (ownSocket) {
-                socket.removeAllListeners();
-                socket.disconnect();
-            }
-        };
+        // 🛡️ RELIABILITY FIX: Prevent infinite loading if server drops the request
+        let creationTimeout;
 
         const handleError = (msg) => {
+            clearTimeout(creationTimeout);
             set({ serverError: msg });
             setTimeout(() => set({ serverError: null }), 4000);
             
-            // Kill temp socket on failure
             if (ownSocket) {
                 socket.removeAllListeners();
                 socket.disconnect();
             }
         };
 
+        const handleCreated = (response) => {
+            clearTimeout(creationTimeout);
+            if (onSuccess) onSuccess(response);
+            set({ serverError: null });
+            
+            if (ownSocket) {
+                socket.removeAllListeners();
+                socket.disconnect();
+            }
+        };
+
+        creationTimeout = setTimeout(() => {
+            handleError('Match creation timed out. Server may be unreachable.');
+        }, 10000);
+
         if (ownSocket) {
-            // 🛡️ PERFORMANCE FIX: Using .once() prevents duplicate callbacks across multiple creations
             socket.once('connect', () => {
                 socket.emit('create_match', payload);
             });
