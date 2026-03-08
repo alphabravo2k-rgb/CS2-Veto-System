@@ -1,0 +1,56 @@
+{
+  "name": "cs2-mapveto-client",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Frontend client for CS2 Map Veto System - GPU Accelerated & Vite Optimized",
+  "author": "LOTGaming",
+  "license": "MIT",
+  "dependencies": {
+    "framer-motion": "^12.4.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.1.5",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.5.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "jsdom": "^24.0.0",
+    "vite": "^5.2.0",
+    "vitest": "^3.0.0"
+  },
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "serve": "NODE_ENV=production vite preview",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "keywords": [
+    "cs2",
+    "counter-strike",
+    "map-veto",
+    "react",
+    "vite",
+    "socket.io",
+    "real-time"
+  ]
+}
