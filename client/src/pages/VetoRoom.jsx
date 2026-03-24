@@ -1,320 +1,307 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon } from '../components/SharedUI';
-import useVetoStore from '../store/useVetoStore'; // 🛡️ ARCHITECTURE FIX: Importing the global store
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import useVetoStore from '../store/useVetoStore';
+import useOrgBranding from '../hooks/useOrgBranding';
+import MapCard from '../components/veto/MapCard';
+import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
+import LogLineRenderer from '../components/veto/LogLineRenderer';
+import Countdown from '../components/veto/Countdown';
+import { AnimatedBackground, HomeIcon, CheckIcon } from '../components/SharedUI';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
-const LOGO_URL = import.meta.env.VITE_ORG_LOGO_URL || "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
-
-export default function TournamentDashboard() {
-    const { orgId, tournamentId } = useParams();
+const VetoRoom = () => {
+    const { matchId } = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
-    
-    // 🛡️ ARCHITECTURE FIX: Pulling createMatch and serverError from the Store
-    const { createMatch: storeCreateMatch, serverError } = useVetoStore();
+    const query = new URLSearchParams(location.search);
+    const key = query.get('key');
 
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-    const [teamA, setTeamA] = useState('');
-    const [teamB, setTeamB] = useState('');
-    const [teamALogo, setTeamALogo] = useState('');
-    const [teamBLogo, setTeamBLogo] = useState('');
-    const [vetoMode, setVetoMode] = useState('vrs');
-    const [useTimer, setUseTimer] = useState(false);
-    const [timerDuration, setTimerDuration] = useState(60);
-    const [useCoinFlip, setUseCoinFlip] = useState(false);
-    
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [inputError, setInputError] = useState(false);
-    const [createdLinks, setCreatedLinks] = useState(null);
-    const [showNotification, setShowNotification] = useState(false);
-    const [historyData, setHistoryData] = useState([]);
+    const { 
+        gameState, 
+        myRole, 
+        roomUserCount, 
+        isConnected, 
+        serverError,
+        connectToRoom, 
+        disconnectRoom, 
+        sendAction, 
+        sendReady, 
+        sendCoinCall, 
+        sendCoinDecide 
+    } = useVetoStore();
 
-    const [availableMaps, setAvailableMaps] = useState([]);
-    const [customSelectedMaps, setCustomSelectedMaps] = useState([]);
-    const [customSequence, setCustomSequence] = useState([]);
-    const [userCustomMap, setUserCustomMap] = useState('');
+    const { branding } = useOrgBranding();
+    const [showCopyNotify, setShowCopyNotify] = useState(false);
+    const logContainerRef = useRef(null);
 
-    const fileInputA = useRef(null);
-    const fileInputB = useRef(null);
-
-    const styles = useMemo(() => getStyles(isMobile), [isMobile]);
-
-    const fetchHistory = useCallback(() => {
-        fetch(`${API_URL}/api/history?tournamentId=${tournamentId}`)
-            .then(r => r.ok ? r.json() : { matches: [] })
-            .then(data => {
-                if (data.matches) setHistoryData(data.matches);
-            }).catch(() => { });
-    }, [tournamentId]);
-
+    // ── WebSocket Lifecycle ──
     useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-
-        fetch(`${API_URL}/api/maps`).then(r => r.ok ? r.json() : []).then(data => {
-            if (data.length > 0) {
-                setAvailableMaps(data);
-                setCustomSelectedMaps(data.map(m => m.name));
-            }
-        }).catch(() => { });
-
-        fetchHistory();
-
-        return () => window.removeEventListener('resize', handleResize);
-    }, [fetchHistory]);
-
-    const handleLogoUpload = (e, team) => {
-        const file = e.target.files[0];
-        if (file) {
-            // 🛡️ SECURITY FIX: Enforce MIME Validation
-            const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-            if (!ALLOWED_TYPES.includes(file.type)) return alert("Invalid file type. Only JPG, PNG, WEBP, or GIF.");
-            if (file.size > 2000000) return alert("File too large. Max 2MB.");
-            
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                if (team === 'A') setTeamALogo(reader.result);
-                else setTeamBLogo(reader.result);
-            };
-            reader.readAsDataURL(file);
+        if (matchId) {
+            connectToRoom(matchId, key);
         }
-    };
+        return () => disconnectRoom();
+    }, [matchId, key, connectToRoom, disconnectRoom]);
 
-    const handleCreateMatchSubmit = (type) => {
-        if (!teamA.trim() || !teamB.trim()) { setInputError(true); return; }
-
-        let format = type;
-        if (vetoMode === 'faceit') {
-            if (type === 'bo1') format = 'faceit_bo1';
-            if (type === 'bo3') format = 'faceit_bo3';
-            if (type === 'bo5') format = 'faceit_bo5';
-        } else if (vetoMode === 'wingman') {
-            if (type === 'bo1') format = 'wingman_bo1';
-            if (type === 'bo3') format = 'wingman_bo3';
-        } else if (vetoMode === 'custom') format = 'custom';
-
-        if (format === 'custom') {
-            if (customSelectedMaps.length === 0) return alert("Please select at least one map.");
-            if (customSequence.length === 0) return alert("Please define at least one step in the sequence.");
+    // ── Auto-scroll logs ──
+    useEffect(() => {
+        if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
         }
+    }, [gameState?.logs]);
 
-        setIsGenerating(true);
-        
-        // 🛡️ BUG FIX: Dispatching to the global store, passing a callback to clear the form ONLY on success
-        storeCreateMatch({
-            orgId, 
-            tournamentId, 
-            teamA: teamA.trim().slice(0, 50), 
-            teamB: teamB.trim().slice(0, 50), 
-            teamALogo, 
-            teamBLogo, 
-            format,
-            customMapNames: format === 'custom' ? customSelectedMaps : null,
-            customSequence: format === 'custom' ? customSequence : null,
-            useTimer, 
-            useCoinFlip, 
-            timerDuration: useTimer ? parseInt(timerDuration) : 60
-        }, (response) => {
-            const baseUrl = `${window.location.origin}/${orgId}/${tournamentId}/veto/${response.roomId}`;
-            setCreatedLinks({
-                admin: `${baseUrl}?key=${response.keys.admin}`,
-                teamA: `${baseUrl}?key=${response.keys.A}`,
-                teamB: `${baseUrl}?key=${response.keys.B}`
-            });
-            setIsGenerating(false);
-            setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false);
-            fetchHistory(); 
-        });
+    // ── Helper Logic ──
+    const isMyTurn = useMemo(() => {
+        if (!gameState || gameState.finished) return false;
+        const currentStep = gameState.sequence[gameState.step];
+        if (!currentStep) return false;
+        return currentStep.t === myRole;
+    }, [gameState, myRole]);
+
+    const currentActionColor = useMemo(() => {
+        if (!gameState || gameState.finished) return 'rgba(255,255,255,0.2)';
+        const currentStep = gameState.sequence[gameState.step];
+        if (currentStep?.t === 'A') return 'var(--brand-primary, #00d4ff)';
+        if (currentStep?.t === 'B') return '#ff0055';
+        return '#ffd700';
+    }, [gameState]);
+
+    const handleMapClick = (mapName) => {
+        if (!isMyTurn) return;
+        const currentStep = gameState.sequence[gameState.step];
+        if (currentStep?.a === 'side' || currentStep?.a === 'knife') return;
+        sendAction(matchId, { mapName }, key);
     };
 
-    const handleCopyLogs = (text) => { 
-        navigator.clipboard.writeText(text).then(() => { 
-            setShowNotification(true); setTimeout(() => setShowNotification(false), 3000); 
-        }); 
+    const copyInvite = () => {
+        navigator.clipboard.writeText(window.location.href);
+        setShowCopyNotify(true);
+        setTimeout(() => setShowCopyNotify(false), 2000);
     };
 
-    const toggleMapSelection = (mapName) => {
-        if (customSelectedMaps.includes(mapName)) setCustomSelectedMaps(customSelectedMaps.filter(m => m !== mapName));
-        else setCustomSelectedMaps([...customSelectedMaps, mapName]);
-    };
-
-    const addUserMap = () => {
-        if (!userCustomMap.trim()) return;
-        // 🛡️ SECURITY FIX: Sliced the custom map input to prevent massive string injection
-        const newName = userCustomMap.trim().slice(0, 50);
-        setAvailableMaps([...availableMaps, { name: newName }]);
-        setCustomSelectedMaps([...customSelectedMaps, newName]);
-        setUserCustomMap('');
-    };
-
-    const addSequenceStep = (team, action) => setCustomSequence([...customSequence, { t: team, a: action }]);
-    const removeSequenceStep = (idx) => { const s = [...customSequence]; s.splice(idx, 1); setCustomSequence(s); };
+    if (!gameState) {
+        return (
+            <div className="loading-screen">
+                <AnimatedBackground />
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="loading-content"
+                >
+                    <div className="spinner-large" />
+                    <h2 className="loading-text">INITIALIZING VETO STREAM...</h2>
+                    {serverError && <p className="error-text">{serverError}</p>}
+                </motion.div>
+            </div>
+        );
+    }
 
     return (
-        <div style={styles.container}>
+        <div className="veto-room-page">
             <AnimatedBackground />
-            
-            {/* 🛡️ UI UX FIX: Inline keyframes for missing animations */}
-            <style>
-                {`
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-                `}
-            </style>
 
-            <button onClick={() => navigate('/')} style={styles.homeBtn}><HomeIcon /> PORTAL</button>
-            
-            <div style={styles.glassPanel}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '10px' }}>
-                    <img src={LOGO_URL} alt="Logo" onError={e => { e.target.style.display = 'none'; }} style={styles.logo} />
-                    <h1 style={styles.neonTitle}>{(orgId || '').toUpperCase()}</h1>
+            {/* ── Status Bar ── */}
+            <div className="room-status-bar">
+                <div className="spectator-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>{roomUserCount} VIEWERS</span>
                 </div>
-                <h3 style={{ color: '#aaa', letterSpacing: '4px', marginBottom: '30px', fontSize: isMobile ? '0.8rem' : '1rem' }}>{(tournamentId || '').toUpperCase()} DASHBOARD</h3>
-
-                {serverError && <div style={{ color: '#ff4444', marginBottom: '15px', fontWeight: 'bold' }}>⚠️ {serverError}</div>}
-
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', gap: '10px', flexWrap: 'wrap' }}>
-                    <button onClick={() => setVetoMode('vrs')} style={vetoMode === 'vrs' ? styles.modeBtnActive : styles.modeBtn}>VRS VETO</button>
-                    <button onClick={() => setVetoMode('faceit')} style={vetoMode === 'faceit' ? styles.modeBtnActive : styles.modeBtn}>FACEIT STYLE</button>
-                    <button onClick={() => setVetoMode('wingman')} style={vetoMode === 'wingman' ? styles.modeBtnActive : styles.modeBtn}>WINGMAN VETO</button>
-                    <button onClick={() => setVetoMode('custom')} style={vetoMode === 'custom' ? styles.modeBtnActive : styles.modeBtn}>CUSTOM VETO</button>
+                <div className={`connection-status ${isConnected ? 'online' : 'reconnecting'}`}>
+                    {isConnected ? 'LIVE' : 'RECONNECTING...'}
                 </div>
+            </div>
 
-                <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} maxLength={50} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'A')} />
-                    <button onClick={() => fileInputA.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <UploadIcon /> {teamALogo ? "CHANGE LOGO A" : "ATTACH LOGO A"}
-                    </button>
-                    {teamALogo && <img src={teamALogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
-                </div>
-
-                <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} maxLength={50} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'B')} />
-                    <button onClick={() => fileInputB.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <UploadIcon /> {teamBLogo ? "CHANGE LOGO B" : "ATTACH LOGO B"}
-                    </button>
-                    {teamBLogo && <img src={teamBLogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
-                </div>
-
-                <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#aaa', fontSize: '0.9rem', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input type="checkbox" checked={useTimer} onChange={e => setUseTimer(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
-                        <span>Enable Auto-Ban Timer</span>
+            {/* ── Match Header ── */}
+            <header className="match-header">
+                <div className={`team-block team-a ${gameState.sequence[gameState.step]?.t === 'A' ? 'active-turn' : ''}`}>
+                    <div className="team-logo-wrapper">
+                        <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} />
                     </div>
-                    {useTimer && (
-                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                            {[30, 45, 60, 90, 120].map(seconds => (
-                                <button key={seconds} onClick={() => setTimerDuration(seconds)}
-                                    style={{ ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent', color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333', padding: '5px 15px', fontSize: '0.9rem' }}>
-                                    {seconds}s
-                                </button>
-                            ))}
+                    <div className="team-info">
+                        <h2 className="team-name">{gameState.teamA}</h2>
+                        {gameState.ready?.A ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING</span>}
+                    </div>
+                </div>
+
+                <div className="match-center">
+                    <div className="vs-label">VS</div>
+                    <div className="format-badge">{gameState.format.toUpperCase()}</div>
+                    {gameState.useTimer && !gameState.finished && (
+                        <div className={`timer-wrapper ${gameState.timerEndsAt && (new Date(gameState.timerEndsAt) - new Date() < 5000) ? 'emergency-shake' : ''}`}>
+                            <Countdown target={gameState.timerEndsAt} key={gameState.step} />
                         </div>
                     )}
                 </div>
 
-                <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#ffd700', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={useCoinFlip} onChange={e => setUseCoinFlip(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
-                    <span>Enable Coin Flip</span>
+                <div className={`team-block team-b ${gameState.sequence[gameState.step]?.t === 'B' ? 'active-turn' : ''}`}>
+                    <div className="team-info">
+                        <h2 className="team-name">{gameState.teamB}</h2>
+                        {gameState.ready?.B ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING</span>}
+                    </div>
+                    <div className="team-logo-wrapper">
+                        <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} />
+                    </div>
                 </div>
+            </header>
 
-                {vetoMode !== 'custom' ? (
-                    <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
-                        <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo1')}>Bo1</button>
-                        <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo3')}>Bo3</button>
-                        {vetoMode !== 'wingman' && <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo5')}>Bo5</button>}
+            {/* ── Main Layout ── */}
+            <main className="room-layout">
+                {/* ── Left Sidebar: Logs & Controls ── */}
+                <aside className="room-sidebar">
+                    <div className="action-card">
+                        <h4 className="card-title">MATCH LOG</h4>
+                        <div className="log-container" ref={logContainerRef}>
+                            <AnimatePresence initial={false}>
+                                {gameState.logs.slice(-8).map((log, idx) => (
+                                    <motion.div 
+                                        key={`${idx}-${log}`}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        className="log-item-wrapper"
+                                    >
+                                        <LogLineRenderer log={log} teamA={gameState.teamA} teamB={gameState.teamB} />
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
+                        </div>
                     </div>
-                ) : (
-                    <div style={{ marginTop: '40px', textAlign: 'left', borderTop: '1px solid #333', paddingTop: '30px' }}>
-                        <h4 style={{ color: '#00d4ff', marginBottom: '15px' }}>1. SELECT MAP POOL</h4>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '15px' }}>
-                            {availableMaps.map(m => (
-                                <div key={m.name} onClick={() => toggleMapSelection(m.name)}
-                                    style={{ padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', border: customSelectedMaps.includes(m.name) ? '1px solid #00ff00' : '1px solid #333', color: customSelectedMaps.includes(m.name) ? '#fff' : '#666', background: customSelectedMaps.includes(m.name) ? 'rgba(0,255,0,0.1)' : 'transparent' }}>
-                                    {m.name}
-                                </div>
-                            ))}
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
-                            <span style={{ fontSize: '0.8rem', color: '#aaa' }}>ADD CUSTOM MAP:</span>
-                            <input style={{ ...styles.input, margin: 0, width: '150px', fontSize: '0.9rem', padding: '5px', height: '35px', textAlign: 'left' }} placeholder="Map Name" value={userCustomMap} onChange={e => setUserCustomMap(e.target.value)} />
-                            <button onClick={addUserMap} style={{ ...styles.tinyBtn, height: '35px', border: '1px solid #00ff00', color: '#00ff00', padding: '0 15px', fontWeight: 'bold' }}>ADD</button>
-                        </div>
-                        <h4 style={{ color: '#00d4ff' }}>2. DEFINE BAN ORDER</h4>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'ban')}>+ A BAN</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'ban')}>+ B BAN</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'pick')}>+ A PICK</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'pick')}>+ B PICK</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'side')}>+ A SIDE</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'side')}>+ B SIDE</button>
-                            <button style={{ ...styles.tinyBtn, borderColor: '#ffa500', color: '#ffa500' }} onClick={() => addSequenceStep('System', 'knife')}>+ KNIFE</button>
-                        </div>
-                        <div style={{ background: '#000', padding: '10px', borderRadius: '5px', fontSize: '0.8rem', color: '#aaa', minHeight: '50px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                            {customSequence.length === 0 ? "No steps defined." : customSequence.map((s, i) => (
-                                <span key={i} onClick={() => removeSequenceStep(i)} style={{ background: '#222', padding: '2px 6px', borderRadius: '3px', border: '1px solid #444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    {i + 1}. {s.t} {s.a.toUpperCase()} <span style={{ color: '#ff4444', fontWeight: 'bold' }}>x</span>
-                                </span>
-                            ))}
-                        </div>
-                        <button style={{ ...styles.modeBtn, width: '100%', marginTop: '20px', borderColor: '#00ff00', color: '#00ff00' }} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('custom')}>GENERATE CUSTOM MATCH</button>
-                    </div>
-                )}
 
-                {isGenerating && <div style={styles.generatingBox}><div style={styles.spinner}></div></div>}
-
-                {createdLinks && !isGenerating && (
-                    <div style={styles.linksBox}>
-                        <div style={styles.linkRow}><span style={{ color: '#aaa', fontWeight: 'bold', minWidth: '70px' }}>ADMIN:</span> <input readOnly style={styles.linkInput} value={createdLinks.admin} onClick={() => handleCopyLogs(createdLinks.admin)} /><button onClick={() => window.open(createdLinks.admin, '_blank')} style={styles.iconBtn}><ExternalLinkIcon /></button></div>
-                        <div style={styles.linkRow}><span style={{ color: '#00d4ff', fontWeight: 'bold', minWidth: '70px' }}>TEAM A:</span> <input readOnly style={styles.linkInput} value={createdLinks.teamA} onClick={() => handleCopyLogs(createdLinks.teamA)} /><button onClick={() => window.open(createdLinks.teamA, '_blank')} style={{ ...styles.iconBtn, color: '#00d4ff' }}><ExternalLinkIcon /></button></div>
-                        <div style={styles.linkRow}><span style={{ color: '#ff0055', fontWeight: 'bold', minWidth: '70px' }}>TEAM B:</span> <input readOnly style={styles.linkInput} value={createdLinks.teamB} onClick={() => handleCopyLogs(createdLinks.teamB)} /><button onClick={() => window.open(createdLinks.teamB, '_blank')} style={{ ...styles.iconBtn, color: '#ff0055' }}><ExternalLinkIcon /></button></div>
-                    </div>
-                )}
-            </div>
-
-            {historyData.length > 0 && (
-                <div style={{ ...styles.glassPanel, marginTop: '30px' }}>
-                    <h3 style={{ color: '#00d4ff', borderBottom: '1px solid #333', paddingBottom: '10px' }}>RECENT MATCHES</h3>
-                    <div style={{ maxHeight: '300px', overflowY: 'auto', textAlign: 'left' }}>
-                        {historyData.map(match => (
-                            <div key={match.id} style={{ background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: match.finished ? '4px solid #333' : '4px solid #00ff00' }}>
-                                <div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: match.finished ? '#888' : '#fff' }}>{match.teamA} <span style={{color: '#555', fontSize:'0.9rem'}}>VS</span> {match.teamB}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>{new Date(match.date).toLocaleDateString()} | Format: {match.format.toUpperCase()}</div>
-                                </div>
-                                <button onClick={() => navigate(`/${orgId}/${tournamentId}/veto/${match.id}`)} style={{ background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '5px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                    SPECTATE
+                    {!gameState.finished && (
+                        <div className="action-card controls">
+                            <h4 className="card-title">CONTROLS</h4>
+                            <div className="controls-stack">
+                                {myRole && !gameState.ready?.[myRole] && (
+                                    <button className="btn-primary ready-btn" onClick={() => sendReady(matchId, key)}>
+                                        I AM READY
+                                    </button>
+                                )}
+                                <button className="btn-secondary share-btn" onClick={copyInvite}>
+                                    INVITE PLAYERS
                                 </button>
+                                {myRole === 'admin' && (
+                                    <button className="btn-danger-outline" onClick={() => navigate('/admin')}>
+                                        ADMIN OVERRIDE
+                                    </button>
+                                )}
                             </div>
-                        ))}
+                        </div>
+                    )}
+                </aside>
+
+                {/* ── Center Map Grid ── */}
+                <section className="map-grid-section">
+                    <div className="step-indicator">
+                        {gameState.finished ? (
+                            <span className="veto-complete">VETO COMPLETE</span>
+                        ) : (
+                            <>
+                                <span className="current-step-label">NEXT ACTION:</span>
+                                <span className="current-step-value" style={{ color: currentActionColor }}>
+                                    {gameState.sequence[gameState.step]?.t} {gameState.sequence[gameState.step]?.a.toUpperCase()}
+                                </span>
+                            </>
+                        )}
                     </div>
-                </div>
+
+                    <div className="map-grid">
+                        <AnimatePresence mode="popLayout">
+                            {gameState.maps.map((m) => {
+                                const pickIndex = gameState.logs.filter(l => l.includes('[PICK]')).findIndex(l => l.includes(m.name));
+                                return (
+                                    <MapCard 
+                                        key={m.name}
+                                        map={m}
+                                        isInteractive={isMyTurn}
+                                        onClick={() => handleMapClick(m.name)}
+                                        actionColor={currentActionColor}
+                                        mapOrderLabel={pickIndex !== -1 ? (pickIndex + 1).toString() : null}
+                                    />
+                                );
+                            })}
+                        </AnimatePresence>
+                    </div>
+                </section>
+            </main>
+
+            {/* ── Overlays ── */}
+            {gameState.useCoinFlip && (
+                <CoinFlipOverlay 
+                    gameState={gameState} 
+                    myRole={myRole} 
+                    onCall={(call) => sendCoinCall(matchId, call, key)}
+                    onDecide={(decision) => sendCoinDecide(matchId, decision, key)}
+                />
             )}
 
-            <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
+            {/* ── Toasts ── */}
+            <AnimatePresence>
+                {!isConnected && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="connection-toast"
+                    >
+                        <RefreshIcon /> Connection lost — reconnecting...
+                    </motion.div>
+                )}
+
+                {showCopyNotify && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 50 }}
+                        className="copy-toast"
+                    >
+                        <CheckIcon /> LINK COPIED
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <style>{`
+                .veto-room-page { min-height: 100vh; background: #050a14; color: #fff; font-family: 'Rajdhani', sans-serif; position: relative; }
+                .room-status-bar { display: flex; justify-content: space-between; padding: 8px 24px; font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05); }
+                .spectator-badge { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.5); }
+                .connection-status.online { color: #00ff00; }
+                .connection-status.reconnecting { color: #ffaa00; animation: blink 1s infinite; }
+                .connection-toast { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #ffaa00; color: #000; padding: 8px 20px; border-radius: 4px; font-weight: 700; z-index: 2000; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+
+                .match-header { display: flex; align-items: center; justify-content: center; padding: 40px 24px; gap: 60px; }
+                .team-block { display: flex; align-items: center; gap: 24px; transition: all 0.3s ease; }
+                .team-block.active-turn { transform: scale(1.05); }
+                .team-block.active-turn .team-logo-wrapper { border-color: var(--brand-primary, #00d4ff); box-shadow: 0 0 30px rgba(0, 212, 255, 0.4); animation: border-pulse 2s infinite; }
+                .team-logo-wrapper { width: 100px; height: 100px; border: 3px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; }
+                .team-logo-wrapper img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                .team-name { font-size: 2.5rem; font-weight: 800; margin: 0; }
+                .ready-tag { font-size: 12px; color: #00ff00; background: rgba(0,255,0,0.1); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(0,255,0,0.3); }
+
+                .match-center { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+                .vs-label { font-size: 1.5rem; font-weight: 900; color: rgba(255,255,255,0.2); }
+                .format-badge { background: #fff; color: #000; padding: 2px 12px; font-weight: 800; border-radius: 4px; font-size: 14px; }
+                .timer-wrapper { font-size: 3rem; font-weight: 800; }
+                .emergency-shake { animation: shake 0.1s infinite; color: #ff4444; }
+
+                .room-layout { display: grid; grid-template-columns: 350px 1fr; gap: 32px; max-width: 1600px; margin: 0 auto; padding: 0 32px 64px; }
+                .action-card { background: rgba(15, 20, 35, 0.6); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+                .card-title { font-size: 12px; color: rgba(255,255,255,0.4); margin: 0 0 16px 0; letter-spacing: 0.2em; font-weight: 700; }
+                .log-container { max-height: 400px; overflow-y: auto; scrollbar-width: none; }
+                .log-item-wrapper { margin-bottom: 8px; }
+                .controls-stack { display: flex; flex-direction: column; gap: 12px; }
+                .btn-primary { width: 100%; background: var(--brand-primary, #00d4ff); color: #000; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+                .btn-secondary { width: 100%; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+
+                .map-grid-section { display: flex; flex-direction: column; gap: 24px; }
+                .step-indicator { background: rgba(0,0,0,0.3); padding: 12px 24px; border-radius: 8px; display: flex; align-items: center; gap: 12px; font-weight: 700; }
+                .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+
+                .copy-toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: #00ff00; color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 800; display: flex; align-items: center; gap: 10px; z-index: 2000; }
+
+                @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                @keyframes border-pulse { 0% { border-color: rgba(0,212,255,0.3); } 50% { border-color: rgba(0,212,255,1); } 100% { border-color: rgba(0,212,255,0.3); } }
+                @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+            `}</style>
         </div>
     );
-}
+};
 
-const getStyles = (isMobile) => ({
-    container: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'Rajdhani', sans-serif", color: 'white', padding: isMobile ? '20px 10px' : '40px 20px', boxSizing: 'border-box', position: 'relative' },
-    glassPanel: { background: 'rgba(15, 18, 25, 0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: isMobile ? '20px' : '40px', width: '100%', maxWidth: '600px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10 },
-    logo: { width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', borderRadius: '50%', border: '2px solid #00d4ff', boxShadow: '0 0 15px rgba(0, 212, 255, 0.5)' },
-    neonTitle: { fontSize: isMobile ? '2rem' : '3.5rem', fontWeight: '900', margin: '0', background: 'linear-gradient(to right, #fff, #00d4ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 0 20px rgba(0, 212, 255, 0.3)', letterSpacing: '2px' },
-    input: { width: '80%', padding: '15px', margin: '15px 0', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', borderRadius: '8px', color: 'white', fontSize: '1.2rem', textAlign: 'center', outline: 'none', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold' },
-    modeBtn: { background: 'transparent', border: '1px solid #333', color: '#888', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', transition: 'all 0.3s' },
-    modeBtnActive: { background: 'rgba(0, 212, 255, 0.1)', border: '1px solid #00d4ff', color: '#00d4ff', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', boxShadow: '0 0 10px rgba(0, 212, 255, 0.2)' },
-    tinyBtn: { background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '2px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem', fontFamily: "'Rajdhani', sans-serif" },
-    generatingBox: { marginTop: '20px', padding: '20px', display: 'flex', justifyContent: 'center' },
-    spinner: { width: '40px', height: '40px', border: '4px solid rgba(0, 212, 255, 0.1)', borderTopColor: '#00d4ff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
-    linksBox: { marginTop: '25px', background: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'left', animation: 'fadeIn 0.5s ease-out' },
-    linkRow: { display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '10px' },
-    linkInput: { flex: 1, background: '#111', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer', outline: 'none' },
-    iconBtn: { background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' },
-    notification: { position: 'fixed', bottom: '20px', left: '50%', marginLeft: '-125px', width: '250px', background: '#00ff00', color: '#000', padding: '10px 20px', borderRadius: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', zIndex: 4000, transition: 'all 0.3s ease' },
-    homeBtn: { position: 'absolute', top: '20px', left: '20px', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 20 }
-});
+export default VetoRoom;
+

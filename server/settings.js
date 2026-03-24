@@ -10,6 +10,9 @@
 
 const { isValidDiscordWebhook } = require('./discord-webhook');
 
+const fs = require('fs');
+const path = require('path');
+
 let db = null;
 
 // 🛡️ SECURITY FIX: Enumerate valid keys to prevent arbitrary config injection
@@ -18,31 +21,27 @@ const VALID_KEYS = new Set([
 ]);
 
 function initSettingsTable(database) {
-    // 🛡️ ARCHITECTURE FIX: Guard against double-initialization
     if (db) return Promise.resolve();
-    
     db = database; 
 
     return new Promise((resolve, reject) => {
-        if (!db) {
-            return reject(new Error('[SETTINGS] Database connection is null'));
+        try {
+            const sqlPath = path.join(__dirname, 'migrations', '005_settings_table.sql');
+            const sql = fs.readFileSync(sqlPath, 'utf8');
+            
+            db.run(sql, (err) => {
+                if (err) {
+                    console.error('[SETTINGS] Error creating settings table from migration:', err);
+                    reject(err);
+                } else {
+                    console.log('[SETTINGS] Settings table verified via migration 005');
+                    resolve();
+                }
+            });
+        } catch (err) {
+            console.error('[SETTINGS] Failed to read migration 005:', err);
+            reject(err);
         }
-
-        db.run(`
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-        `, (err) => {
-            if (err) {
-                console.error('[SETTINGS] Error creating settings table:', err);
-                reject(err);
-            } else {
-                console.log('[SETTINGS] Settings table verified successfully');
-                resolve();
-            }
-        });
     });
 }
 

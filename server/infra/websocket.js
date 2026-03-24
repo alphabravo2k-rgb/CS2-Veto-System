@@ -112,12 +112,13 @@ async function saveRoom(roomId) {
         const { keys, timerHandle, undoStack, ...data } = room;
         await db.run(
             `INSERT INTO match_history (
-               id, tournament_id, date, teamA, teamB, teamALogo, teamBLogo, format,
+               id, org_id, tournament_id, date, teamA, teamB, teamALogo, teamBLogo, format,
                sequence, step, maps, logs, finished, lastPickedMap, playedMaps,
                useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys_data, tempWebhookUrl
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
-               tournament_id=excluded.tournament_id, teamA=excluded.teamA, teamB=excluded.teamB,
+               org_id=excluded.org_id, tournament_id=excluded.tournament_id,
+               teamA=excluded.teamA, teamB=excluded.teamB,
                format=excluded.format, sequence=excluded.sequence, step=excluded.step,
                maps=excluded.maps, logs=excluded.logs, finished=excluded.finished,
                lastPickedMap=excluded.lastPickedMap, playedMaps=excluded.playedMaps,
@@ -126,7 +127,7 @@ async function saveRoom(roomId) {
                coinFlip=excluded.coinFlip, keys_data=excluded.keys_data,
                tempWebhookUrl=excluded.tempWebhookUrl`,
             [
-                data.id, data.tournament_id || 'default', data.date,
+                data.id, data.org_id || 'global', data.tournament_id || 'default', data.date,
                 (data.teamA||'').slice(0,50), (data.teamB||'').slice(0,50),
                 data.teamALogo, data.teamBLogo, data.format,
                 JSON.stringify(data.sequence), data.step,

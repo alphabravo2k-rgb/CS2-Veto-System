@@ -22,6 +22,10 @@ import OrgDashboard      from './pages/OrgDashboard';
 import PlayerProfile     from './pages/PlayerProfile';
 import ProfileEdit       from './pages/ProfileEdit';
 
+// Components
+import TopNav from './components/layout/TopNav';
+import BrandingProvider from './components/layout/BrandingProvider';
+
 // Lazy placeholder for existing pages not yet extracted
 const GlobalAdmin = React.lazy(() =>
     import('./pages/GlobalAdmin').catch(() => ({
@@ -75,36 +79,43 @@ export default function App() {
 
     return (
         <React.Suspense fallback={<div style={{ minHeight:'100vh', background:'#050a14' }} />}>
-            <Routes>
-                {/* ── Public routes ── */}
-                <Route path="/"          element={<GlobalHome />} />
-                <Route path="/login"     element={<Login />} />
-                <Route path="/register"  element={<Register />} />
-                <Route path="/history"   element={<GlobalHome view="history" />} />
+            <div className="app-container" style={{ minHeight: '100vh', background: '#050a14' }}>
+                <TopNav />
+                <div className="app-content" style={{ paddingTop: '56px' }}>
+                    <BrandingProvider>
+                        <Routes>
+                            {/* ── Public routes ── */}
+                            <Route path="/"          element={<GlobalHome />} />
+                            <Route path="/login"     element={<Login />} />
+                            <Route path="/register"  element={<Register />} />
+                            <Route path="/history"   element={<GlobalHome view="history" />} />
 
-                {/* ── Player profiles (public) ── */}
-                <Route path="/players/:userId" element={<PlayerProfile />} />
+                            {/* ── Player profiles (public) ── */}
+                            <Route path="/players/:userId" element={<PlayerProfile />} />
 
-                {/* ── Protected routes ── */}
-                <Route path="/orgs/create" element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
-                <Route path="/org/:orgId"  element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
-                <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
-                <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
+                            {/* ── Protected routes ── */}
+                            <Route path="/orgs/create" element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
+                            <Route path="/org/:orgId"  element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
+                            <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
+                            <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
 
-                {/* ── Admin (protected) ── */}
-                <Route path="/admin" element={<ProtectedRoute><GlobalAdmin /></ProtectedRoute>} />
+                            {/* ── Admin (protected) ── */}
+                            <Route path="/admin" element={<ProtectedRoute><GlobalAdmin /></ProtectedRoute>} />
 
-                {/* ── Legacy multi-tenant tournament routes (kept for backward compat) ── */}
-                <Route path="/:orgId/:tournamentId" element={<TournamentDashboard />} />
+                            {/* ── Legacy multi-tenant tournament routes (kept for backward compat) ── */}
+                            <Route path="/:orgId/:tournamentId" element={<TournamentDashboard />} />
 
-                {/* ── Veto room (PUBLIC — spectators need no auth) ── */}
-                <Route path="/:orgId/:tournamentId/veto/:matchId" element={
-                    <React.Suspense fallback={null}><VetoRoom /></React.Suspense>
-                } />
+                            {/* ── Veto room (PUBLIC — spectators need no auth) ── */}
+                            <Route path="/:orgId/:tournamentId/veto/:matchId" element={
+                                <React.Suspense fallback={null}><VetoRoom /></React.Suspense>
+                            } />
 
-                {/* ── 404 ── */}
-                <Route path="*" element={<NotFound />} />
-            </Routes>
+                            {/* ── 404 ── */}
+                            <Route path="*" element={<NotFound />} />
+                        </Routes>
+                    </BrandingProvider>
+                </div>
+            </div>
         </React.Suspense>
     );
 }
