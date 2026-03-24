@@ -248,7 +248,7 @@ export default function ProfileEdit() {
                             )}
                         </div>
                     </div>
-                </aside>
+                </motion.div>
             </div>
 
             <style>{`
