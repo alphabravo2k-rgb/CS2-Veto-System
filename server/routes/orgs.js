@@ -1,19 +1,26 @@
-/**
- * ⚡ APPLICATION LAYER — ORGANIZATION ROUTES
- * =============================================================================
- */
-
-'use strict';
-
 const express = require('express');
 const OrgService = require('../domain/organizations/OrgService');
 const TournamentService = require('../domain/tournaments/TournamentService');
+const TenantResolver = require('../domain/organizations/TenantResolver');
 const { requireAuth, requireOrgAdmin } = require('../middleware/auth');
 const { log } = require('../infra/auditLog');
 
 const router = express.Router();
 
-// POST /api/orgs — create org (any authenticated user)
+/**
+ * Helper to resolve :orgId param (slug or UUID)
+ */
+async function resolveOrg(req, res, next) {
+    let orgId = req.params.orgId;
+    if (orgId && !orgId.includes('-')) {
+        const resolved = await TenantResolver.resolveSlug(orgId);
+        if (resolved) orgId = resolved.id;
+    }
+    req.orgId = orgId;
+    next();
+}
+
+// POST /api/orgs — create org
 router.post('/', requireAuth, async (req, res) => {
     try {
         const { name, slug, primaryColor, secondaryColor, logoUrl } = req.body;
@@ -30,18 +37,19 @@ router.get('/mine', requireAuth, async (req, res) => {
     try {
         const orgs = await OrgService.getUserOrgs(req.user.id);
         res.json(orgs);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch organizations' });
     }
 });
 
 // GET /api/orgs/:orgId — public profile + branding
-router.get('/:orgId', async (req, res) => {
+router.get('/:orgId', resolveOrg, async (req, res) => {
     try {
-        const org = await OrgService.getOrgWithBranding(req.params.orgId);
+        if (!req.orgId) return res.status(404).json({ error: 'Organization not found' });
+        const org = await OrgService.getOrgWithBranding(req.orgId);
         if (!org) return res.status(404).json({ error: 'Organization not found' });
         res.json(org);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch organization' });
     }
 });
@@ -49,9 +57,16 @@ router.get('/:orgId', async (req, res) => {
 // PATCH /api/orgs/:orgId/branding — update branding (org admin only)
 router.patch('/:orgId/branding', requireAuth, requireOrgAdmin, async (req, res) => {
     try {
+        // req.orgId is already resolved by requireOrgAdmin middleware
         const { displayName, primaryColor, secondaryColor, logoUrl, bannerUrl } = req.body;
-        const org = await OrgService.updateBranding(req.params.orgId, { displayName, primaryColor, secondaryColor, logoUrl, bannerUrl });
-        await log({ actor_id: req.user.id, action: 'org.updateBranding', target_id: req.params.orgId });
+        const org = await OrgService.updateBranding(req.orgId, { 
+            display_name: displayName, 
+            primary_color: primaryColor, 
+            secondary_color: secondaryColor, 
+            logo_url: logoUrl, 
+            banner_url: bannerUrl 
+        });
+        await log({ actor_id: req.user.id, action: 'org.updateBranding', target_id: req.orgId });
         res.json(org);
     } catch (err) {
         res.status(err.statusCode || 500).json({ error: err.message });
@@ -61,9 +76,9 @@ router.patch('/:orgId/branding', requireAuth, requireOrgAdmin, async (req, res) 
 // GET /api/orgs/:orgId/members
 router.get('/:orgId/members', requireAuth, requireOrgAdmin, async (req, res) => {
     try {
-        const members = await OrgService.getMembers(req.params.orgId);
+        const members = await OrgService.getMembers(req.orgId);
         res.json(members);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch members' });
     }
 });
@@ -72,8 +87,8 @@ router.get('/:orgId/members', requireAuth, requireOrgAdmin, async (req, res) => 
 router.post('/:orgId/members', requireAuth, requireOrgAdmin, async (req, res) => {
     try {
         const { email, role } = req.body;
-        const result = await OrgService.addMember(req.params.orgId, { inviteEmail: email, role, actorId: req.user.id });
-        await log({ actor_id: req.user.id, action: 'org.addMember', target_id: req.params.orgId, meta: { email } });
+        const result = await OrgService.addMember(req.orgId, { inviteEmail: email, role });
+        await log({ actor_id: req.user.id, action: 'org.addMember', target_id: req.orgId, meta: { email } });
         res.json(result);
     } catch (err) {
         res.status(err.statusCode || 500).json({ error: err.message });
@@ -86,7 +101,7 @@ router.post('/:orgId/members', requireAuth, requireOrgAdmin, async (req, res) =>
 router.post('/:orgId/tournaments', requireAuth, requireOrgAdmin, async (req, res) => {
     try {
         const { name, defaultFormat, gameModule } = req.body;
-        const tournament = await TournamentService.createTournament({ orgId: req.params.orgId, name, defaultFormat, gameModule });
+        const tournament = await TournamentService.createTournament({ orgId: req.orgId, name, defaultFormat, gameModule });
         await log({ actor_id: req.user.id, action: 'tournament.create', target_id: tournament.id });
         res.status(201).json(tournament);
     } catch (err) {
@@ -95,24 +110,25 @@ router.post('/:orgId/tournaments', requireAuth, requireOrgAdmin, async (req, res
 });
 
 // GET /api/orgs/:orgId/tournaments
-router.get('/:orgId/tournaments', async (req, res) => {
+router.get('/:orgId/tournaments', resolveOrg, async (req, res) => {
     try {
-        const tournaments = await TournamentService.getTournamentsByOrg(req.params.orgId);
+        if (!req.orgId) return res.status(404).json({ error: 'Organization not found' });
+        const tournaments = await TournamentService.getTournamentsByOrg(req.orgId);
         res.json(tournaments);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch tournaments' });
     }
 });
 
 // GET /api/orgs/:orgId/tournaments/:tId
-router.get('/:orgId/tournaments/:tId', async (req, res) => {
+router.get('/:orgId/tournaments/:tId', resolveOrg, async (req, res) => {
     try {
         const tournament = await TournamentService.getTournament(req.params.tId);
-        if (!tournament || tournament.org_id !== req.params.orgId) {
+        if (!tournament || tournament.org_id !== req.orgId) {
             return res.status(404).json({ error: 'Tournament not found' });
         }
         res.json(tournament);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch tournament' });
     }
 });
@@ -129,11 +145,11 @@ router.patch('/:orgId/tournaments/:tId', requireAuth, requireOrgAdmin, async (re
 });
 
 // GET /api/orgs/:orgId/tournaments/:tId/maps
-router.get('/:orgId/tournaments/:tId/maps', async (req, res) => {
+router.get('/:orgId/tournaments/:tId/maps', resolveOrg, async (req, res) => {
     try {
         const maps = await TournamentService.getMapPool(req.params.tId);
         res.json(maps);
-    } catch {
+    } catch (err) {
         res.status(500).json({ error: 'Failed to fetch map pool' });
     }
 });

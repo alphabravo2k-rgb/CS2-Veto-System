@@ -1,102 +1,146 @@
+const supabase = require('../../infra/supabase');
+const TrialGate = require('../organizations/TrialGate');
+
 /**
  * ⚡ DOMAIN LAYER — TOURNAMENT SERVICE
  * =============================================================================
- * PROBLEM (Architecture Flaw): The map pool was a single global array
- * (`activeMaps`) stored in maps.json and loaded into server memory. ALL
- * tournaments across ALL organizations shared this one pool.
- * Org A could not have a different map list than Org B.
- *
- * FIX: Per-tournament map pools stored in `tournament_map_pools` table.
- * Each tournament owns its own maps. The global maps.json is only a fallback
- * for tournaments that have not configured a custom pool.
+ * Responsibility: Tournament lifecycle and map pool management using Supabase.
  * =============================================================================
  */
 
-'use strict';
-
-const db = require('../../infra/database');
-
 const DEFAULT_CS2_MAPS = ['Dust2', 'Inferno', 'Mirage', 'Overpass', 'Nuke', 'Anubis', 'Ancient'];
 
-async function createTournament({ orgId, name, defaultFormat = 'bo3', gameModule = 'cs2' }) {
-    if (!orgId) throw Object.assign(new Error('Organization ID required'), { statusCode: 400 });
-    if (!name || name.trim().length < 2) throw Object.assign(new Error('Tournament name required'), { statusCode: 400 });
+class TournamentService {
+    /**
+     * Create a new tournament and seed its map pool.
+     */
+    async createTournament({ orgId, name, defaultFormat = 'bo3', gameModule = 'cs2' }) {
+        if (!orgId) throw new Error('Organization ID required');
+        
+        // 🛡️ GOVERNANCE: Check trial limits before creating tournament
+        await TrialGate.checkLimit(orgId);
 
-    const crypto = require('crypto');
-    const id = `${orgId}-${crypto.randomBytes(4).toString('hex')}`;
-    const safeName = name.trim().slice(0, 100);
+        const crypto = require('crypto');
+        const id = `${orgId}-${crypto.randomBytes(4).toString('hex')}`;
+        
+        const { data: tournament, error } = await supabase
+            .from('tournaments')
+            .insert({ 
+                id, 
+                org_id: orgId, 
+                name: name.trim().slice(0, 100), 
+                format: defaultFormat, 
+                game_module: gameModule 
+            })
+            .select()
+            .single();
 
-    await db.run(
-        `INSERT INTO tournaments (id, org_id, name, defaultFormat, game_module, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'active', datetime('now'))`,
-        [id, orgId, safeName, defaultFormat, gameModule]
-    );
+        if (error) throw new Error(`Tournament creation failed: ${error.message}`);
 
-    // Seed with default CS2 map pool
-    for (let i = 0; i < DEFAULT_CS2_MAPS.length; i++) {
-        await db.run(
-            `INSERT OR IGNORE INTO tournament_map_pools (tournament_id, map_name, sort_order) VALUES (?, ?, ?)`,
-            [id, DEFAULT_CS2_MAPS[i], i]
-        );
+        // Seed with default CS2 map pool
+        const mapsToInsert = DEFAULT_CS2_MAPS.map((mapName, i) => ({
+            tournament_id: id,
+            map_name: mapName,
+            sort_order: i
+        }));
+
+        const { error: mapErr } = await supabase
+            .from('tournament_map_pools')
+            .insert(mapsToInsert);
+
+        if (mapErr) console.error('[TournamentService] Failed to seed map pool:', mapErr.message);
+
+        return this.getTournament(id);
     }
 
-    return getTournament(id);
-}
+    /**
+     * Fetch a single tournament with its map pool.
+     */
+    async getTournament(tournamentId) {
+        const { data: tournament, error } = await supabase
+            .from('tournaments')
+            .select('*, tournament_map_pools (*)')
+            .eq('id', tournamentId)
+            .single();
 
-async function getTournament(tournamentId) {
-    const t = await db.get('SELECT * FROM tournaments WHERE id = ?', [tournamentId]);
-    if (!t) return null;
-    const maps = await getMapPool(tournamentId);
-    return { ...t, mapPool: maps };
-}
-
-async function getTournamentsByOrg(orgId) {
-    const tournaments = await db.all(
-        'SELECT * FROM tournaments WHERE org_id = ? ORDER BY created_at DESC',
-        [orgId]
-    );
-    return tournaments;
-}
-
-async function updateTournament(tournamentId, { name, defaultFormat, status }) {
-    await db.run(
-        `UPDATE tournaments SET
-           name = COALESCE(?, name),
-           defaultFormat = COALESCE(?, defaultFormat),
-           status = COALESCE(?, status)
-         WHERE id = ?`,
-        [name?.trim().slice(0, 100) || null, defaultFormat || null, status || null, tournamentId]
-    );
-    return getTournament(tournamentId);
-}
-
-async function getMapPool(tournamentId) {
-    const rows = await db.all(
-        'SELECT map_name, map_image_url FROM tournament_map_pools WHERE tournament_id = ? ORDER BY sort_order ASC',
-        [tournamentId]
-    );
-    if (rows.length === 0) {
-        // Fall back to default pool — no custom maps configured
-        return DEFAULT_CS2_MAPS.map((name, i) => ({ map_name: name, map_image_url: null }));
+        if (error || !tournament) return null;
+        
+        // Rename key for consistency
+        const { tournament_map_pools, ...t } = tournament;
+        return { ...t, mapPool: tournament_map_pools };
     }
-    return rows;
+
+    /**
+     * Get all tournaments for an organization.
+     */
+    async getTournamentsByOrg(orgId) {
+        const { data, error } = await supabase
+            .from('tournaments')
+            .select('*')
+            .eq('org_id', orgId)
+            .order('created_at', { ascending: false });
+
+        if (error) return [];
+        return data;
+    }
+
+    /**
+     * Update tournament basic info.
+     */
+    async updateTournament(tournamentId, { name, defaultFormat, status }) {
+        const { data, error } = await supabase
+            .from('tournaments')
+            .update({ 
+                name: name?.trim().slice(0, 100), 
+                format: defaultFormat, 
+                status 
+            })
+            .eq('id', tournamentId)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Update failed: ${error.message}`);
+        return this.getTournament(tournamentId);
+    }
+
+    /**
+     * Get only the map pool for a tournament.
+     */
+    async getMapPool(tournamentId) {
+        const { data, error } = await supabase
+            .from('tournament_map_pools')
+            .select('map_name, map_image_url')
+            .eq('tournament_id', tournamentId)
+            .order('sort_order', { ascending: true });
+
+        if (error || !data || data.length === 0) {
+            return DEFAULT_CS2_MAPS.map(name => ({ map_name: name, map_image_url: null }));
+        }
+        return data;
+    }
+
+    /**
+     * Overwrite the map pool for a tournament.
+     */
+    async updateMapPool(tournamentId, maps) {
+        if (!Array.isArray(maps) || maps.length === 0) throw new Error('Maps required');
+
+        // Delete existing
+        await supabase.from('tournament_map_pools').delete().eq('tournament_id', tournamentId);
+
+        // Insert new
+        const rows = maps.map((m, i) => ({
+            tournament_id: tournamentId,
+            map_name: m.name.trim().slice(0, 50),
+            map_image_url: m.imageUrl || null,
+            sort_order: i
+        }));
+
+        const { error } = await supabase.from('tournament_map_pools').insert(rows);
+        if (error) throw new Error(`Map pool update failed: ${error.message}`);
+
+        return this.getMapPool(tournamentId);
+    }
 }
 
-async function updateMapPool(tournamentId, maps) {
-    if (!Array.isArray(maps) || maps.length === 0) {
-        throw Object.assign(new Error('Maps must be a non-empty array'), { statusCode: 400 });
-    }
-    // Clear existing and replace
-    await db.run('DELETE FROM tournament_map_pools WHERE tournament_id = ?', [tournamentId]);
-    for (let i = 0; i < maps.length; i++) {
-        const m = maps[i];
-        if (!m.name || typeof m.name !== 'string') continue;
-        await db.run(
-            `INSERT INTO tournament_map_pools (tournament_id, map_name, map_image_url, sort_order) VALUES (?, ?, ?, ?)`,
-            [tournamentId, m.name.trim().slice(0, 50), m.imageUrl || null, i]
-        );
-    }
-    return getMapPool(tournamentId);
-}
-
-module.exports = { createTournament, getTournament, getTournamentsByOrg, updateTournament, getMapPool, updateMapPool };
+module.exports = new TournamentService();

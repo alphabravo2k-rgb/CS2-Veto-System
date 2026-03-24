@@ -1,275 +1,341 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatedBackground, RefreshIcon, TrashIcon, UndoIcon, CheckIcon } from '../components/SharedUI';
+import useAuthStore from '../store/useAuthStore';
+import { 
+    AnimatedBackground, 
+    RefreshIcon, 
+    TrashIcon, 
+    CheckIcon, 
+    ShieldIcon, 
+    UsersIcon, 
+    GlobeIcon, 
+    ActivityIcon 
+} from '../components/SharedUI';
 
-// 🛡️ SECURITY FIX: Dynamic URL Resolution
-const API_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const TABS = [
+    { id: 'overview', label: 'Overview', icon: ShieldIcon },
+    { id: 'users', label: 'Users', icon: UsersIcon },
+    { id: 'orgs', label: 'Organizations', icon: GlobeIcon },
+    { id: 'history', label: 'Match History', icon: ActivityIcon },
+    { id: 'audit', label: 'Audit Log', icon: ShieldIcon },
+];
 
 export default function GlobalAdmin() {
     const navigate = useNavigate();
-    
-    // Auth State
-    const [adminSecret, setAdminSecret] = useState(sessionStorage.getItem('adminSecret') || '');
-    const [authInput, setAuthInput] = useState('');
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [authError, setAuthError] = useState(null);
+    const { user, authFetch } = useAuthStore();
+    const [activeTab, setActiveTab] = useState('overview');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [data, setData] = useState({
+        users: [],
+        orgs: [],
+        history: [],
+        audit: [],
+        stats: { totalMatches: 0, totalUsers: 0, totalOrgs: 0 }
+    });
 
-    // Data State
-    const [historyData, setHistoryData] = useState([]);
-    const [mapPool, setMapPool] = useState([]);
-    const [webhookUrl, setWebhookUrl] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [notification, setNotification] = useState(null);
+    const isPlatformAdmin = user?.role === 'platform_admin';
 
-    // 🛡️ LOGIC FIX: Initial Auth Check on Mount, NOT on every keystroke
     useEffect(() => {
-        if (adminSecret) {
-            verifyAndLoadData(adminSecret);
+        if (!isPlatformAdmin) {
+            navigate('/');
+            return;
         }
-    }, [adminSecret]);
+        loadAllData();
+    }, [isPlatformAdmin]);
 
-    const showToast = (msg) => {
-        setNotification(msg);
-        setTimeout(() => setNotification(null), 3000);
-    };
-
-    const verifyAndLoadData = async (secretToUse) => {
-        setIsLoading(true);
-        setAuthError(null);
+    const loadAllData = async () => {
+        setLoading(true);
         try {
-            // Fetch History
-            const histRes = await fetch(`${API_URL}/api/admin/history`, { 
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: secretToUse }) 
+            const [usersRes, orgsRes, histRes, auditRes] = await Promise.all([
+                authFetch('/api/admin/users'),
+                authFetch('/api/admin/orgs'),
+                authFetch('/api/admin/history'),
+                authFetch('/api/admin/audit')
+            ]);
+
+            const [usersData, orgsData, histData, auditData] = await Promise.all([
+                usersRes.json(),
+                orgsRes.json(),
+                histRes.json(),
+                auditRes.json()
+            ]);
+
+            setData({
+                users: usersData.users || [],
+                orgs: orgsData || [],
+                history: histData.matches || [],
+                audit: auditData || [],
+                stats: {
+                    totalUsers: usersData.total || 0,
+                    totalOrgs: orgsData.length || 0,
+                    totalMatches: histData.total || 0
+                }
             });
-            const histData = await histRes.json();
-            
-            if (histData.error) {
-                setAuthError("INVALID CREDENTIALS");
-                sessionStorage.removeItem('adminSecret');
-                setIsAuthenticated(false);
-                setIsLoading(false);
-                return;
-            }
-
-            // If we get here, auth succeeded
-            setHistoryData(histData);
-            setAdminSecret(secretToUse);
-            sessionStorage.setItem('adminSecret', secretToUse);
-            setIsAuthenticated(true);
-
-            // 🛡️ FEATURE RESTORE: Fetch Map Pool
-            const mapRes = await fetch(`${API_URL}/api/admin/maps/get`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: secretToUse })
-            });
-            const mapData = await mapRes.json();
-            if (!mapData.error) setMapPool(mapData);
-
-            // 🛡️ FEATURE RESTORE: Fetch Webhook
-            const webRes = await fetch(`${API_URL}/api/admin/webhook/get`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: secretToUse })
-            });
-            const webData = await webRes.json();
-            if (!webData.error) setWebhookUrl(webData.webhookUrl || '');
-
-        } catch (e) {
-            setAuthError("SERVER UNREACHABLE");
+        } catch (err) {
+            setError(err.message);
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     };
 
-    const handleLoginSubmit = (e) => {
-        e.preventDefault();
-        if (!authInput.trim()) return;
-        verifyAndLoadData(authInput);
-    };
-
-    // --- ACTIONS ---
-
-    const deleteMatch = async (id) => { 
-        if (!window.confirm("Permanently delete this match log?")) return; 
+    const toggleUserSuspension = async (userId, isSuspended) => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/delete`, { 
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, secret: adminSecret }) 
+            const res = await authFetch(`/api/admin/users/${userId}/suspend`, {
+                method: 'POST',
+                body: JSON.stringify({ suspended: !isSuspended })
             });
-            const data = await res.json();
-            if (data.success) {
-                setHistoryData(prev => prev.filter(m => m.id !== id));
-                showToast("MATCH DELETED");
+            if (res.ok) {
+                setData(prev => ({
+                    ...prev,
+                    users: prev.users.map(u => u.id === userId ? { ...u, suspended: !isSuspended } : u)
+                }));
             }
-        } catch (e) { alert("Failed to delete match"); }
-    };
-
-    const triggerSystemReset = async () => {
-        if (!window.confirm("⚠️ DANGER ⚠️\nThis will instantly delete ALL active and past matches across ALL tournaments.\n\nAre you sure?")) return;
-        if (!window.confirm("Final Warning: This cannot be undone.")) return;
-
-        try {
-            const res = await fetch(`${API_URL}/api/admin/reset`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setHistoryData([]);
-                showToast("SYSTEM PURGED");
-            }
-        } catch (e) { alert("Failed to reset system"); }
-    };
-
-    const updateMapPool = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/admin/maps/update`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret, maps: mapPool })
-            });
-            const data = await res.json();
-            if (data.success) showToast("MAP POOL SAVED");
-        } catch (e) { alert("Failed to save maps"); }
-    };
-
-    const addMapToPool = () => {
-        const mapName = prompt("Enter new map name:");
-        if (mapName && mapName.trim()) {
-            setMapPool([...mapPool, { name: mapName.trim() }]);
+        } catch (err) {
+            alert('Failed to update user status');
         }
     };
 
-    const removeMapFromPool = (index) => {
-        const newPool = [...mapPool];
-        newPool.splice(index, 1);
-        setMapPool(newPool);
-    };
-
-    const saveWebhook = async () => {
+    const deleteMatch = async (matchId) => {
+        if (!window.confirm('Permanently delete this match?')) return;
         try {
-            const res = await fetch(`${API_URL}/api/admin/webhook/set`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret, webhookUrl })
-            });
-            const data = await res.json();
-            if (data.error) alert(data.error);
-            else showToast("WEBHOOK SAVED");
-        } catch (e) { alert("Failed to save webhook"); }
+            const res = await authFetch(`/api/admin/matches/${matchId}`, { method: 'DELETE' });
+            if (res.ok) {
+                setData(prev => ({
+                    ...prev,
+                    history: prev.history.filter(m => m.id !== matchId)
+                }));
+            }
+        } catch (err) {
+            alert('Failed to delete match');
+        }
     };
 
-    const testWebhook = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/admin/webhook/test`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: adminSecret, webhookUrl })
-            });
-            const data = await res.json();
-            if (data.error) alert(data.error);
-            else showToast("TEST PING SENT");
-        } catch (e) { alert("Failed to test webhook"); }
-    };
-
-
-    // --- RENDERERS ---
-
-    if (!isAuthenticated) {
-        return (
-            <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Rajdhani', sans-serif" }}>
-                <AnimatedBackground />
-                <form onSubmit={handleLoginSubmit} style={{ background: 'rgba(15, 18, 25, 0.9)', padding: '40px', borderRadius: '15px', border: '1px solid #333', textAlign: 'center', width: '300px' }}>
-                    <h3 style={{ color: '#fff', marginBottom: '20px', letterSpacing: '2px' }}>SYSTEM ACCESS</h3>
-                    <input 
-                        type="password" 
-                        value={authInput} 
-                        onChange={e => { setAuthInput(e.target.value); setAuthError(null); }} 
-                        placeholder="ENTER MASTER KEY" 
-                        style={{ width: '100%', padding: '15px', background: '#000', border: authError ? '1px solid #ff4444' : '1px solid #444', color: '#00d4ff', textAlign: 'center', fontSize: '1.2rem', outline: 'none', marginBottom: '15px', boxSizing: 'border-box' }} 
-                    />
-                    <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '10px', background: '#00d4ff', color: '#000', border: 'none', fontWeight: 'bold', cursor: isLoading ? 'wait' : 'pointer' }}>
-                        {isLoading ? 'VERIFYING...' : 'AUTHENTICATE'}
-                    </button>
-                    {authError && <div style={{ color: '#ff4444', marginTop: '15px', fontSize: '0.9rem', fontWeight: 'bold' }}>{authError}</div>}
-                </form>
-            </div>
-        );
-    }
+    if (!isPlatformAdmin) return null;
 
     return (
-        <div style={{ minHeight: '100vh', padding: '40px', fontFamily: "'Rajdhani', sans-serif", color: '#fff' }}>
+        <div style={{ minHeight: '100vh', color: '#fff', fontFamily: "'Outfit', sans-serif" }}>
             <AnimatedBackground />
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #333', paddingBottom: '20px', marginBottom: '30px' }}>
+            <header style={{ 
+                padding: '2rem', 
+                background: 'rgba(10, 15, 30, 0.7)', 
+                backdropFilter: 'blur(20px)',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                position: 'sticky',
+                top: 0,
+                zIndex: 100
+            }}>
                 <div>
-                    <button onClick={() => navigate('/')} style={{ background: 'transparent', border: '1px solid #444', color: '#fff', padding: '5px 15px', borderRadius: '5px', cursor: 'pointer', marginBottom: '10px' }}>← EXIT TO PORTAL</button>
-                    <h1 style={{ color: '#ff4444', margin: 0 }}>GLOBAL ADMINISTRATION</h1>
+                    <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '2px', color: '#ff4b2b' }}>PLATFORM CONTROL</h1>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>SYSTEM COMMAND & OBSERVABILITY</p>
                 </div>
-                <button onClick={triggerSystemReset} style={{ background: 'rgba(255,0,0,0.1)', border: '1px solid #ff4444', color: '#ff4444', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
-                    ☢️ NUKE ALL DATA
-                </button>
-            </div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={loadAllData} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', padding: '0.8rem', borderRadius: '12px', cursor: 'pointer' }}>
+                        <RefreshIcon />
+                    </button>
+                    <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 0.5rem' }} />
+                    <button onClick={() => navigate('/')} style={{ background: '#ff4b2b', border: 'none', color: '#fff', padding: '0.8rem 1.5rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
+                        EXIT PORTAL
+                    </button>
+                </div>
+            </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
-                
-                {/* HISTORY PANEL */}
-                <div style={{ background: 'rgba(0,0,0,0.8)', padding: '20px', borderRadius: '10px', border: '1px solid #333' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={{ color: '#00d4ff', margin: 0 }}>MATCH REGISTRY</h3>
-                        <button onClick={() => verifyAndLoadData(adminSecret)} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer' }}><RefreshIcon /></button>
+            <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+                {/* Navigation Tabs */}
+                <nav style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '1rem' }}>
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem',
+                                padding: '1rem 1.5rem',
+                                background: activeTab === tab.id ? 'rgba(255, 75, 43, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid',
+                                borderColor: activeTab === tab.id ? '#ff4b2b' : 'rgba(255, 255, 255, 0.1)',
+                                borderRadius: '16px',
+                                color: activeTab === tab.id ? '#ff4b2b' : '#fff',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            <tab.icon size={20} />
+                            <span style={{ fontWeight: '600' }}>{tab.label}</span>
+                        </button>
+                    ))}
+                </nav>
+
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '10rem' }}>
+                        <div style={{ width: '50px', height: '50px', border: '3px solid #ff4b2b', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto mb-4' }} />
+                        <p style={{ color: 'rgba(255,255,255,0.5)' }}>SYNCHRONIZING SYSTEM DATA...</p>
                     </div>
-                    <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                        {historyData.length === 0 ? <div style={{color: '#666', textAlign: 'center', padding: '20px'}}>No records found.</div> : null}
-                        {historyData.map((match) => (
-                            // 🛡️ BUG FIX: Keyed by DB ID, not array index
-                            <div key={match.id} style={{ background: '#161b22', marginBottom: '10px', padding: '15px', borderRadius: '5px', borderLeft: match.finished ? '4px solid #333' : '4px solid #00ff00', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: match.finished ? '#888' : '#fff' }}>{match.teamA} vs {match.teamB}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#666' }}>ID: {match.id} | Tourney: {match.tournament_id} | {new Date(match.date).toLocaleString()}</div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                    {!match.finished && <button onClick={() => window.open(`/${match.tournament_id === 'default' ? 'legacy' : match.tournament_id}/veto/${match.id}`, '_blank')} style={{ background: 'transparent', color: '#00d4ff', border: '1px solid #00d4ff', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}>JOIN</button>}
-                                    <button onClick={() => deleteMatch(match.id)} style={{ background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}><TrashIcon /></button>
-                                </div>
+                ) : (
+                    <div className="tab-content">
+                        {activeTab === 'overview' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+                                <StatCard label="Total Users" value={data.stats.totalUsers} icon={UsersIcon} color="#00d4ff" />
+                                <StatCard label="Total Organizations" value={data.stats.totalOrgs} icon={GlobeIcon} color="#00ff88" />
+                                <StatCard label="Total Matches" value={data.stats.totalMatches} icon={ActivityIcon} color="#ff4b2b" />
                             </div>
-                        ))}
-                    </div>
-                </div>
+                        )}
 
-                {/* CONFIGURATION PANELS */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-                    
-                    {/* WEBHOOKS */}
-                    <div style={{ background: 'rgba(0,0,0,0.8)', padding: '20px', borderRadius: '10px', border: '1px solid #333' }}>
-                        <h3 style={{ color: '#00d4ff', marginBottom: '15px', margin: 0 }}>GLOBAL WEBHOOK</h3>
-                        <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '15px' }}>Sends live match updates to a central Discord channel.</p>
-                        <input 
-                            value={webhookUrl} 
-                            onChange={e => setWebhookUrl(e.target.value)} 
-                            placeholder="https://discord.com/api/webhooks/..." 
-                            style={{ width: '100%', padding: '10px', background: '#111', border: '1px solid #444', color: '#fff', borderRadius: '5px', marginBottom: '10px', boxSizing: 'border-box' }} 
-                        />
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button onClick={saveWebhook} style={{ background: '#00d4ff', color: '#000', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>SAVE LINK</button>
-                            <button onClick={testWebhook} style={{ background: 'transparent', color: '#fff', border: '1px solid #555', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>TEST PING</button>
-                        </div>
-                    </div>
+                        {activeTab === 'users' && (
+                            <Table>
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Role</th>
+                                        <th>Registration</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.users.map(u => (
+                                        <tr key={u.id}>
+                                            <td>
+                                                <div style={{ fontWeight: '600' }}>{u.display_name}</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>{u.email}</div>
+                                            </td>
+                                            <td><span style={{ padding: '4px 8px', borderRadius: '4px', background: u.role === 'platform_admin' ? '#ff4b2b' : 'rgba(255,255,255,0.1)', fontSize: '0.7rem' }}>{u.role.toUpperCase()}</span></td>
+                                            <td>{new Date(u.created_at).toLocaleDateString()}</td>
+                                            <td>
+                                                <span style={{ color: u.suspended ? '#ff4444' : '#00ff88' }}>
+                                                    {u.suspended ? 'SUSPENDED' : 'ACTIVE'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button 
+                                                    onClick={() => toggleUserSuspension(u.id, u.suspended)}
+                                                    style={{ background: 'transparent', border: '1px solid #444', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                                                >
+                                                    {u.suspended ? 'Unsuspend' : 'Suspend'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        )}
 
-                    {/* MAP POOL */}
-                    <div style={{ background: 'rgba(0,0,0,0.8)', padding: '20px', borderRadius: '10px', border: '1px solid #333' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                            <h3 style={{ color: '#00d4ff', margin: 0 }}>ACTIVE MAP POOL</h3>
-                            <button onClick={updateMapPool} style={{ background: '#00ff00', color: '#000', border: 'none', padding: '5px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>SAVE POOL</button>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-                            {mapPool.map((map, index) => (
-                                <div key={index} style={{ background: '#111', border: '1px solid #444', padding: '5px 10px', borderRadius: '5px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    {map.name}
-                                    <button onClick={() => removeMapFromPool(index)} style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', padding: 0 }}>&times;</button>
-                                </div>
-                            ))}
-                        </div>
-                        <button onClick={addMapToPool} style={{ background: 'transparent', border: '1px dashed #666', color: '#aaa', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', width: '100%' }}>+ ADD CUSTOM MAP</button>
-                    </div>
-                </div>
+                        {activeTab === 'history' && (
+                            <Table>
+                                <thead>
+                                    <tr>
+                                        <th>Match ID</th>
+                                        <th>Lineup</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.history.map(m => (
+                                        <tr key={m.id}>
+                                            <td style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>{m.id.slice(0, 8)}</td>
+                                            <td style={{ fontWeight: '600' }}>{m.teamA} vs {m.teamB}</td>
+                                            <td><span style={{ color: m.finished ? '#888' : '#00ff88' }}>{m.finished ? 'COMPLETED' : 'LIVE'}</span></td>
+                                            <td>{new Date(m.date).toLocaleString()}</td>
+                                            <td>
+                                                <button onClick={() => deleteMatch(m.id)} style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer' }}>
+                                                    <TrashIcon size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        )}
 
+                        {activeTab === 'audit' && (
+                            <Table>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Actor</th>
+                                        <th>Action</th>
+                                        <th>Target</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.audit.map((log, i) => (
+                                        <tr key={i}>
+                                            <td style={{ fontSize: '0.8rem', opacity: 0.6 }}>{new Date(log.created_at).toLocaleString()}</td>
+                                            <td>{log.actor_id.slice(0, 8)}</td>
+                                            <td><code style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px' }}>{log.action}</code></td>
+                                            <td>{log.target_id?.slice(0, 8) || '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        )}
+                    </div>
+                )}
+            </main>
+
+            <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+            `}</style>
+        </div>
+    );
+}
+
+function StatCard({ label, value, icon: Icon, color }) {
+    return (
+        <div style={{ 
+            background: 'rgba(255, 255, 255, 0.03)', 
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '24px',
+            padding: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2rem'
+        }}>
+            <div style={{ 
+                width: '64px', 
+                height: '64px', 
+                borderRadius: '20px', 
+                background: `rgba(${color === '#ff4b2b' ? '255,75,43' : color === '#00ff88' ? '0,255,136' : '0,212,255'}, 0.1)`, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: color
+            }}>
+                <Icon size={32} />
             </div>
+            <div>
+                <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>{label}</div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{value}</div>
+            </div>
+        </div>
+    );
+}
 
-            {notification && (
-                <div style={{ position: 'fixed', bottom: '20px', right: '20px', background: '#00ff00', color: '#000', padding: '15px 30px', borderRadius: '5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 5000, boxShadow: '0 5px 15px rgba(0,255,0,0.3)', animation: 'slideIn 0.3s ease-out' }}>
-                    <CheckIcon /> {notification}
-                </div>
-            )}
+function Table({ children }) {
+    return (
+        <div style={{ 
+            background: 'rgba(255, 255, 255, 0.03)', 
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '24px',
+            overflow: 'hidden'
+        }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                {children}
+            </table>
+            <style>{`
+                th { padding: 1.5rem; font-size: 0.8rem; color: rgba(255,255,255,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); text-transform: uppercase; letter-spacing: 1px; }
+                td { padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+                tr:last-child td { border-bottom: none; }
+            `}</style>
         </div>
     );
 }

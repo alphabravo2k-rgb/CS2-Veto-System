@@ -4,56 +4,87 @@ const supabase = require('../../infra/supabase');
  * ⚡ DOMAIN LAYER — ORGANIZATION SERVICE
  * =============================================================================
  * Responsibility: Multi-tenant business logic, branding resolution, 
- * and organization-level configuration.
+ * and organization-level configuration using Supabase.
  * =============================================================================
  */
 
 class OrgService {
     /**
-     * Resolve branding for a specific organization.
-     * @param {string} orgId - The UUID or slug of the organization.
+     * Create a new organization and its initial branding.
      */
-    async getBranding(orgId) {
-        try {
-            const { data, error } = await supabase
-                .from('org_branding')
-                .select('*')
-                .eq('org_id', orgId)
-                .single();
+    async createOrg({ userId, name, slug, primaryColor, secondaryColor, logoUrl }) {
+        if (!userId) throw new Error('User ID required');
+        
+        // 1. Create org
+        const { data: org, error: orgErr } = await supabase
+            .from('orgs')
+            .insert({ id: slug, name, slug })
+            .select()
+            .single();
 
-            if (error) {
-                console.error(`[OrgService] Branding fetch error for ${orgId}:`, error.message);
-                return null;
-            }
+        if (orgErr) throw new Error(`Org creation failed: ${orgErr.message}`);
 
-            return data;
-        } catch (err) {
-            console.error(`[OrgService] Unexpected branding error:`, err);
-            return null;
-        }
+        // 2. Add creator as admin member
+        const { error: memErr } = await supabase
+            .from('org_members')
+            .insert({ org_id: org.id, user_id: userId, role: 'admin' });
+
+        if (memErr) console.error('[OrgService] Failed to add creator as admin:', memErr.message);
+
+        // 3. Initialize branding
+        const { error: brandErr } = await supabase
+            .from('org_branding')
+            .insert({ 
+                org_id: org.id, 
+                display_name: name, 
+                primary_color: primaryColor || '#00d4ff', 
+                secondary_color: secondaryColor || '#0a0f1e', 
+                logo_url: logoUrl || null 
+            });
+
+        if (brandErr) console.error('[OrgService] Branding init failed:', brandErr.message);
+
+        return org;
     }
 
     /**
-     * Get organization settings (e.g., match limits, enabled features).
+     * Resolve branding for a specific organization.
      */
-    async getSettings(orgId) {
-        try {
-            const { data, error } = await supabase
-                .from('org_settings')
-                .select('*')
-                .eq('org_id', orgId)
-                .single();
+    async getBranding(orgId) {
+        const { data, error } = await supabase
+            .from('org_branding')
+            .select('*')
+            .eq('org_id', orgId)
+            .single();
 
-            if (error) {
-                console.error(`[OrgService] Settings fetch error for ${orgId}:`, error.message);
-                return null;
-            }
+        if (error) return null;
+        return data;
+    }
 
-            return data;
-        } catch (err) {
-            console.error(`[OrgService] Unexpected settings error:`, err);
-            return null;
-        }
+    /**
+     * Fetch all organizations where a user is a member.
+     */
+    async getUserOrgs(userId) {
+        const { data, error } = await supabase
+            .from('org_members')
+            .select('orgs (*)')
+            .eq('user_id', userId);
+
+        if (error) return [];
+        return data.map(m => m.orgs);
+    }
+
+    /**
+     * Get organization with its branding in a single call.
+     */
+    async getOrgWithBranding(orgId) {
+        const { data: org } = await supabase
+            .from('orgs')
+            .select('*, org_branding (*)')
+            .eq('id', orgId)
+            .single();
+
+        return org;
     }
 
     /**
@@ -68,6 +99,42 @@ class OrgService {
             .single();
 
         if (error) throw new Error(`[OrgService] Branding update failed: ${error.message}`);
+        return data;
+    }
+
+    /**
+     * Get all members of an organization.
+     */
+    async getMembers(orgId) {
+        const { data, error } = await supabase
+            .from('org_members')
+            .select('user_id, role, users (username, display_name, avatar_url, email)')
+            .eq('org_id', orgId);
+
+        if (error) return [];
+        return data;
+    }
+
+    /**
+     * Add a member by email (resolves to UUID).
+     */
+    async addMember(orgId, { inviteEmail, role }) {
+        // Resolve email to UUID
+        const { data: user } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', inviteEmail)
+            .single();
+
+        if (!user) throw new Error('User not found by email. They must register first.');
+
+        const { data, error } = await supabase
+            .from('org_members')
+            .upsert({ org_id: orgId, user_id: user.id, role })
+            .select()
+            .single();
+
+        if (error) throw new Error(`Member addition failed: ${error.message}`);
         return data;
     }
 }

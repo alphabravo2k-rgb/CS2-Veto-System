@@ -28,8 +28,8 @@ export default function OrgDashboard() {
         (async () => {
             try {
                 const [orgRes, tRes] = await Promise.all([
-                    fetch(`${API}/api/orgs/${orgId}`),
-                    fetch(`${API}/api/orgs/${orgId}/tournaments`),
+                    authFetch(`/api/orgs/${orgId}`),
+                    authFetch(`/api/orgs/${orgId}/tournaments`),
                 ]);
                 if (!orgRes.ok) throw new Error('Organization not found');
                 const orgData = await orgRes.json();
@@ -74,7 +74,8 @@ export default function OrgDashboard() {
             const updated = await res.json();
             setOrg(updated);
             setEditBranding(false);
-            window.location.reload(); // Re-apply CSS vars
+            // Trigger a re-render of BrandingProvider by updating state or reload
+            window.location.reload(); 
         } catch (e) {
             alert(e.message);
         } finally {
@@ -92,6 +93,9 @@ export default function OrgDashboard() {
         if (res.ok) {
             const t = await res.json();
             setTournaments(ts => [t, ...ts]);
+        } else {
+            const err = await res.json();
+            alert(err.error || 'Failed to create tournament');
         }
     };
 

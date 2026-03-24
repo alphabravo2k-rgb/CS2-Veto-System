@@ -12,14 +12,12 @@
  * =============================================================================
  */
 
-'use strict';
-
 const { verifyAccessToken } = require('../domain/auth/AuthService');
-const db = require('../infra/database');
+const supabase = require('../infra/supabase');
+const TenantResolver = require('../domain/organizations/TenantResolver');
 
 /**
  * Attach the authenticated user to req.user.
- * Returns 401 if token is missing, invalid, or expired.
  */
 async function requireAuth(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -39,47 +37,52 @@ async function requireAuth(req, res, next) {
 }
 
 /**
- * Require the user to be a platform-level admin.
- * Must be used AFTER requireAuth.
+ * Require platform admin role.
  */
 function requirePlatformAdmin(req, res, next) {
-    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    if (req.user.role !== 'platform_admin') {
+    if (!req.user || req.user.role !== 'platform_admin') {
         return res.status(403).json({ error: 'Platform admin access required' });
     }
     next();
 }
 
 /**
- * Require the user to be an admin of the specified organization.
- * Reads orgId from req.params.orgId by default.
- * Must be used AFTER requireAuth.
+ * Require org admin role. Resolves slugs to UUIDs.
  */
-function requireOrgAdmin(req, res, next) {
+async function requireOrgAdmin(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    // Platform admins can always act
     if (req.user.role === 'platform_admin') return next();
 
-    const orgId = req.params.orgId;
-    if (!orgId) return res.status(400).json({ error: 'Organization ID required' });
+    let orgId = req.params.orgId;
+    if (!orgId) return res.status(400).json({ error: 'Organization identifier required' });
 
-    db.get(
-        'SELECT role FROM org_members WHERE org_id = ? AND user_id = ?',
-        [orgId, req.user.id]
-    ).then(row => {
-        if (!row || row.role !== 'admin') {
-            return res.status(403).json({ error: 'Organization admin access required' });
-        }
-        next();
-    }).catch(() => res.status(500).json({ error: 'Authorization check failed' }));
+    // 1. Resolve slug if needed
+    if (!orgId.includes('-')) {
+        const resolved = await TenantResolver.resolveSlug(orgId);
+        if (resolved) orgId = resolved.id;
+    }
+
+    // 2. Check membership
+    const { data: member, error } = await supabase
+        .from('org_members')
+        .select('role')
+        .eq('org_id', orgId)
+        .eq('user_id', req.user.id)
+        .single();
+
+    if (error || !member || member.role !== 'admin') {
+        return res.status(403).json({ error: 'Organization admin access required' });
+    }
+
+    // Attach resolved orgId for downstream use
+    req.orgId = orgId;
+    next();
 }
 
 /**
- * Optional auth — attaches req.user if a valid token is present,
- * but does NOT reject the request if absent.
- * Used for spectator views or public endpoints that show extra data to logged-in users.
+ * Optional authentication.
  */
-function optionalAuth(req, res, next) {
+async function optionalAuth(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         req.user = null;

@@ -1,81 +1,62 @@
-/**
- * ⚡ APPLICATION LAYER — ADMIN ROUTES
- * =============================================================================
- * PROBLEM (Architecture Flaw): Admin logic was scattered across server.js
- * inline with main application logic. No separation of concerns.
- *
- * PROBLEM (Security Vulnerability): Rate limiter used an in-memory Map that
- * grew indefinitely — a memory leak that would exhaust RAM under sustained load.
- * The interval that cleaned it only deleted TTL-expired entries from the ROOM
- * store, not from the rate limit map.
- *
- * FIX: Admin routes extracted to their own module. Rate limiter cleanup fixed.
- * =============================================================================
- */
-
-'use strict';
-
 const express = require('express');
 const crypto = require('crypto');
-const db = require('../infra/database');
+const supabase = require('../infra/supabase');
 const { log } = require('../infra/auditLog');
-const { requirePlatformAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All admin routes require JWT platform admin OR fall back to MASTER_SECRET
-// for backward compatibility during the migration period.
+/**
+ * Admin Authentication Bridge
+ * Prefer JWT platform_admin role; fallback to MASTER_SECRET for emergency access.
+ */
 function adminAuth(req, res, next) {
-    // JWT path (preferred)
     if (req.user?.role === 'platform_admin') return next();
 
-    // Legacy MASTER_SECRET path
     const secret = req.body?.secret || req.headers['x-admin-secret'];
     const MASTER_SECRET = process.env.ADMIN_SECRET || 'default_secret';
+    
     if (!secret || secret.length !== MASTER_SECRET.length) {
-        return res.status(403).json({ error: 'Admin authentication required' });
+        return res.status(403).json({ error: 'Forbidden' });
     }
+    
     try {
-        const secretBuf = Buffer.from(secret);
-        const masterBuf = Buffer.from(MASTER_SECRET);
-        if (!crypto.timingSafeEqual(secretBuf, masterBuf)) {
-            return res.status(403).json({ error: 'Invalid admin credentials' });
+        if (!crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(MASTER_SECRET))) {
+            return res.status(403).json({ error: 'Invalid secret' });
         }
     } catch {
-        return res.status(403).json({ error: 'Invalid admin credentials' });
+        return res.status(403).json({ error: 'Forbidden' });
     }
-    req.adminLegacy = true;
     next();
 }
 
 router.use(adminAuth);
 
 // GET /api/admin/health
-router.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+router.get('/health', (req, res) => res.json({ status: 'ok', engine: 'supabase' }));
 
-// GET /api/admin/users — list all users (platform admin)
+// GET /api/admin/users
 router.get('/users', async (req, res) => {
     try {
-        const page  = Math.max(1, parseInt(req.query.page)  || 1);
+        const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(100, parseInt(req.query.limit) || 20);
-        const offset = (page - 1) * limit;
-        const search = req.query.search ? `%${req.query.search}%` : null;
+        const { search } = req.query;
 
-        const sql = search
-            ? 'SELECT id, email, username, display_name, role, suspended, created_at FROM users WHERE username LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-            : 'SELECT id, email, username, display_name, role, suspended, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        const params = search ? [search, search, limit, offset] : [limit, offset];
+        let query = supabase
+            .from('users')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range((page - 1) * limit, page * limit - 1);
 
-        const users = await db.all(sql, params);
-        const { total } = await db.get(
-            search ? 'SELECT COUNT(*) as total FROM users WHERE username LIKE ? OR email LIKE ?' : 'SELECT COUNT(*) as total FROM users',
-            search ? [search, search] : []
-        );
-        res.json({ users, total, page, totalPages: Math.ceil(total / limit) });
-    } catch {
-        res.status(500).json({ error: 'Failed to fetch users' });
+        if (search) {
+            query = query.or(`username.ilike.%${search}%,email.ilike.%${search}%`);
+        }
+
+        const { data: users, count, error } = await query;
+        if (error) throw error;
+
+        res.json({ users, total: count, page, totalPages: Math.ceil((count || 0) / limit) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -83,75 +64,110 @@ router.get('/users', async (req, res) => {
 router.post('/users/:userId/suspend', async (req, res) => {
     try {
         const { suspended = true } = req.body;
-        await db.run('UPDATE users SET suspended = ? WHERE id = ?', [suspended ? 1 : 0, req.params.userId]);
-        const actorId = req.user?.id || 'legacy_admin';
-        await log({ actor_id: actorId, action: suspended ? 'user.suspend' : 'user.unsuspend', target_id: req.params.userId });
+        const { error } = await supabase
+            .from('users')
+            .update({ suspended })
+            .eq('id', req.params.userId);
+
+        if (error) throw error;
+
+        await log({ 
+            actor_id: req.user?.id || 'master_key', 
+            action: suspended ? 'user.suspend' : 'user.unsuspend', 
+            target_id: req.params.userId 
+        });
         res.json({ success: true });
-    } catch {
-        res.status(500).json({ error: 'Failed to update user' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// GET /api/admin/orgs — list all orgs
+// GET /api/admin/orgs
 router.get('/orgs', async (req, res) => {
     try {
-        const orgs = await db.all(
-            `SELECT o.id, o.name, ob.primary_color, ob.logo_url,
-                    (SELECT COUNT(*) FROM org_members WHERE org_id = o.id) as member_count,
-                    (SELECT COUNT(*) FROM tournaments WHERE org_id = o.id) as tournament_count
-             FROM organizations o
-             LEFT JOIN org_branding ob ON ob.org_id = o.id
-             ORDER BY o.name ASC`
-        );
+        const { data, error } = await supabase
+            .from('orgs')
+            .select(`
+                id, name, slug, 
+                org_branding (primary_color, logo_url),
+                org_members (count),
+                tournaments (count)
+            `)
+            .order('name');
+
+        if (error) throw error;
+        
+        // Flatten for API consumer
+        const orgs = data.map(o => ({
+            id: o.id,
+            name: o.name,
+            slug: o.slug,
+            primary_color: o.org_branding?.[0]?.primary_color,
+            logo_url: o.org_branding?.[0]?.logo_url,
+            member_count: o.org_members?.[0]?.count || 0,
+            tournament_count: o.tournaments?.[0]?.count || 0
+        }));
+
         res.json(orgs);
-    } catch {
-        res.status(500).json({ error: 'Failed to fetch organizations' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// GET /api/admin/history — all matches (paginated)
+// GET /api/admin/history
 router.get('/history', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
-        const offset = (page - 1) * limit;
-        const tournamentId = req.query.tournamentId || null;
+        const { tournamentId } = req.query;
 
-        const where = tournamentId ? 'WHERE tournament_id = ?' : '';
-        const params = tournamentId ? [tournamentId, limit, offset] : [limit, offset];
+        let query = supabase
+            .from('match_history')
+            .select('*', { count: 'exact' })
+            .order('date', { ascending: false })
+            .range((page - 1) * limit, page * limit - 1);
 
-        const matches = await db.all(
-            `SELECT id, tournament_id, teamA, teamB, format, finished, date
-             FROM match_history ${where} ORDER BY date DESC LIMIT ? OFFSET ?`,
-            params
-        );
-        res.json(matches);
-    } catch {
-        res.status(500).json({ error: 'Failed to fetch match history' });
+        if (tournamentId) query = query.eq('tournament_id', tournamentId);
+
+        const { data: matches, count, error } = await query;
+        if (error) throw error;
+
+        res.json({ matches, total: count });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
 // DELETE /api/admin/matches/:matchId
 router.delete('/matches/:matchId', async (req, res) => {
     try {
-        await db.run('DELETE FROM match_history WHERE id = ?', [req.params.matchId]);
-        const actorId = req.user?.id || 'legacy_admin';
-        await log({ actor_id: actorId, action: 'match.delete', target_id: req.params.matchId });
+        const { error } = await supabase.from('match_history').delete().eq('id', req.params.matchId);
+        if (error) throw error;
+
+        await log({ 
+            actor_id: req.user?.id || 'master_key', 
+            action: 'match.delete', 
+            target_id: req.params.matchId 
+        });
         res.json({ success: true });
-    } catch {
-        res.status(500).json({ error: 'Failed to delete match' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// GET /api/admin/audit — audit log viewer
+// GET /api/admin/audit
 router.get('/audit', async (req, res) => {
     try {
-        const logs = await db.all(
-            'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200'
-        );
-        res.json(logs);
-    } catch {
-        res.status(500).json({ error: 'Failed to fetch audit logs' });
+        const { data, error } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
