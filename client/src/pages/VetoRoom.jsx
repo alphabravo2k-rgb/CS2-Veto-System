@@ -118,7 +118,7 @@ const VetoRoom = () => {
             </div>
 
             {/* ── MATCH HEADER ── */}
-            <header className="match-header fade-enter-active" style={{ display: 'flex', alignItems: 'center', justify-content: 'center', padding: '60px 24px', gap: '80px', position: 'relative', zIndex: 10 }}>
+            <header className="match-header fade-enter-active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 24px', gap: '80px', position: 'relative', zIndex: 10 }}>
                 <div className={`team-block team-a ${gameState.sequence[gameState.step]?.t === 'A' ? 'active-turn' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '32px', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
                     <div className="team-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '20px' }}>
                         <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
@@ -129,7 +129,7 @@ const VetoRoom = () => {
                     </div>
                 </div>
 
-                <div className="match-center" style={{ display: 'flex', flex-direction: 'column', alignItems: 'center', gap: '16px' }}>
+                <div className="match-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
                     <div className="vs-label neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, opacity: 0.3 }}>VS</div>
                     <div className="format-badge premium-button" style={{ borderRadius: '50px', padding: '4px 16px', border: '1px solid var(--brand-primary)', fontFamily: 'Rajdhani' }}>{gameState.format.toUpperCase()}</div>
                     {gameState.useTimer && !gameState.finished && (
@@ -155,8 +155,8 @@ const VetoRoom = () => {
                 {/* LOGS & CONTROLS */}
                 <aside className="room-sidebar">
                     <div className="action-card glass-panel" style={{ padding: '2rem', marginBottom: '2rem', position: 'relative' }}>
-                        <h4 className="card-title neon-text" style={{ font-size: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', font-weight: 900 }}>OPERATION LOGS</h4>
-                        <div className="log-container" ref={logContainerRef} style={{ max-height: '450px', overflow-y: 'auto' }}>
+                        <h4 className="card-title neon-text" style={{ fontSize: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', fontWeight: 900 }}>OPERATION LOGS</h4>
+                        <div className="log-container" ref={logContainerRef} style={{ maxHeight: '450px', overflowY: 'auto' }}>
                             <AnimatePresence initial={false}>
                                 {gameState.logs.slice(-8).map((log, idx) => (
                                     <motion.div 
@@ -174,7 +174,7 @@ const VetoRoom = () => {
 
                     {!gameState.finished && (
                         <div className="action-card controls glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-                            <h4 className="card-title neon-text" style={{ font-size: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', font-weight: 900 }}>COMMAND OVERRIDE</h4>
+                            <h4 className="card-title neon-text" style={{ fontSize: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', fontWeight: 900 }}>COMMAND OVERRIDE</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {myRole && !gameState.ready?.[myRole] && (
                                     <button className="premium-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
@@ -195,8 +195,8 @@ const VetoRoom = () => {
                 </aside>
 
                 {/* MAP GRID */}
-                <section className="map-grid-section" style={{ display: 'flex', flex-direction: 'column', gap: '32px' }}>
-                    <div className="step-indicator glass-panel" style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', gap: '16px', font-weight: 900, background: 'rgba(0,0,0,0.4)' }}>
+                <section className="map-grid-section" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <div className="step-indicator glass-panel" style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', gap: '16px', fontWeight: 900, background: 'rgba(0,0,0,0.4)' }}>
                         {gameState.finished ? (
                             <span className="veto-complete neon-text" style={{ fontSize: '1.2rem', letterSpacing: '4px' }}>MISSION ACCOMPLISHED</span>
                         ) : (
@@ -259,7 +259,7 @@ const VetoRoom = () => {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 50 }}
                         className="glass-panel"
-                        style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', padding: '16px 32px', border-radius: '50px', font-weight: 900, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 2000, background: 'var(--brand-primary)', color: '#000', border: 'none', letterSpacing: '2px' }}
+                        style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', padding: '16px 32px', borderRadius: '50px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 2000, background: 'var(--brand-primary)', color: '#000', border: 'none', letterSpacing: '2px' }}
                     >
                         <CheckIcon /> ENCRYPTION KEY COPIED
                     </motion.div>
