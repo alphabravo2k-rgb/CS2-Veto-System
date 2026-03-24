@@ -12,6 +12,11 @@ const supabase = require('./supabase');
  */
 async function log({ actor_id, action, target_id = null, meta = {} }) {
     try {
+        if (!supabase) {
+            console.warn('[AUDIT] Skipping log due to missing Supabase client:', action);
+            return;
+        }
+
         // Fire and forget
         supabase.from('audit_logs').insert({
             actor_id,
