@@ -42,57 +42,66 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
                 filter: map.status === 'banned' ? 'grayscale(100%) brightness(0.4)' : 'grayscale(0%) brightness(1)',
             }}
             whileHover={map.status === 'available' && isInteractive ? { 
-                scale: 1.04, 
-                boxShadow: `0 0 20px ${actionColor || 'var(--brand-primary, #00d4ff)'}` 
+                scale: 1.05, 
+                boxShadow: `0 0 30px ${actionColor || 'rgba(0, 212, 255, 0.4)'}` 
             } : {}}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             onClick={onClick} 
-            className={`map-card ${map.status}`}
+            className={`map-card glass-panel ${map.status}`}
             style={{
-                ...styles.mapCard,
                 position: 'relative',
                 overflow: 'hidden',
-                backgroundImage: imageFailed ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' : `linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%), url(${imageUrl})`,
+                aspectRatio: '16/9',
+                backgroundImage: imageFailed ? 'linear-gradient(135deg, #0a0f1e 0%, #16213e 100%)' : `linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.9) 100%), url(${imageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
                 border: map.status === 'picked' 
-                    ? `3px solid var(--brand-primary, #00d4ff)` 
+                    ? `2px solid var(--brand-primary)` 
                     : map.status === 'decider' 
-                    ? '3px solid #ffaa00' 
+                    ? '2px solid #ffbb00' 
                     : isInteractive 
-                    ? `2px solid ${actionColor || 'rgba(255,255,255,0.2)'}` 
-                    : '1px solid rgba(255,255,255,0.1)',
+                    ? `1px solid ${actionColor || 'rgba(255,255,255,0.2)'}` 
+                    : '1px solid rgba(255,255,255,0.05)',
                 cursor: (map.status === 'available' && isInteractive) ? 'pointer' : 'default',
-                boxShadow: map.status === 'picked' 
-                    ? `0 0 20px rgba(0, 212, 255, 0.4)` 
-                    : map.status === 'decider' 
-                    ? '0 0 20px rgba(255, 170, 0, 0.4)'
-                    : '0 5px 15px rgba(0,0,0,0.5)'
             }}
         >
-            {/* ── Banned X Overlay ── */}
+            {/* ── BANNED OVERLAY ── */}
             {map.status === 'banned' && (
                 <div className="ban-overlay">
-                    <svg viewBox="0 0 100 100" className="ban-x">
-                        <line x1="10" y1="10" x2="90" y2="90" stroke="rgba(255,50,50,0.8)" strokeWidth="3" />
-                        <line x1="90" y1="10" x2="10" y2="90" stroke="rgba(255,50,50,0.8)" strokeWidth="3" />
-                    </svg>
+                    <div style={{ transform: 'rotate(-45deg)', background: 'rgba(255, 75, 43, 0.9)', color: '#fff', padding: '4px 40px', fontWeight: 900, letterSpacing: '2px', fontSize: '0.7rem', filter: 'drop-shadow(0 0 10px rgba(255,75,43,0.5))' }}>BANNED</div>
                 </div>
             )}
 
-            {map.status === 'picked' && mapOrderLabel && <div style={styles.mapOrderBadge}>{mapOrderLabel}</div>}
+            {/* ── MAP ORDER BADGE ── */}
+            {map.status === 'picked' && mapOrderLabel && (
+                <div className="glass-panel" style={{ position: 'absolute', top: '10px', right: '10px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: 'var(--brand-primary)', background: 'rgba(0,0,0,0.5)', borderRadius: '8px', zIndex: 10 }}>
+                    {mapOrderLabel}
+                </div>
+            )}
             
-            <div style={{...styles.cardContent, isolation: 'isolate'}}>
-                <span style={{
-                    ...styles.mapTitle, 
-                    fontFamily: 'Rajdhani, sans-serif', 
-                    fontWeight: 700, 
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '1.2rem', background: 'linear-gradient(transparent, rgba(0,0,0,0.8))' }}>
+                <span className={map.status === 'available' && isInteractive ? "neon-text" : ""} style={{
+                    fontFamily: "'Outfit', sans-serif", 
+                    fontWeight: 900, 
+                    fontSize: '1.5rem',
                     textTransform: 'uppercase', 
-                    letterSpacing: '0.08em'
+                    letterSpacing: '2px',
+                    color: '#fff'
                 }}>
                     {map.name}
                 </span>
-                {map.status === 'banned' && <div style={styles.badgeBan}>BANNED BY {logData?.team || '...'}</div>}
-                {map.status === 'picked' && <div style={styles.badgePick}>PICKED BY {logData?.team || '...'} <div style={styles.miniSideBadge}>{logData?.sideText || 'WAITING...'}</div></div>}
-                {map.status === 'decider' && <div style={styles.badgeDecider}>DECIDER <div style={styles.miniSideBadge}>{logData?.sideText || 'WAITING FOR SIDE'}</div></div>}
+                
+                {map.status === 'picked' && (
+                    <div style={{ color: 'var(--brand-primary)', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '2px', marginTop: '4px' }}>
+                        SECURED BY {logData?.team || 'OPPONENT'}
+                    </div>
+                )}
+                
+                {map.status === 'decider' && (
+                    <div style={{ color: '#ffbb00', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '2px', marginTop: '4px' }}>
+                        CRITICAL: DECIDER MAP
+                    </div>
+                )}
             </div>
 
             <style>{`
@@ -100,9 +109,9 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
                     animation: pulse-decider 2s infinite ease-in-out;
                 }
                 @keyframes pulse-decider {
-                    0% { border-color: rgba(255, 170, 0, 0.4); box-shadow: 0 0 5px rgba(255, 170, 0, 0.2); }
-                    50% { border-color: rgba(255, 170, 0, 1); box-shadow: 0 0 20px rgba(255, 170, 0, 0.6); }
-                    100% { border-color: rgba(255, 170, 0, 0.4); box-shadow: 0 0 5px rgba(255, 170, 0, 0.2); }
+                    0% { box-shadow: 0 0 5px rgba(255, 187, 0, 0.2); }
+                    50% { box-shadow: 0 0 30px rgba(255, 187, 0, 0.5); }
+                    100% { box-shadow: 0 0 5px rgba(255, 187, 0, 0.2); }
                 }
                 .ban-overlay {
                     position: absolute;
@@ -111,12 +120,7 @@ const MapCard = React.memo(({ map, isInteractive, onClick, actionColor, logData,
                     align-items: center;
                     justify-content: center;
                     z-index: 5;
-                    pointer-events: none;
-                }
-                .ban-x {
-                    width: 60%;
-                    height: 60%;
-                    filter: drop-shadow(0 0 10px rgba(255,0,0,0.5));
+                    background: rgba(0,0,0,0.4);
                 }
             `}</style>
         </motion.div>

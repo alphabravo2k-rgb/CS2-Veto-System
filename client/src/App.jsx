@@ -1,9 +1,9 @@
 /**
- * ⚡ APP ROUTING — UPDATED WITH AUTH SYSTEM
+ * ⚡ APP ROUTING — PREMIUM GLOBAL ARCHITECTURE
  * =============================================================================
- * Added: /login, /register, /orgs/create, /org/:orgId, /profile, /profile/edit
- * Auth guard: ProtectedRoute redirects unauthenticated users to /login.
- * Spectator veto routes remain public (no auth required).
+ * Unified multi-tenant routing with hardware-accelerated transitions.
+ * Auth-guarded sectors for organizational and administrative domains.
+ * Spectator-optimized public routes for live veto theaters.
  * =============================================================================
  */
 
@@ -26,42 +26,19 @@ import ProfileEdit       from './pages/ProfileEdit';
 import TopNav from './components/layout/TopNav';
 import BrandingProvider from './components/layout/BrandingProvider';
 
-// Lazy placeholder for existing pages not yet extracted
-const GlobalAdmin = React.lazy(() =>
-    import('./pages/GlobalAdmin').catch(() => ({
-        default: () => (
-            <div style={{ minHeight:'100vh', background:'#0b0f19', color:'#ff4444', display:'flex', justifyContent:'center', alignItems:'center', fontFamily:'monospace', textAlign:'center' }}>
-                <h1>[ GLOBAL ADMIN PANEL ]<br/><span style={{fontSize:'1rem', color:'#aaa'}}>System Management Loading...</span></h1>
-            </div>
-        )
-    }))
-);
-const VetoRoom = React.lazy(() =>
-    import('./pages/VetoRoom').catch(() => ({
-        default: () => (
-            <div style={{ minHeight:'100vh', background:'#0b0f19', color:'#00ff00', display:'flex', justifyContent:'center', alignItems:'center', fontFamily:'monospace', textAlign:'center' }}>
-                <h1>[ LIVE VETO ROOM ]<br/><span style={{fontSize:'1rem', color:'#aaa'}}>Initializing WebSockets...</span></h1>
-            </div>
-        )
-    }))
-);
+// Lazy-loaded Command Centers
+const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
+const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 
 /**
- * Redirect to /login if not authenticated.
- * Preserves the intended destination via `state.from` for post-login redirect.
+ * 🛰️ SECURE SECTOR GUARD
+ * Redirects unauthorized signals to the authentication portal.
  */
 function ProtectedRoute({ children }) {
     const { isAuthenticated, isLoading } = useAuthStore();
     const location = useLocation();
 
-    if (isLoading) {
-        return (
-            <div style={{ minHeight:'100vh', background:'#050a14', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <div style={{ width:32, height:32, border:'3px solid rgba(0,212,255,0.2)', borderTopColor:'#00d4ff', borderRadius:'50%', animation:'spin .7s linear infinite' }} />
-                <style>{`@keyframes spin { to { transform:rotate(360deg); } }`}</style>
-            </div>
-        );
-    }
+    if (isLoading) return <div style={{ minHeight: '100vh', background: '#050a14' }} />;
 
     if (!isAuthenticated) {
         return <Navigate to="/login" state={{ from: location }} replace />;
@@ -75,42 +52,41 @@ export default function App() {
 
     useEffect(() => {
         initialize();
-    }, []);
+    }, [initialize]);
 
     return (
-        <React.Suspense fallback={<div style={{ minHeight:'100vh', background:'#050a14' }} />}>
-            <div className="app-container" style={{ minHeight: '100vh', background: '#050a14' }}>
+        <React.Suspense fallback={<div style={{ minHeight: '100vh', background: '#050a14' }} />}>
+            <div className="app-container" style={{ minHeight: '100vh', background: '#050a14', color: '#fff' }}>
                 <TopNav />
+                
                 <div className="app-content" style={{ paddingTop: '56px' }}>
                     <BrandingProvider>
                         <Routes>
-                            {/* ── Public routes ── */}
+                            {/* ── SECTOR 0: PUBLIC ACCESS ── */}
                             <Route path="/"          element={<GlobalHome />} />
                             <Route path="/login"     element={<Login />} />
                             <Route path="/register"  element={<Register />} />
                             <Route path="/history"   element={<GlobalHome view="history" />} />
-
-                            {/* ── Player profiles (public) ── */}
                             <Route path="/players/:userId" element={<PlayerProfile />} />
 
-                            {/* ── Protected routes ── */}
-                            <Route path="/orgs/create" element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
-                            <Route path="/org/:orgId"  element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
+                            {/* ── SECTOR 1: PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
                             <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
+                            <Route path="/orgs/create"  element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
+                            <Route path="/org/:orgId"   element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
+                            
+                            {/* Unified Tournament Routes */}
+                            <Route path="/org/:orgId/tournament/:tournamentId" element={<ProtectedRoute><TournamentDashboard /></ProtectedRoute>} />
+                            <Route path="/org/:orgId/tournament/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
-                            {/* ── Admin (protected) ── */}
+                            {/* ── SECTOR 9: COMMAND & CONTROL ── */}
                             <Route path="/admin" element={<ProtectedRoute><GlobalAdmin /></ProtectedRoute>} />
 
-                            {/* ── Legacy multi-tenant tournament routes (kept for backward compat) ── */}
+                            {/* ── LEGACY SIGNAL COMPATIBILITY ── */}
                             <Route path="/:orgId/:tournamentId" element={<TournamentDashboard />} />
+                            <Route path="/:orgId/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
-                            {/* ── Veto room (PUBLIC — spectators need no auth) ── */}
-                            <Route path="/:orgId/:tournamentId/veto/:matchId" element={
-                                <React.Suspense fallback={null}><VetoRoom /></React.Suspense>
-                            } />
-
-                            {/* ── 404 ── */}
+                            {/* ── 404: SIGNAL LOST ── */}
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </BrandingProvider>

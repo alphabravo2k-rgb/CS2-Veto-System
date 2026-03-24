@@ -1,21 +1,54 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { AnimatedBackground } from '../components/SharedUI';
 
+/**
+ * ⚡ UI LAYER — PREMIUM 404 EXPERIENCE
+ * =============================================================================
+ * Responsibility: Secure fallback for invalid spatial coordinates.
+ * Features: Hardware-accelerated neon signaling, deep-blur glass panels,
+ *           and integrated navigation recovery.
+ * =============================================================================
+ */
 export default function NotFound() {
     const navigate = useNavigate();
     
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Rajdhani', sans-serif", color: 'white' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#050a14', color: '#fff', position: 'relative' }}>
             <AnimatedBackground />
-            <h1 style={{ fontSize: '6rem', color: '#ff4444', textShadow: '0 0 20px rgba(255,0,0,0.5)', margin: 0, fontWeight: '900' }}>404</h1>
-            <h2 style={{ letterSpacing: '5px', color: '#aaa', margin: '10px 0 30px 0' }}>SECTOR NOT FOUND</h2>
-            <button 
-                onClick={() => navigate('/')} 
-                style={{ background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '10px 30px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', fontSize: '1rem' }}
+
+            <motion.div 
+                className="glass-panel"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{ padding: '64px', textAlign: 'center', maxWidth: '480px', position: 'relative', zIndex: 10 }}
             >
-                RETURN TO BASE
-            </button>
+                <motion.h1 
+                    className="neon-text"
+                    animate={{ textShadow: ['0 0 20px rgba(255,75,43,0.4)', '0 0 40px rgba(255,75,43,0.8)', '0 0 20px rgba(255,75,43,0.4)'] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    style={{ fontSize: '8rem', color: '#ff4b2b', margin: 0, fontWeight: 900, lineHeight: 1 }}
+                >
+                    404
+                </motion.h1>
+                
+                <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '6px', color: '#ff4b2b', marginTop: '16px', opacity: 0.8 }}>
+                    SIGNAL LOST / SECTOR UNIDENTIFIED
+                </div>
+                
+                <p style={{ margin: '32px 0', fontSize: '14px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, lineHeight: 1.6 }}>
+                    The coordinates you provided do not correspond to any known operational sector in the Veto.GG network.
+                </p>
+
+                <button 
+                    onClick={() => navigate('/')} 
+                    className="premium-button"
+                    style={{ padding: '16px 32px' }}
+                >
+                    RETURN TO SECTOR 0
+                </button>
+            </motion.div>
         </div>
     );
 }

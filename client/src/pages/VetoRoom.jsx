@@ -7,8 +7,15 @@ import MapCard from '../components/veto/MapCard';
 import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
 import LogLineRenderer from '../components/veto/LogLineRenderer';
 import Countdown from '../components/veto/Countdown';
-import { AnimatedBackground, HomeIcon, CheckIcon } from '../components/SharedUI';
+import { AnimatedBackground, HomeIcon, CheckIcon, ActivityIcon, RefreshIcon } from '../components/SharedUI';
 
+/**
+ * ⚡ UI LAYER — PREMIUM VETO ROOM
+ * =============================================================================
+ * Responsibility: Live map selection interface for teams and observers.
+ * Features: Real-time WebSocket sync, glassmorphic UI, neon signaling.
+ * =============================================================================
+ */
 const VetoRoom = () => {
     const { matchId } = useParams();
     const location = useLocation();
@@ -80,16 +87,16 @@ const VetoRoom = () => {
 
     if (!gameState) {
         return (
-            <div className="loading-screen">
+            <div className="loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', color: '#fff' }}>
                 <AnimatedBackground />
                 <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="loading-content"
+                    style={{ textAlign: 'center', zIndex: 10 }}
                 >
-                    <div className="spinner-large" />
-                    <h2 className="loading-text">INITIALIZING VETO STREAM...</h2>
-                    {serverError && <p className="error-text">{serverError}</p>}
+                    <div style={{ width: '40px', height: '40px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1.5rem' }} />
+                    <h2 style={{ letterSpacing: '4px', fontWeight: 900 }}>INITIALIZING VETO STREAM...</h2>
+                    {serverError && <p style={{ color: '#ff4b2b', marginTop: '1rem' }}>{serverError}</p>}
                 </motion.div>
             </div>
         );
@@ -99,64 +106,64 @@ const VetoRoom = () => {
         <div className="veto-room-page">
             <AnimatedBackground />
 
-            {/* ── Status Bar ── */}
-            <div className="room-status-bar">
-                <div className="spectator-badge">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    <span>{roomUserCount} VIEWERS</span>
+            {/* ── STATUS BAR ── */}
+            <div className="room-status-bar glass-panel" style={{ borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'space-between', padding: '12px 24px', fontSize: '11px', zIndex: 100, position: 'relative' }}>
+                <div className="spectator-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.7)' }}>
+                    <ActivityIcon size={14} color="var(--brand-primary)" />
+                    <span style={{ letterSpacing: '2px', fontWeight: 900 }}>{roomUserCount} OBSERVERS</span>
                 </div>
-                <div className={`connection-status ${isConnected ? 'online' : 'reconnecting'}`}>
-                    {isConnected ? 'LIVE' : 'RECONNECTING...'}
+                <div className={`connection-status ${isConnected ? 'online' : 'reconnecting'}`} style={{ letterSpacing: '2px', fontWeight: 900, color: isConnected ? '#00ff88' : '#ffaa00' }}>
+                    {isConnected ? 'LIVE FEED ON' : 'SIGNAL LOST - RECONNECTING...'}
                 </div>
             </div>
 
-            {/* ── Match Header ── */}
-            <header className="match-header">
-                <div className={`team-block team-a ${gameState.sequence[gameState.step]?.t === 'A' ? 'active-turn' : ''}`}>
-                    <div className="team-logo-wrapper">
-                        <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} />
+            {/* ── MATCH HEADER ── */}
+            <header className="match-header fade-enter-active" style={{ display: 'flex', alignItems: 'center', justify-content: 'center', padding: '60px 24px', gap: '80px', position: 'relative', zIndex: 10 }}>
+                <div className={`team-block team-a ${gameState.sequence[gameState.step]?.t === 'A' ? 'active-turn' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '32px', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+                    <div className="team-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '20px' }}>
+                        <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </div>
                     <div className="team-info">
-                        <h2 className="team-name">{gameState.teamA}</h2>
-                        {gameState.ready?.A ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING</span>}
+                        <h2 className={gameState.sequence[gameState.step]?.t === 'A' ? "team-name neon-text" : "team-name"} style={{ fontSize: '3rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamA}</h2>
+                        {gameState.ready?.A ? <span className="ready-tag">READY FOR COMBAT</span> : <span className="waiting-tag">WAITING FOR OPS</span>}
                     </div>
                 </div>
 
-                <div className="match-center">
-                    <div className="vs-label">VS</div>
-                    <div className="format-badge">{gameState.format.toUpperCase()}</div>
+                <div className="match-center" style={{ display: 'flex', flex-direction: 'column', alignItems: 'center', gap: '16px' }}>
+                    <div className="vs-label neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, opacity: 0.3 }}>VS</div>
+                    <div className="format-badge premium-button" style={{ borderRadius: '50px', padding: '4px 16px', border: '1px solid var(--brand-primary)', fontFamily: 'Rajdhani' }}>{gameState.format.toUpperCase()}</div>
                     {gameState.useTimer && !gameState.finished && (
-                        <div className={`timer-wrapper ${gameState.timerEndsAt && (new Date(gameState.timerEndsAt) - new Date() < 5000) ? 'emergency-shake' : ''}`}>
+                        <div className="timer-wrapper" style={{ fontSize: '3.5rem', fontWeight: 900, letterSpacing: '-2px' }}>
                             <Countdown target={gameState.timerEndsAt} key={gameState.step} />
                         </div>
                     )}
                 </div>
 
-                <div className={`team-block team-b ${gameState.sequence[gameState.step]?.t === 'B' ? 'active-turn' : ''}`}>
-                    <div className="team-info">
-                        <h2 className="team-name">{gameState.teamB}</h2>
-                        {gameState.ready?.B ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING</span>}
+                <div className={`team-block team-b ${gameState.sequence[gameState.step]?.t === 'B' ? 'active-turn' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '32px', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+                    <div className="team-info" style={{ textAlign: 'right' }}>
+                        <h2 className={gameState.sequence[gameState.step]?.t === 'B' ? "team-name neon-text" : "team-name"} style={{ fontSize: '3rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamB}</h2>
+                        {gameState.ready?.B ? <span className="ready-tag">READY FOR COMBAT</span> : <span className="waiting-tag">WAITING FOR OPS</span>}
                     </div>
-                    <div className="team-logo-wrapper">
-                        <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} />
+                    <div className="team-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '20px' }}>
+                        <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </div>
                 </div>
             </header>
 
-            {/* ── Main Layout ── */}
-            <main className="room-layout">
-                {/* ── Left Sidebar: Logs & Controls ── */}
+            {/* ── MAIN LAYOUT ── */}
+            <main className="room-layout" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '40px', maxWidth: '1600px', margin: '0 auto', padding: '0 40px 80px', position: 'relative', zIndex: 10 }}>
+                {/* LOGS & CONTROLS */}
                 <aside className="room-sidebar">
-                    <div className="action-card">
-                        <h4 className="card-title">MATCH LOG</h4>
-                        <div className="log-container" ref={logContainerRef}>
+                    <div className="action-card glass-panel" style={{ padding: '2rem', marginBottom: '2rem', position: 'relative' }}>
+                        <h4 className="card-title neon-text" style={{ font-size: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', font-weight: 900 }}>OPERATION LOGS</h4>
+                        <div className="log-container" ref={logContainerRef} style={{ max-height: '450px', overflow-y: 'auto' }}>
                             <AnimatePresence initial={false}>
                                 {gameState.logs.slice(-8).map((log, idx) => (
                                     <motion.div 
                                         key={`${idx}-${log}`}
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        className="log-item-wrapper"
+                                        style={{ marginBottom: '12px' }}
                                     >
                                         <LogLineRenderer log={log} teamA={gameState.teamA} teamB={gameState.teamB} />
                                     </motion.div>
@@ -166,20 +173,20 @@ const VetoRoom = () => {
                     </div>
 
                     {!gameState.finished && (
-                        <div className="action-card controls">
-                            <h4 className="card-title">CONTROLS</h4>
-                            <div className="controls-stack">
+                        <div className="action-card controls glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                            <h4 className="card-title neon-text" style={{ font-size: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', font-weight: 900 }}>COMMAND OVERRIDE</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {myRole && !gameState.ready?.[myRole] && (
-                                    <button className="btn-primary ready-btn" onClick={() => sendReady(matchId, key)}>
-                                        I AM READY
+                                    <button className="premium-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
+                                        ACTIVATE READINESS
                                     </button>
                                 )}
-                                <button className="btn-secondary share-btn" onClick={copyInvite}>
-                                    INVITE PLAYERS
+                                <button className="glass-panel" style={{ width: '100%', cursor: 'pointer', padding: '12px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px' }} onClick={copyInvite}>
+                                    TRANSMIT INVITE
                                 </button>
                                 {myRole === 'admin' && (
-                                    <button className="btn-danger-outline" onClick={() => navigate('/admin')}>
-                                        ADMIN OVERRIDE
+                                    <button className="premium-button" style={{ width: '100%', justifyContent: 'center', background: '#ff4b2b' }} onClick={() => navigate('/admin')}>
+                                        PLATFORM ADMIN
                                     </button>
                                 )}
                             </div>
@@ -187,22 +194,22 @@ const VetoRoom = () => {
                     )}
                 </aside>
 
-                {/* ── Center Map Grid ── */}
-                <section className="map-grid-section">
-                    <div className="step-indicator">
+                {/* MAP GRID */}
+                <section className="map-grid-section" style={{ display: 'flex', flex-direction: 'column', gap: '32px' }}>
+                    <div className="step-indicator glass-panel" style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', gap: '16px', font-weight: 900, background: 'rgba(0,0,0,0.4)' }}>
                         {gameState.finished ? (
-                            <span className="veto-complete">VETO COMPLETE</span>
+                            <span className="veto-complete neon-text" style={{ fontSize: '1.2rem', letterSpacing: '4px' }}>MISSION ACCOMPLISHED</span>
                         ) : (
                             <>
-                                <span className="current-step-label">NEXT ACTION:</span>
-                                <span className="current-step-value" style={{ color: currentActionColor }}>
+                                <span style={{ opacity: 0.5, letterSpacing: '2px' }}>PENDING DIRECTIVE:</span>
+                                <span className="neon-text" style={{ fontSize: '1.2rem', letterSpacing: '2px' }}>
                                     {gameState.sequence[gameState.step]?.t} {gameState.sequence[gameState.step]?.a.toUpperCase()}
                                 </span>
                             </>
                         )}
                     </div>
 
-                    <div className="map-grid">
+                    <div className="map-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
                         <AnimatePresence mode="popLayout">
                             {gameState.maps.map((m) => {
                                 const pickIndex = gameState.logs.filter(l => l.includes('[PICK]')).findIndex(l => l.includes(m.name));
@@ -222,7 +229,7 @@ const VetoRoom = () => {
                 </section>
             </main>
 
-            {/* ── Overlays ── */}
+            {/* OVERLAYS */}
             {gameState.useCoinFlip && (
                 <CoinFlipOverlay 
                     gameState={gameState} 
@@ -232,16 +239,17 @@ const VetoRoom = () => {
                 />
             )}
 
-            {/* ── Toasts ── */}
+            {/* TOASTS */}
             <AnimatePresence>
                 {!isConnected && (
                     <motion.div 
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
-                        className="connection-toast"
+                        className="glass-panel"
+                        style={{ position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', fontWeight: 900, zIndex: 2000, display: 'flex', alignItems: 'center', gap: '10px', background: '#ff4b2b', color: '#fff', border: 'none', letterSpacing: '2px' }}
                     >
-                        <RefreshIcon /> Connection lost — reconnecting...
+                        <RefreshIcon /> SIGNAL LOST — RECOVERING DATA...
                     </motion.div>
                 )}
 
@@ -250,58 +258,25 @@ const VetoRoom = () => {
                         initial={{ opacity: 0, y: 50 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 50 }}
-                        className="copy-toast"
+                        className="glass-panel"
+                        style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', padding: '16px 32px', border-radius: '50px', font-weight: 900, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 2000, background: 'var(--brand-primary)', color: '#000', border: 'none', letterSpacing: '2px' }}
                     >
-                        <CheckIcon /> LINK COPIED
+                        <CheckIcon /> ENCRYPTION KEY COPIED
                     </motion.div>
                 )}
             </AnimatePresence>
 
             <style>{`
                 .veto-room-page { min-height: 100vh; background: #050a14; color: #fff; font-family: 'Rajdhani', sans-serif; position: relative; }
-                .room-status-bar { display: flex; justify-content: space-between; padding: 8px 24px; font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05); }
-                .spectator-badge { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.5); }
-                .connection-status.online { color: #00ff00; }
-                .connection-status.reconnecting { color: #ffaa00; animation: blink 1s infinite; }
-                .connection-toast { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #ffaa00; color: #000; padding: 8px 20px; border-radius: 4px; font-weight: 700; z-index: 2000; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-
-                .match-header { display: flex; align-items: center; justify-content: center; padding: 40px 24px; gap: 60px; }
-                .team-block { display: flex; align-items: center; gap: 24px; transition: all 0.3s ease; }
-                .team-block.active-turn { transform: scale(1.05); }
-                .team-block.active-turn .team-logo-wrapper { border-color: var(--brand-primary, #00d4ff); box-shadow: 0 0 30px rgba(0, 212, 255, 0.4); animation: border-pulse 2s infinite; }
-                .team-logo-wrapper { width: 100px; height: 100px; border: 3px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; }
-                .team-logo-wrapper img { max-width: 100%; max-height: 100%; object-fit: contain; }
-                .team-name { font-size: 2.5rem; font-weight: 800; margin: 0; }
-                .ready-tag { font-size: 12px; color: #00ff00; background: rgba(0,255,0,0.1); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(0,255,0,0.3); }
-
-                .match-center { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-                .vs-label { font-size: 1.5rem; font-weight: 900; color: rgba(255,255,255,0.2); }
-                .format-badge { background: #fff; color: #000; padding: 2px 12px; font-weight: 800; border-radius: 4px; font-size: 14px; }
-                .timer-wrapper { font-size: 3rem; font-weight: 800; }
-                .emergency-shake { animation: shake 0.1s infinite; color: #ff4444; }
-
-                .room-layout { display: grid; grid-template-columns: 350px 1fr; gap: 32px; max-width: 1600px; margin: 0 auto; padding: 0 32px 64px; }
-                .action-card { background: rgba(15, 20, 35, 0.6); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-                .card-title { font-size: 12px; color: rgba(255,255,255,0.4); margin: 0 0 16px 0; letter-spacing: 0.2em; font-weight: 700; }
-                .log-container { max-height: 400px; overflow-y: auto; scrollbar-width: none; }
-                .log-item-wrapper { margin-bottom: 8px; }
-                .controls-stack { display: flex; flex-direction: column; gap: 12px; }
-                .btn-primary { width: 100%; background: var(--brand-primary, #00d4ff); color: #000; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
-                .btn-secondary { width: 100%; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
-
-                .map-grid-section { display: flex; flex-direction: column; gap: 24px; }
-                .step-indicator { background: rgba(0,0,0,0.3); padding: 12px 24px; border-radius: 8px; display: flex; align-items: center; gap: 12px; font-weight: 700; }
-                .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-
-                .copy-toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: #00ff00; color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 800; display: flex; align-items: center; gap: 10px; z-index: 2000; }
-
-                @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-                @keyframes border-pulse { 0% { border-color: rgba(0,212,255,0.3); } 50% { border-color: rgba(0,212,255,1); } 100% { border-color: rgba(0,212,255,0.3); } }
-                @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+                .ready-tag { font-size: 10px; color: #00ff88; background: rgba(0,255,136,0.1); padding: 4px 12px; border-radius: 50px; border: 1px solid rgba(0,255,136,0.2); font-weight: 900; letter-spacing: 2px; }
+                .waiting-tag { font-size: 10px; color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.1); font-weight: 900; letter-spacing: 2px; }
+                .team-block.active-turn { transform: scale(1.1); }
+                .team-block.active-turn .team-logo-wrapper { border-color: var(--brand-primary); box-shadow: 0 0 40px rgba(0, 212, 255, 0.4); }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                .log-container::-webkit-scrollbar { display: none; }
             `}</style>
         </div>
     );
 };
 
 export default VetoRoom;
-

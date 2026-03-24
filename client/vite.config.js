@@ -42,16 +42,11 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: !isProd, // Disabled in production to prevent source code leaks
-      chunkSizeWarningLimit: 600,
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          manualChunks: (id) => {
-            if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) return 'vendor-react';
-              if (id.includes('socket.io-client') || id.includes('engine.io-client')) return 'vendor-socket';
-              return 'vendor-core';
-            }
-          },
+          // 🛡️ RELIABILITY FIX: Removed manualChunks to prevent 'createContext' undefined errors 
+          // caused by chunk isolation in React 19 + React Router 7 environments.
         },
       },
     },

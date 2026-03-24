@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
 import useOrgBranding from '../hooks/useOrgBranding';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, RefreshIcon, CheckIcon } from '../components/SharedUI';
 
-const API = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '') || 'http://localhost:3001';
-
+/**
+ * ⚡ UI LAYER — PREMIUM ORGANIZATION DASHBOARD
+ * =============================================================================
+ * Responsibility: Central hub for organization owners and members.
+ * Features: Glassmorphic stats, tournament management, branding control.
+ * =============================================================================
+ */
 export default function OrgDashboard() {
     const { orgId } = useParams();
     const navigate = useNavigate();
     const { authFetch, user } = useAuthStore();
-    useOrgBranding(orgId);
+    const { branding: globalBranding } = useOrgBranding(orgId);
 
     const [org,         setOrg]         = useState(null);
     const [tournaments, setTournaments] = useState([]);
@@ -21,7 +27,7 @@ export default function OrgDashboard() {
 
     // Branding edit state
     const [editBranding, setEditBranding] = useState(false);
-    const [branding, setBranding] = useState({ displayName: '', primaryColor: '#00d4ff', secondaryColor: '#0a0f1e', logoUrl: '' });
+    const [brandingForm, setBrandingForm] = useState({ displayName: '', primaryColor: '#00d4ff', secondaryColor: '#0a0f1e', logoUrl: '' });
     const [savingBrand, setSavingBrand] = useState(false);
 
     useEffect(() => {
@@ -37,7 +43,7 @@ export default function OrgDashboard() {
                 setOrg(orgData);
                 setTournaments(tData);
                 if (orgData.branding) {
-                    setBranding({
+                    setBrandingForm({
                         displayName:     orgData.branding.display_name || orgData.name || '',
                         primaryColor:    orgData.branding.primary_color || '#00d4ff',
                         secondaryColor:  orgData.branding.secondary_color || '#0a0f1e',
@@ -50,7 +56,7 @@ export default function OrgDashboard() {
                 setLoading(false);
             }
         })();
-    }, [orgId]);
+    }, [orgId, authFetch]);
 
     const loadMembers = async () => {
         try {
@@ -68,13 +74,12 @@ export default function OrgDashboard() {
         try {
             const res = await authFetch(`/api/orgs/${orgId}/branding`, {
                 method: 'PATCH',
-                body: JSON.stringify(branding),
+                body: JSON.stringify(brandingForm),
             });
             if (!res.ok) throw new Error((await res.json()).error);
             const updated = await res.json();
             setOrg(updated);
             setEditBranding(false);
-            // Trigger a re-render of BrandingProvider by updating state or reload
             window.location.reload(); 
         } catch (e) {
             alert(e.message);
@@ -99,188 +104,241 @@ export default function OrgDashboard() {
         }
     };
 
-    const primaryColor = org?.branding?.primary_color || '#00d4ff';
+    const accentColor = org?.branding?.primary_color || 'var(--brand-primary, #00d4ff)';
 
-    if (loading) return <div className="org-loading"><span className="spinner" /></div>;
-    if (error)   return <div className="org-error">❌ {error} — <Link to="/">Home</Link></div>;
+    if (loading) {
+        return (
+            <div className="org-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
+                <AnimatedBackground />
+                <div className="spinner-large" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="org-error" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
+                <AnimatedBackground />
+                <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
+                    <h2 style={{ color: '#ff4b2b' }}>[ERROR]</h2>
+                    <p>{error}</p>
+                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN TO SECTOR 0</Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="org-page">
-            {/* Banner */}
-            <div className="org-banner" style={{ background: `linear-gradient(135deg, ${primaryColor}22, #050a1400)`, borderBottom: `1px solid ${primaryColor}30` }}>
-                <div className="org-banner-inner">
-                    <div className="org-header-left">
-                        {org.branding?.logo_url ? (
-                            <img src={org.branding.logo_url} alt="org logo" className="org-logo" />
-                        ) : (
-                            <div className="org-logo-placeholder" style={{ background: primaryColor }}>
-                                {(org.name || 'O').charAt(0).toUpperCase()}
-                            </div>
-                        )}
+        <div className="org-page" style={{ minHeight: '100vh', background: '#050a14', color: '#fff' }}>
+            <AnimatedBackground />
+
+            {/* ── BANNER ── */}
+            <div className="org-banner" style={{ padding: '60px 40px 40px', background: `linear-gradient(180deg, ${accentColor}11, transparent)`, borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative', zIndex: 10 }}>
+                <div className="org-banner-inner" style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '32px' }}>
+                    <div className="org-header-left" style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+                        <div className="org-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', border: `2px solid ${accentColor}44`, boxShadow: `0 0 40px ${accentColor}22` }}>
+                            {org.branding?.logo_url ? (
+                                <img src={org.branding.logo_url} alt="org logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                            ) : (
+                                <span style={{ fontSize: '3rem', fontWeight: 900, color: accentColor }}>{(org.name || 'O').charAt(0).toUpperCase()}</span>
+                            )}
+                        </div>
                         <div>
-                            <h1 className="org-name" style={{ color: primaryColor }}>{org.branding?.display_name || org.name}</h1>
-                            <p className="org-id">/{orgId}</p>
+                            <h1 className="neon-text" style={{ fontSize: '3.5rem', fontWeight: 900, margin: 0, textShadow: `0 0 20px ${accentColor}44` }}>{org.branding?.display_name || org.name}</h1>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', opacity: 0.6 }}>
+                                <GlobeIcon size={14} />
+                                <span style={{ letterSpacing: '2px', fontWeight: 700 }}>SECTOR: {orgId.toUpperCase()}</span>
+                            </div>
                         </div>
                     </div>
-                    <div className="org-header-right">
-                        <button className="btn-brand" style={{ background: primaryColor }} onClick={() => setEditBranding(true)}>
-                            🎨 Customize
+                    <div className="org-header-right" style={{ display: 'flex', gap: '16px' }}>
+                        <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setEditBranding(true)}>
+                            CUSTOMIZE SIGNAL
                         </button>
-                        <Link to={`/org/${orgId}/tournament`} className="btn-brand-outline" style={{ borderColor: primaryColor, color: primaryColor }}>
-                            + New Match
+                        <Link to={`/org/${orgId}/tournament`} className="premium-button">
+                            GENERATE MATCH
                         </Link>
                     </div>
                 </div>
             </div>
 
-            <div className="org-body">
-                {/* Tab nav */}
-                <div className="tab-nav">
+            <div className="org-body" style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px' }}>
+                {/* ── TABS ── */}
+                <div className="tab-nav" style={{ display: 'flex', gap: '32px', marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                     {['tournaments', 'members'].map(t => (
-                        <button key={t} className={`tab-btn ${tab === t ? 'active' : ''}`} style={{ '--accent': primaryColor }} onClick={() => setTab(t)}>
-                            {t.charAt(0).toUpperCase() + t.slice(1)}
+                        <button 
+                            key={t} 
+                            style={{ 
+                                background: 'none', border: 'none', color: tab === t ? accentColor : 'rgba(255,255,255,0.4)', 
+                                padding: '16px 0', cursor: 'pointer', fontSize: '14px', fontWeight: 900, letterSpacing: '4px',
+                                borderBottom: tab === t ? `2px solid ${accentColor}` : '2px solid transparent',
+                                transition: 'all 0.3s'
+                            }} 
+                            onClick={() => setTab(t)}
+                        >
+                            {t.toUpperCase()}
                         </button>
                     ))}
                 </div>
 
-                {/* Tab content */}
-                <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
-                    {tab === 'tournaments' && (
-                        <div className="panel">
-                            <div className="panel-header">
-                                <h2 className="panel-title">Tournaments</h2>
-                                <button className="btn-sm" style={{ background: primaryColor }} onClick={createTournament}>+ New Tournament</button>
-                            </div>
-                            {tournaments.length === 0 ? (
-                                <div className="empty-state">No tournaments yet. Create one to get started.</div>
-                            ) : (
-                                <div className="tournament-grid">
-                                    {tournaments.map(t => (
-                                        <motion.div
-                                            key={t.id}
-                                            className="tournament-card"
-                                            style={{ '--accent': primaryColor }}
-                                            whileHover={{ y: -3 }}
-                                            onClick={() => navigate(`/org/${orgId}/tournament/${t.id}`)}
-                                        >
-                                            <div className="t-badge" style={{ background: `${primaryColor}20`, color: primaryColor }}>
-                                                {t.game_module?.toUpperCase() || 'CS2'}
-                                            </div>
-                                            <h3 className="t-name">{t.name}</h3>
-                                            <div className="t-meta">
-                                                <span className="t-format">{t.defaultFormat?.toUpperCase()}</span>
-                                                <span className={`t-status status-${t.status || 'active'}`}>{t.status || 'active'}</span>
-                                            </div>
-                                        </motion.div>
-                                    ))}
+                {/* ── CONTENT ── */}
+                <AnimatePresence mode="wait">
+                    <motion.div 
+                        key={tab} 
+                        initial={{ opacity: 0, y: 20 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.4 }}
+                    >
+                        {tab === 'tournaments' && (
+                            <div className="tab-pane">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                    <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px' }}>ACTIVE OPERATIONS</h2>
+                                    <button className="premium-button" style={{ padding: '8px 24px', fontSize: '12px' }} onClick={createTournament}>INITIALIZE TOURNAMENT</button>
                                 </div>
-                            )}
-                        </div>
-                    )}
+                                
+                                {tournaments.length === 0 ? (
+                                    <div className="glass-panel" style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.2)' }}>
+                                        <p style={{ letterSpacing: '4px', fontStyle: 'italic' }}>NO DATA STREAMS FOUND</p>
+                                    </div>
+                                ) : (
+                                    <div className="tournament-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
+                                        {tournaments.map(t => (
+                                            <motion.div
+                                                key={t.id}
+                                                className="glass-panel"
+                                                whileHover={{ y: -8, scale: 1.02, boxShadow: `0 20px 40px rgba(0,0,0,0.4), 0 0 20px ${accentColor}11` }}
+                                                onClick={() => navigate(`/org/${orgId}/tournament/${t.id}`)}
+                                                style={{ padding: '24px', cursor: 'pointer', borderTop: `4px solid ${accentColor}` }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                                                    <div className="premium-button" style={{ fontSize: '10px', padding: '4px 12px', background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}>
+                                                        {t.game_module?.toUpperCase() || 'CS2'}
+                                                    </div>
+                                                    <span style={{ fontSize: '10px', fontWeight: 900, color: t.status === 'completed' ? '#ff4b2b' : '#00ff88', letterSpacing: '2px' }}>
+                                                        {t.status?.toUpperCase() || 'ACTIVE'}
+                                                    </span>
+                                                </div>
+                                                <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>{t.name}</h3>
+                                                <div style={{ marginTop: '24px', display: 'flex', gap: '16px', opacity: 0.4, fontSize: '12px', fontWeight: 700 }}>
+                                                    <span>{t.defaultFormat?.toUpperCase()} FORMAT</span>
+                                                    <span>|</span>
+                                                    <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                    {tab === 'members' && (
-                        <div className="panel">
-                            <div className="panel-header">
-                                <h2 className="panel-title">Members</h2>
-                            </div>
-                            {members.length === 0 ? (
-                                <div className="empty-state">No members loaded or you are not an admin.</div>
-                            ) : (
-                                <div className="members-list">
-                                    {members.map(m => (
-                                        <div key={m.id} className="member-row">
-                                            <div className="member-avatar" style={{ background: primaryColor }}>
-                                                {(m.username || 'U').charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="member-info">
-                                                <span className="member-name">{m.display_name || m.username}</span>
-                                                <span className="member-handle">@{m.username}</span>
-                                            </div>
-                                            <span className={`role-badge role-${m.role}`}>{m.role}</span>
+                        {tab === 'members' && (
+                            <div className="tab-pane">
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>ROSTER DATA</h2>
+                                <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                                    {members.length === 0 ? (
+                                        <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>ACCESSING SECURE DATA...</div>
+                                    ) : (
+                                        <div className="members-list">
+                                            {members.map(m => (
+                                                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 32px', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.3s' }} className="member-row">
+                                                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: `${accentColor}22`, color: accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: `1px solid ${accentColor}44` }}>
+                                                        {(m.username || 'U').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{m.display_name || m.username}</div>
+                                                        <div style={{ fontSize: '0.8rem', opacity: 0.4, fontWeight: 700 }}>@{m.username} / {m.email || 'N/A'}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <ShieldIcon size={14} color={m.role === 'admin' ? accentColor : 'rgba(255,255,255,0.4)'} />
+                                                        <span style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', color: m.role === 'admin' ? accentColor : 'rgba(255,255,255,0.4)' }}>{m.role.toUpperCase()}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    )}
-                </motion.div>
+                            </div>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
             </div>
 
-            {/* Branding modal */}
-            {editBranding && (
-                <div className="modal-overlay" onClick={() => setEditBranding(false)}>
-                    <div className="modal-card" onClick={e => e.stopPropagation()}>
-                        <h2 className="modal-title">Customize Branding</h2>
-                        <div className="form-fields">
-                            <div className="form-group"><label>Display Name</label><input type="text" value={branding.displayName} onChange={e => setBranding(b => ({ ...b, displayName: e.target.value }))} /></div>
-                            <div className="form-group"><label>Primary Color</label><div style={{ display: 'flex', gap: 10 }}><input type="color" value={branding.primaryColor} onChange={e => setBranding(b => ({ ...b, primaryColor: e.target.value }))} style={{ width: 40, border: 'none' }} /><input type="text" value={branding.primaryColor} onChange={e => setBranding(b => ({ ...b, primaryColor: e.target.value }))} style={{ flex: 1 }} /></div></div>
-                            <div className="form-group"><label>Logo URL</label><input type="url" value={branding.logoUrl} onChange={e => setBranding(b => ({ ...b, logoUrl: e.target.value }))} placeholder="https://..." /></div>
-                        </div>
-                        <div className="modal-actions">
-                            <button className="btn-ghost" onClick={() => setEditBranding(false)}>Cancel</button>
-                            <button className="btn-primary" onClick={saveBranding} disabled={savingBrand}>
-                                {savingBrand ? <span className="btn-spinner" /> : 'Save'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* ── BRANDING MODAL ── */}
+            <AnimatePresence>
+                {editBranding && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="modal-overlay" 
+                        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+                        onClick={() => setEditBranding(false)}
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="glass-panel" 
+                            style={{ padding: '40px', width: '100%', maxWidth: '500px' }}
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>CALIBRATE SIGNAL</h2>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>DISPLAY NAME</label>
+                                    <input 
+                                        type="text" 
+                                        value={brandingForm.displayName} 
+                                        onChange={e => setBrandingForm(b => ({ ...b, displayName: e.target.value }))}
+                                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px', outline: 'none' }}
+                                    />
+                                </div>
+                                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PRIMARY ACCENT</label>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <input 
+                                            type="color" 
+                                            value={brandingForm.primaryColor} 
+                                            onChange={e => setBrandingForm(b => ({ ...b, primaryColor: e.target.value }))} 
+                                            style={{ width: '48px', height: '42px', border: 'none', background: 'none', cursor: 'pointer' }}
+                                        />
+                                        <input 
+                                            type="text" 
+                                            value={brandingForm.primaryColor} 
+                                            onChange={e => setBrandingForm(b => ({ ...b, primaryColor: e.target.value }))}
+                                            style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px' }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>LOGO SOURCE URL</label>
+                                    <input 
+                                        type="url" 
+                                        value={brandingForm.logoUrl} 
+                                        onChange={e => setBrandingForm(b => ({ ...b, logoUrl: e.target.value }))}
+                                        placeholder="https://..."
+                                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                                <button className="glass-panel" style={{ padding: '12px 24px', cursor: 'pointer' }} onClick={() => setEditBranding(false)}>CANCEL</button>
+                                <button className="premium-button" onClick={saveBranding} disabled={savingBrand}>
+                                    {savingBrand ? <RefreshIcon size={14} className="spin" /> : 'APPLY SIGNAL'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <style>{`
-                * { box-sizing: border-box; }
-                .org-page { min-height:100vh; background:#050a14; color:#fff; font-family:'Inter',sans-serif; }
-                .org-loading { min-height:100vh; display:flex; align-items:center; justify-content:center; background:#050a14; }
-                .spinner { width:36px; height:36px; border:3px solid rgba(0,212,255,0.2); border-top-color:#00d4ff; border-radius:50%; animation:spin .7s linear infinite; }
-                @keyframes spin { to { transform:rotate(360deg); } }
-                .org-error { min-height:100vh; display:flex; align-items:center; justify-content:center; color:#ff6b6b; font-family:'Inter',sans-serif; gap:8px; }
-                .org-banner { padding:32px 40px 28px; }
-                .org-banner-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
-                .org-header-left { display:flex; align-items:center; gap:20px; }
-                .org-logo { width:64px; height:64px; border-radius:12px; object-fit:cover; }
-                .org-logo-placeholder { width:64px; height:64px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; color:#fff; }
-                .org-name { font-size:28px; font-weight:800; margin:0 0 4px; }
-                .org-id { color:#3d5070; font-size:13px; margin:0; }
-                .org-header-right { display:flex; gap:12px; }
-                .btn-brand { border:none; border-radius:10px; padding:10px 20px; font-size:14px; font-weight:700; cursor:pointer; color:#fff; }
-                .btn-brand-outline { border:1px solid; border-radius:10px; padding:10px 20px; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; }
-                .org-body { max-width:1100px; margin:0 auto; padding:32px 40px; }
-                .tab-nav { display:flex; gap:4px; margin-bottom:24px; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0; }
-                .tab-btn { background:transparent; border:none; color:#6b7fa3; font-size:14px; font-weight:600; padding:10px 20px; cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; margin-bottom:-1px; }
-                .tab-btn.active { color:var(--accent,#00d4ff); border-bottom-color:var(--accent,#00d4ff); }
-                .panel { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:16px; padding:24px; }
-                .panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
-                .panel-title { font-size:18px; font-weight:700; margin:0; }
-                .btn-sm { border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; color:#fff; }
-                .empty-state { color:#3d5070; text-align:center; padding:40px; font-size:14px; }
-                .tournament-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
-                .tournament-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-top:2px solid var(--accent,#00d4ff); border-radius:12px; padding:20px; cursor:pointer; transition:transform .2s; }
-                .t-badge { display:inline-block; border-radius:6px; padding:3px 10px; font-size:11px; font-weight:700; margin-bottom:12px; }
-                .t-name { font-size:15px; font-weight:700; margin:0 0 10px; color:#fff; }
-                .t-meta { display:flex; align-items:center; gap:8px; }
-                .t-format { font-size:11px; color:#6b7fa3; font-weight:700; text-transform:uppercase; }
-                .t-status { font-size:11px; border-radius:20px; padding:2px 10px; font-weight:700; }
-                .status-active { background:rgba(0,255,100,0.1); color:#00ff9d; }
-                .status-completed { background:rgba(100,100,100,0.1); color:#6b7fa3; }
-                .members-list { display:flex; flex-direction:column; gap:10px; }
-                .member-row { display:flex; align-items:center; gap:14px; padding:12px; background:rgba(255,255,255,0.02); border-radius:10px; }
-                .member-avatar { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:#fff; }
-                .member-info { flex:1; display:flex; flex-direction:column; gap:2px; }
-                .member-name { font-size:14px; font-weight:600; }
-                .member-handle { font-size:12px; color:#3d5070; }
-                .role-badge { font-size:11px; border-radius:20px; padding:3px 10px; font-weight:700; }
-                .role-admin { background:rgba(0,212,255,0.1); color:#00d4ff; }
-                .role-member { background:rgba(255,255,255,0.06); color:#6b7fa3; }
-                .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:100; }
-                .modal-card { background:#0d1829; border:1px solid rgba(0,212,255,0.2); border-radius:18px; padding:32px; width:100%; max-width:440px; }
-                .modal-title { font-size:20px; font-weight:700; margin:0 0 24px; }
-                .form-fields { display:flex; flex-direction:column; gap:16px; margin-bottom:24px; }
-                .form-group { display:flex; flex-direction:column; gap:6px; }
-                .form-group label { font-size:12px; font-weight:600; color:#8fa3c7; text-transform:uppercase; letter-spacing:.5px; }
-                .form-group input { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px 12px; color:#fff; font-size:14px; outline:none; }
-                .modal-actions { display:flex; justify-content:flex-end; gap:10px; }
-                .btn-ghost { background:transparent; border:1px solid rgba(255,255,255,0.1); color:#8fa3c7; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; }
-                .btn-primary { background:linear-gradient(135deg,#00d4ff,#0077cc); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px; }
-                .btn-spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+                .member-row:hover { background: rgba(255,255,255,0.03); }
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             `}</style>
         </div>
     );

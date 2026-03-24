@@ -1,12 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useParams, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 
 const API = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '') || 'http://localhost:3001';
 
-const REGION_LABELS = { EU: '🇪🇺 Europe', NA: '🌎 North America', SEA: '🌏 Southeast Asia', ME: '🌍 Middle East', Faceit: '🎯 Faceit' };
+const REGION_LABELS = { EU: '🌍 Europe', NA: '🌎 North America', SEA: '🌏 Southeast Asia', ME: '🌍 Middle East', Faceit: '🎯 Faceit' };
 const PLATFORM_ICONS = { steam: '🎮', riot: '⚡', epic: '🎯', faceit: '🔥' };
 
+/**
+ * ⚡ UI LAYER — PREMIUM PLAYER PROFILE
+ * =============================================================================
+ * Responsibility: Public-facing agent identity card.
+ * Features: Hardware-accelerated glass panels, neon avatar signaling, 
+ *           integrated account telemetry.
+ * =============================================================================
+ */
 export default function PlayerProfile() {
     const { userId } = useParams();
     const [profile, setProfile] = useState(null);
@@ -21,93 +30,112 @@ export default function PlayerProfile() {
             .finally(() => setLoading(false));
     }, [userId]);
 
-    if (loading) return <div className="profile-loading"><span className="spinner" /></div>;
-    if (error)   return <div className="profile-error">❌ {error}</div>;
+    if (loading) {
+        return (
+            <div className="profile-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
+                <AnimatedBackground />
+                <div className="spinner-large" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="profile-error" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
+                <AnimatedBackground />
+                <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
+                    <h2 style={{ color: '#ff4b2b' }}>[SECTOR NOT FOUND]</h2>
+                    <p style={{ opacity: 0.6 }}>The requested agent ID does not exist in the database.</p>
+                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN TO SECTOR 0</Link>
+                </div>
+            </div>
+        );
+    }
+
+    const accentColor = 'var(--brand-primary, #00d4ff)';
 
     return (
-        <div className="profile-page">
-            <div className="profile-bg" />
-            <motion.div className="profile-card" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
-                {/* Avatar + identity */}
-                <div className="profile-header">
-                    <div className="avatar-ring">
+        <div className="profile-page" style={{ minHeight: '100vh', background: '#050a14', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+            <AnimatedBackground />
+            
+            <motion.div 
+                className="glass-panel" 
+                initial={{ opacity: 0, scale: 0.9, y: 30 }} 
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                style={{ width: '100%', maxWidth: '500px', overflow: 'hidden', padding: 0 }}
+            >
+                {/* ── HEADER ── */}
+                <div style={{ background: `linear-gradient(180deg, ${accentColor}11, transparent)`, padding: '48px 40px 32px', textAlign: 'center', position: 'relative' }}>
+                    <div style={{ width: '130px', height: '130px', margin: '0 auto 24px', position: 'relative' }}>
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `3px solid ${accentColor}`, boxShadow: `0 0 30px ${accentColor}44`, animation: 'pulse 2s infinite ease-in-out' }} />
                         {profile.avatar_url ? (
-                            <img src={profile.avatar_url} alt="avatar" className="profile-avatar" />
+                            <img src={profile.avatar_url} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '5px solid #050a14', position: 'relative', zIndex: 1 }} />
                         ) : (
-                            <div className="avatar-placeholder">
+                            <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', fontWeight: 900, border: '5px solid #050a14', position: 'relative', zIndex: 1, color: accentColor }}>
                                 {(profile.username || 'U').charAt(0).toUpperCase()}
                             </div>
                         )}
                     </div>
-                    <div className="profile-identity">
-                        <h1 className="profile-display-name">{profile.display_name || profile.username}</h1>
-                        <p className="profile-username">@{profile.username}</p>
-                        <div className="profile-badges">
-                            {profile.country && <span className="badge">{profile.country}</span>}
-                            {profile.server_region && <span className="badge badge-blue">{REGION_LABELS[profile.server_region] || profile.server_region}</span>}
-                        </div>
+                    <h1 className="neon-text" style={{ fontSize: '2rem', fontWeight: 900, margin: 0 }}>{profile.display_name || profile.username}</h1>
+                    <p style={{ opacity: 0.4, fontSize: '0.9rem', fontWeight: 700, marginTop: '8px' }}>AGENT: @{profile.username}</p>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
+                        {profile.country && (
+                            <div style={{ fontSize: '10px', fontWeight: 900, color: '#fff', background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '50px', letterSpacing: '1px' }}>
+                                {profile.country.toUpperCase()}
+                            </div>
+                        )}
+                        {profile.server_region && (
+                            <div style={{ fontSize: '10px', fontWeight: 900, color: accentColor, background: `${accentColor}22`, border: `1px solid ${accentColor}44`, padding: '4px 12px', borderRadius: '50px', letterSpacing: '1px' }}>
+                                {REGION_LABELS[profile.server_region] || profile.server_region}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Bio */}
-                {profile.bio && (
-                    <div className="profile-bio">
-                        <p>{profile.bio}</p>
+                {/* ── BIO ── */}
+                <div style={{ padding: '0 40px 32px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <p style={{ margin: 0, fontSize: '0.95rem', color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.6 }}>
+                            {profile.bio || "This agent has not yet provided an operational briefing."}
+                        </p>
                     </div>
-                )}
+                </div>
 
-                {/* Linked accounts */}
+                {/* ── ACCOUNTS ── */}
                 {profile.linkedAccounts && profile.linkedAccounts.length > 0 && (
-                    <div className="profile-section">
-                        <h3 className="section-label">Linked Accounts</h3>
-                        <div className="linked-accounts">
+                    <div style={{ padding: '0 40px 32px' }}>
+                        <h4 style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.4, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <ShieldIcon size={12} /> SECURE LINKS
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {profile.linkedAccounts.map(acc => (
-                                <div key={acc.platform} className="linked-account">
-                                    <span className="platform-icon">{PLATFORM_ICONS[acc.platform] || '🔗'}</span>
-                                    <div>
-                                        <span className="platform-name">{acc.platform.charAt(0).toUpperCase() + acc.platform.slice(1)}</span>
-                                        {acc.platform_username && <span className="platform-username"> — {acc.platform_username}</span>}
+                                <div key={acc.platform} className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 20px', background: 'rgba(255,255,255,0.02)' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>{PLATFORM_ICONS[acc.platform] || '📡'}</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '12px', fontWeight: 900 }}>{acc.platform.toUpperCase()}</div>
+                                        {acc.platform_username && <div style={{ fontSize: '11px', opacity: 0.5 }}>{acc.platform_username}</div>}
                                     </div>
+                                    <div className="premium-button" style={{ padding: '4px 8px', fontSize: '9px' }}>VERIFIED</div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
 
-                {/* Member since */}
-                <div className="profile-footer">
-                    <span className="member-since">Member since {new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</span>
+                {/* ── FOOTER ── */}
+                <div style={{ padding: '24px 40px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '10px', opacity: 0.3, fontWeight: 700 }}>
+                        ENLISTED: {new Date(profile.created_at).toLocaleDateString().toUpperCase()}
+                    </div>
+                    <Link to="/" style={{ color: accentColor, textDecoration: 'none', fontSize: '10px', fontWeight: 900, letterSpacing: '2px' }}>
+                        BACK TO PORTAL
+                    </Link>
                 </div>
             </motion.div>
 
             <style>{`
-                .profile-page { min-height:100vh; background:#050a14; display:flex; align-items:flex-start; justify-content:center; padding:48px 20px; font-family:'Inter',sans-serif; position:relative; }
-                .profile-bg { position:absolute; inset:0; background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px); background-size:40px 40px; }
-                .profile-loading, .profile-error { min-height:100vh; display:flex; align-items:center; justify-content:center; color:#ff6b6b; font-family:'Inter',sans-serif; }
-                .spinner { width:32px; height:32px; border:3px solid rgba(0,212,255,0.2); border-top-color:#00d4ff; border-radius:50%; animation:spin .7s linear infinite; }
-                @keyframes spin { to { transform:rotate(360deg); } }
-                .profile-card { position:relative; z-index:1; background:rgba(255,255,255,0.03); border:1px solid rgba(0,212,255,0.15); border-radius:20px; width:100%; max-width:480px; overflow:hidden; }
-                .profile-header { display:flex; align-items:flex-start; gap:20px; padding:32px 32px 0; }
-                .avatar-ring { border-radius:50%; padding:3px; background:linear-gradient(135deg,#00d4ff,#0077cc); }
-                .profile-avatar { width:80px; height:80px; border-radius:50%; object-fit:cover; display:block; border:2px solid #050a14; }
-                .avatar-placeholder { width:80px; height:80px; border-radius:50%; background:rgba(0,212,255,0.15); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#00d4ff; border:2px solid #050a14; }
-                .profile-identity { flex:1; padding-top:4px; }
-                .profile-display-name { font-size:22px; font-weight:800; color:#fff; margin:0 0 4px; }
-                .profile-username { color:#3d5070; font-size:14px; margin:0 0 10px; }
-                .profile-badges { display:flex; gap:8px; flex-wrap:wrap; }
-                .badge { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#8fa3c7; border-radius:20px; padding:3px 12px; font-size:12px; font-weight:600; }
-                .badge-blue { background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,0.2); color:#00d4ff; }
-                .profile-bio { padding:20px 32px; color:#8fa3c7; font-size:14px; line-height:1.6; border-top:1px solid rgba(255,255,255,0.06); margin-top:20px; }
-                .profile-bio p { margin:0; }
-                .profile-section { padding:20px 32px; border-top:1px solid rgba(255,255,255,0.06); }
-                .section-label { font-size:11px; font-weight:700; color:#3d5070; text-transform:uppercase; letter-spacing:1px; margin:0 0 14px; }
-                .linked-accounts { display:flex; flex-direction:column; gap:10px; }
-                .linked-account { display:flex; align-items:center; gap:12px; background:rgba(255,255,255,0.03); border-radius:10px; padding:10px 14px; }
-                .platform-icon { font-size:18px; }
-                .platform-name { font-size:13px; font-weight:700; color:#fff; }
-                .platform-username { font-size:13px; color:#6b7fa3; }
-                .profile-footer { padding:20px 32px; border-top:1px solid rgba(255,255,255,0.06); }
-                .member-since { font-size:12px; color:#3d5070; }
+                @keyframes pulse { 0% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.05); } 100% { opacity: 0.3; transform: scale(1); } }
             `}</style>
         </div>
     );

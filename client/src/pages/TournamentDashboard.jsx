@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // 🛡️ CRASH FIX: useCallback imported
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon } from '../components/SharedUI';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon, RefreshIcon, ActivityIcon, ShieldIcon } from '../components/SharedUI';
 import useVetoStore from '../store/useVetoStore'; 
+import useOrgBranding from '../hooks/useOrgBranding';
 
 const API_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
-const LOGO_URL = import.meta.env.VITE_ORG_LOGO_URL || "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
 
+/**
+ * ⚡ UI LAYER — PREMIUM TOURNAMENT DASHBOARD
+ * =============================================================================
+ * Responsibility: Command center for generating and managing veto sessions.
+ * Features: Multi-mode veto generation (VRS, Faceit, Wingman, Custom), 
+ *           automated timer controls, and real-time history telemetry.
+ * =============================================================================
+ */
 export default function TournamentDashboard() {
     const { orgId, tournamentId } = useParams();
     const navigate = useNavigate();
-    
+    const { branding } = useOrgBranding(orgId);
     const { createMatch: storeCreateMatch, serverError } = useVetoStore();
 
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [teamA, setTeamA] = useState('');
     const [teamB, setTeamB] = useState('');
     const [teamALogo, setTeamALogo] = useState('');
@@ -21,7 +29,7 @@ export default function TournamentDashboard() {
     const [useTimer, setUseTimer] = useState(false);
     const [timerDuration, setTimerDuration] = useState(60);
     const [useCoinFlip, setUseCoinFlip] = useState(false);
-    const [tempWebhook, setTempWebhook] = useState(''); // 🛡️ FEATURE RESTORE: Custom per-match webhooks
+    const [tempWebhook, setTempWebhook] = useState('');
     
     const [isGenerating, setIsGenerating] = useState(false);
     const [inputError, setInputError] = useState(false);
@@ -37,8 +45,6 @@ export default function TournamentDashboard() {
     const fileInputA = useRef(null);
     const fileInputB = useRef(null);
 
-    const styles = useMemo(() => getStyles(isMobile), [isMobile]);
-
     const fetchHistory = useCallback(() => {
         fetch(`${API_URL}/api/history?tournamentId=${tournamentId}`)
             .then(r => r.ok ? r.json() : { matches: [] })
@@ -48,26 +54,20 @@ export default function TournamentDashboard() {
     }, [tournamentId]);
 
     useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-
         fetch(`${API_URL}/api/maps`).then(r => r.ok ? r.json() : []).then(data => {
             if (data.length > 0) {
                 setAvailableMaps(data);
                 setCustomSelectedMaps(data.map(m => m.name));
             }
         }).catch(() => { });
-
         fetchHistory();
-
-        return () => window.removeEventListener('resize', handleResize);
     }, [fetchHistory]);
 
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
         if (file) {
             const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-            if (!ALLOWED_TYPES.includes(file.type)) return alert("Invalid file type. Only JPG, PNG, WEBP, or GIF.");
+            if (!ALLOWED_TYPES.includes(file.type)) return alert("Invalid file type.");
             if (file.size > 2000000) return alert("File too large. Max 2MB.");
             
             const reader = new FileReader();
@@ -93,26 +93,17 @@ export default function TournamentDashboard() {
         } else if (vetoMode === 'custom') format = 'custom';
 
         if (format === 'custom') {
-            if (customSelectedMaps.length === 0) return alert("Please select at least one map.");
-            if (customSequence.length === 0) return alert("Please define at least one step in the sequence.");
+            if (customSelectedMaps.length === 0) return alert("Select at least one map.");
+            if (customSequence.length === 0) return alert("Define at least one step.");
         }
 
         setIsGenerating(true);
-        
         storeCreateMatch({
-            orgId, 
-            tournamentId, 
-            teamA: teamA.trim().slice(0, 50), 
-            teamB: teamB.trim().slice(0, 50), 
-            teamALogo, 
-            teamBLogo, 
-            format,
+            orgId, tournamentId, teamA: teamA.trim(), teamB: teamB.trim(), 
+            teamALogo, teamBLogo, format,
             customMapNames: format === 'custom' ? customSelectedMaps : null,
             customSequence: format === 'custom' ? customSequence : null,
-            useTimer, 
-            useCoinFlip, 
-            timerDuration: useTimer ? parseInt(timerDuration) : 60,
-            tempWebhookUrl: tempWebhook.trim() // 🛡️ FEATURE RESTORE
+            useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim()
         }, (response) => {
             const baseUrl = `${window.location.origin}/${orgId}/${tournamentId}/veto/${response.roomId}`;
             setCreatedLinks({
@@ -121,14 +112,14 @@ export default function TournamentDashboard() {
                 teamB: `${baseUrl}?key=${response.keys.B}`
             });
             setIsGenerating(false);
-            setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false); setTempWebhook('');
+            setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false);
             fetchHistory(); 
         });
     };
 
-    const handleCopyLogs = (text) => { 
+    const copyToClipboard = (text) => { 
         navigator.clipboard.writeText(text).then(() => { 
-            setShowNotification(true); setTimeout(() => setShowNotification(false), 3000); 
+            setShowNotification(true); setTimeout(() => setShowNotification(false), 2000); 
         }); 
     };
 
@@ -137,183 +128,219 @@ export default function TournamentDashboard() {
         else setCustomSelectedMaps([...customSelectedMaps, mapName]);
     };
 
-    const addUserMap = () => {
-        if (!userCustomMap.trim()) return;
-        const newName = userCustomMap.trim().slice(0, 50);
-        setAvailableMaps([...availableMaps, { name: newName }]);
-        setCustomSelectedMaps([...customSelectedMaps, newName]);
-        setUserCustomMap('');
-    };
-
     const addSequenceStep = (team, action) => setCustomSequence([...customSequence, { t: team, a: action }]);
     const removeSequenceStep = (idx) => { const s = [...customSequence]; s.splice(idx, 1); setCustomSequence(s); };
 
+    const accentColor = branding?.primary_color || 'var(--brand-primary, #00d4ff)';
+
     return (
-        <div style={styles.container}>
+        <div className="tournament-page" style={{ minHeight: '100vh', background: '#050a14', color: '#fff', padding: '40px' }}>
             <AnimatedBackground />
             
-            <style>
-                {`
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-                `}
-            </style>
-
-            <button onClick={() => navigate('/')} style={styles.homeBtn}><HomeIcon /> PORTAL</button>
-            
-            <div style={styles.glassPanel}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '10px' }}>
-                    <img src={LOGO_URL} alt="Logo" onError={e => { e.target.style.display = 'none'; }} style={styles.logo} />
-                    <h1 style={styles.neonTitle}>{(orgId || '').toUpperCase()}</h1>
+            <header style={{ maxWidth: '1200px', margin: '0 auto 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
+                <Link to={`/org/${orgId}`} className="glass-panel" style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#fff', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>
+                    <HomeIcon /> BACK TO HQ
+                </Link>
+                <div style={{ textAlign: 'center' }}>
+                    <h1 className="neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0 }}>{tournamentId.toUpperCase()}</h1>
+                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '4px', opacity: 0.5, marginTop: '4px' }}>OPERATIONS COMMAND</div>
                 </div>
-                <h3 style={{ color: '#aaa', letterSpacing: '4px', marginBottom: '30px', fontSize: isMobile ? '0.8rem' : '1rem' }}>{(tournamentId || '').toUpperCase()} DASHBOARD</h3>
+                <div style={{ width: '130px' }} /> {/* Spacer */}
+            </header>
 
-                {serverError && <div style={{ color: '#ff4444', marginBottom: '15px', fontWeight: 'bold' }}>⚠️ {serverError}</div>}
-
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', gap: '10px', flexWrap: 'wrap' }}>
-                    <button onClick={() => setVetoMode('vrs')} style={vetoMode === 'vrs' ? styles.modeBtnActive : styles.modeBtn}>VRS VETO</button>
-                    <button onClick={() => setVetoMode('faceit')} style={vetoMode === 'faceit' ? styles.modeBtnActive : styles.modeBtn}>FACEIT STYLE</button>
-                    <button onClick={() => setVetoMode('wingman')} style={vetoMode === 'wingman' ? styles.modeBtnActive : styles.modeBtn}>WINGMAN VETO</button>
-                    <button onClick={() => setVetoMode('custom')} style={vetoMode === 'custom' ? styles.modeBtnActive : styles.modeBtn}>CUSTOM VETO</button>
-                </div>
-
-                <input style={{ ...styles.input, border: inputError && !teamA.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamA} maxLength={50} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="TEAM A NAME (REQUIRED)" />
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputA} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'A')} />
-                    <button onClick={() => fileInputA.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <UploadIcon /> {teamALogo ? "CHANGE LOGO A" : "ATTACH LOGO A"}
-                    </button>
-                    {teamALogo && <img src={teamALogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
-                </div>
-
-                <input style={{ ...styles.input, border: inputError && !teamB.trim() ? '2px solid #ff4444' : '1px solid #333' }} value={teamB} maxLength={50} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="TEAM B NAME (REQUIRED)" />
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-                    <input type="file" ref={fileInputB} style={{ display: 'none' }} accept="image/jpeg, image/png, image/webp, image/gif" onChange={(e) => handleLogoUpload(e, 'B')} />
-                    <button onClick={() => fileInputB.current.click()} style={{ ...styles.tinyBtn, padding: '5px 15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <UploadIcon /> {teamBLogo ? "CHANGE LOGO B" : "ATTACH LOGO B"}
-                    </button>
-                    {teamBLogo && <img src={teamBLogo} alt="Preview" style={{ width: '30px', height: '30px', objectFit: 'contain', border: '1px solid #333', borderRadius: '3px' }} />}
-                </div>
-
-                <input style={{ ...styles.input, fontSize: '0.9rem', padding: '10px', marginBottom: '15px' }} value={tempWebhook} onChange={e => setTempWebhook(e.target.value)} placeholder="OPTIONAL: Custom Discord Webhook URL" />
-
-                <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#aaa', fontSize: '0.9rem', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input type="checkbox" checked={useTimer} onChange={e => setUseTimer(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
-                        <span>Enable Auto-Ban Timer</span>
-                    </div>
-                    {useTimer && (
-                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                            {[30, 45, 60, 90, 120].map(seconds => (
-                                <button key={seconds} onClick={() => setTimerDuration(seconds)}
-                                    style={{ ...styles.modeBtn, background: timerDuration === seconds ? '#00d4ff' : 'transparent', color: timerDuration === seconds ? '#000' : '#aaa', borderColor: timerDuration === seconds ? '#00d4ff' : '#333', padding: '5px 15px', fontSize: '0.9rem' }}>
-                                    {seconds}s
+            <main style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '40px', position: 'relative', zIndex: 10 }}>
+                
+                {/* ── GENERATE MATCH ── */}
+                <section>
+                    <div className="glass-panel" style={{ padding: '40px' }}>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px', color: accentColor }}>INITIALIZE NEW MATCH</h2>
+                        
+                        {/* Mode Selection */}
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '40px', flexWrap: 'wrap' }}>
+                            {['vrs', 'faceit', 'wingman', 'custom'].map(m => (
+                                <button 
+                                    key={m} 
+                                    onClick={() => setVetoMode(m)}
+                                    className={vetoMode === m ? "premium-button" : "glass-panel"}
+                                    style={{ 
+                                        padding: '10px 20px', fontSize: '11px', fontWeight: 900, letterSpacing: '2px', cursor: 'pointer',
+                                        background: vetoMode === m ? accentColor : 'rgba(255,255,255,0.05)',
+                                        border: vetoMode === m ? 'none' : '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                >
+                                    {m.toUpperCase()} MODE
                                 </button>
                             ))}
                         </div>
-                    )}
-                </div>
 
-                <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#ffd700', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={useCoinFlip} onChange={e => setUseCoinFlip(e.target.checked)} style={{ transform: 'scale(1.2)' }} />
-                    <span>Enable Coin Flip</span>
-                </div>
-
-                {vetoMode !== 'custom' ? (
-                    <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
-                        <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo1')}>Bo1</button>
-                        <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo3')}>Bo3</button>
-                        {vetoMode !== 'wingman' && <button style={styles.modeBtn} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('bo5')}>Bo5</button>}
-                    </div>
-                ) : (
-                    <div style={{ marginTop: '40px', textAlign: 'left', borderTop: '1px solid #333', paddingTop: '30px' }}>
-                        <h4 style={{ color: '#00d4ff', marginBottom: '15px' }}>1. SELECT MAP POOL</h4>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '15px' }}>
-                            {availableMaps.map(m => (
-                                <div key={m.name} onClick={() => toggleMapSelection(m.name)}
-                                    style={{ padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', border: customSelectedMaps.includes(m.name) ? '1px solid #00ff00' : '1px solid #333', color: customSelectedMaps.includes(m.name) ? '#fff' : '#666', background: customSelectedMaps.includes(m.name) ? 'rgba(0,255,0,0.1)' : 'transparent' }}>
-                                    {m.name}
-                                </div>
-                            ))}
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
-                            <span style={{ fontSize: '0.8rem', color: '#aaa' }}>ADD CUSTOM MAP:</span>
-                            <input style={{ ...styles.input, margin: 0, width: '150px', fontSize: '0.9rem', padding: '5px', height: '35px', textAlign: 'left' }} placeholder="Map Name" value={userCustomMap} onChange={e => setUserCustomMap(e.target.value)} />
-                            <button onClick={addUserMap} style={{ ...styles.tinyBtn, height: '35px', border: '1px solid #00ff00', color: '#00ff00', padding: '0 15px', fontWeight: 'bold' }}>ADD</button>
-                        </div>
-                        <h4 style={{ color: '#00d4ff' }}>2. DEFINE BAN ORDER</h4>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'ban')}>+ A BAN</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'ban')}>+ B BAN</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'pick')}>+ A PICK</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'pick')}>+ B PICK</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('A', 'side')}>+ A SIDE</button>
-                            <button style={styles.tinyBtn} onClick={() => addSequenceStep('B', 'side')}>+ B SIDE</button>
-                            <button style={{ ...styles.tinyBtn, borderColor: '#ffa500', color: '#ffa500' }} onClick={() => addSequenceStep('System', 'knife')}>+ KNIFE</button>
-                        </div>
-                        <div style={{ background: '#000', padding: '10px', borderRadius: '5px', fontSize: '0.8rem', color: '#aaa', minHeight: '50px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                            {customSequence.length === 0 ? "No steps defined." : customSequence.map((s, i) => (
-                                <span key={i} onClick={() => removeSequenceStep(i)} style={{ background: '#222', padding: '2px 6px', borderRadius: '3px', border: '1px solid #444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    {i + 1}. {s.t} {s.a.toUpperCase()} <span style={{ color: '#ff4444', fontWeight: 'bold' }}>x</span>
-                                </span>
-                            ))}
-                        </div>
-                        <button style={{ ...styles.modeBtn, width: '100%', marginTop: '20px', borderColor: '#00ff00', color: '#00ff00' }} disabled={isGenerating} onClick={() => handleCreateMatchSubmit('custom')}>GENERATE CUSTOM MATCH</button>
-                    </div>
-                )}
-
-                {isGenerating && <div style={styles.generatingBox}><div style={styles.spinner}></div></div>}
-
-                {createdLinks && !isGenerating && (
-                    <div style={styles.linksBox}>
-                        <div style={styles.linkRow}><span style={{ color: '#aaa', fontWeight: 'bold', minWidth: '70px' }}>ADMIN:</span> <input readOnly style={styles.linkInput} value={createdLinks.admin} onClick={() => handleCopyLogs(createdLinks.admin)} /><button onClick={() => window.open(createdLinks.admin, '_blank')} style={styles.iconBtn}><ExternalLinkIcon /></button></div>
-                        <div style={styles.linkRow}><span style={{ color: '#00d4ff', fontWeight: 'bold', minWidth: '70px' }}>TEAM A:</span> <input readOnly style={styles.linkInput} value={createdLinks.teamA} onClick={() => handleCopyLogs(createdLinks.teamA)} /><button onClick={() => window.open(createdLinks.teamA, '_blank')} style={{ ...styles.iconBtn, color: '#00d4ff' }}><ExternalLinkIcon /></button></div>
-                        <div style={styles.linkRow}><span style={{ color: '#ff0055', fontWeight: 'bold', minWidth: '70px' }}>TEAM B:</span> <input readOnly style={styles.linkInput} value={createdLinks.teamB} onClick={() => handleCopyLogs(createdLinks.teamB)} /><button onClick={() => window.open(createdLinks.teamB, '_blank')} style={{ ...styles.iconBtn, color: '#ff0055' }}><ExternalLinkIcon /></button></div>
-                    </div>
-                )}
-            </div>
-
-            {historyData.length > 0 && (
-                <div style={{ ...styles.glassPanel, marginTop: '30px' }}>
-                    <h3 style={{ color: '#00d4ff', borderBottom: '1px solid #333', paddingBottom: '10px' }}>RECENT MATCHES</h3>
-                    <div style={{ maxHeight: '300px', overflowY: 'auto', textAlign: 'left' }}>
-                        {historyData.map(match => (
-                            <div key={match.id} style={{ background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: match.finished ? '4px solid #333' : '4px solid #00ff00' }}>
-                                <div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: match.finished ? '#888' : '#fff' }}>{match.teamA} <span style={{color: '#555', fontSize:'0.9rem'}}>VS</span> {match.teamB}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>{new Date(match.date).toLocaleDateString()} | Format: {match.format.toUpperCase()}</div>
-                                </div>
-                                <button onClick={() => navigate(`/${orgId}/${tournamentId}/veto/${match.id}`)} style={{ background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '5px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                    SPECTATE
+                        {/* Team Config */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>TEAM ALPHA</label>
+                                <input 
+                                    style={{ background: 'rgba(0,0,0,0.3)', border: inputError && !teamA ? '1px solid #ff4b2b' : '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 }}
+                                    value={teamA} onChange={e => { setTeamA(e.target.value); setInputError(false); }} placeholder="NAME"
+                                />
+                                <button className="glass-panel" onClick={() => fileInputA.current.click()} style={{ padding: '8px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <UploadIcon /> {teamALogo ? "CHANGE LOGO" : "ATTACH LOGO"}
                                 </button>
+                                <input type="file" ref={fileInputA} style={{ display: 'none' }} onChange={e => handleLogoUpload(e, 'A')} />
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>TEAM BRAVO</label>
+                                <input 
+                                    style={{ background: 'rgba(0,0,0,0.3)', border: inputError && !teamB ? '1px solid #ff4b2b' : '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 }}
+                                    value={teamB} onChange={e => { setTeamB(e.target.value); setInputError(false); }} placeholder="NAME"
+                                />
+                                <button className="glass-panel" onClick={() => fileInputB.current.click()} style={{ padding: '8px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <UploadIcon /> {teamBLogo ? "CHANGE LOGO" : "ATTACH LOGO"}
+                                </button>
+                                <input type="file" ref={fileInputB} style={{ display: 'none' }} onChange={e => handleLogoUpload(e, 'B')} />
+                            </div>
+                        </div>
 
-            <div style={{ ...styles.notification, opacity: showNotification ? 1 : 0, transform: showNotification ? 'translateY(0)' : 'translateY(20px)' }}><CheckIcon /> COPIED TO CLIPBOARD</div>
+                        {/* Match Settings */}
+                        <div className="glass-panel" style={{ padding: '24px', background: 'rgba(0,0,0,0.2)', marginBottom: '32px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap', gap: '24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => setUseTimer(!useTimer)}>
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '4px', border: `2px solid ${accentColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: useTimer ? accentColor : 'transparent' }}>
+                                        {useTimer && <CheckIcon size={14} color="#000" />}
+                                    </div>
+                                    <span style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '1px' }}>AUTO-BAN TIMER</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => setUseCoinFlip(!useCoinFlip)}>
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '4px', border: '2px solid #ffd700', display: 'flex', alignItems: 'center', justifyContent: 'center', background: useCoinFlip ? '#ffd700' : 'transparent' }}>
+                                        {useCoinFlip && <CheckIcon size={14} color="#000" />}
+                                    </div>
+                                    <span style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '1px' }}>COIN FLIP START</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Format buttons or Custom area */}
+                        {vetoMode !== 'custom' ? (
+                            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                                {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
+                                    <button 
+                                        key={format} 
+                                        className="premium-button" 
+                                        style={{ flex: 1, padding: '16px', fontSize: '14px' }}
+                                        onClick={() => handleCreateMatchSubmit(format)}
+                                        disabled={isGenerating}
+                                    >
+                                        {isGenerating ? <RefreshIcon className="spin" size={16} /> : `LAUNCH ${format.toUpperCase()}`}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ animation: 'fadeIn 0.5s' }}>
+                                <h4 style={{ fontSize: '10px', color: accentColor, letterSpacing: '2px', marginBottom: '16px' }}>1. MAP POOL</h4>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
+                                    {availableMaps.map(m => (
+                                        <div 
+                                            key={m.name} 
+                                            onClick={() => toggleMapSelection(m.name)}
+                                            className="glass-panel"
+                                            style={{ 
+                                                padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontWeight: 700,
+                                                borderColor: customSelectedMaps.includes(m.name) ? accentColor : 'rgba(255,255,255,0.1)',
+                                                background: customSelectedMaps.includes(m.name) ? `${accentColor}22` : 'rgba(0,0,0,0.2)'
+                                            }}
+                                        >
+                                            {m.name}
+                                        </div>
+                                    ))}
+                                </div>
+                                <h4 style={{ fontSize: '10px', color: accentColor, letterSpacing: '2px', marginBottom: '16px' }}>2. SEQUENCE</h4>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
+                                    {['A', 'B'].map(t => (
+                                        <React.Fragment key={t}>
+                                            <button className="glass-panel" style={{ padding: '6px 12px', fontSize: '10px', fontWeight:900 }} onClick={() => addSequenceStep(t, 'ban')}>+ {t} BAN</button>
+                                            <button className="glass-panel" style={{ padding: '6px 12px', fontSize: '10px', fontWeight:900 }} onClick={() => addSequenceStep(t, 'pick')}>+ {t} PICK</button>
+                                        </React.Fragment>
+                                    ))}
+                                    <button className="glass-panel" style={{ padding: '6px 12px', fontSize: '10px', fontWeight:900, color: '#ffd700' }} onClick={() => addSequenceStep('System', 'knife')}>+ KNIFE</button>
+                                </div>
+                                <div className="glass-panel" style={{ minHeight: '60px', padding: '16px', background: 'rgba(0,0,0,0.4)', display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '32px' }}>
+                                    {customSequence.map((s, i) => (
+                                        <span key={i} onClick={() => removeSequenceStep(i)} style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '4px', fontSize: '10px', fontWeight: 900, cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            {i+1}. {s.t} {s.a.toUpperCase()} <span style={{ color: '#ff4b2b' }}>×</span>
+                                        </span>
+                                    ))}
+                                </div>
+                                <button className="premium-button" style={{ width: '100%', padding: '16px' }} onClick={() => handleCreateMatchSubmit('custom')}>INITIALIZE CUSTOM PARAMETERS</button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Result Links */}
+                    {createdLinks && (
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ marginTop: '24px', padding: '24px', border: `1px solid ${accentColor}44`, background: `${accentColor}11` }}>
+                            <h3 style={{ fontSize: '12px', fontWeight: 900, marginBottom: '20px', letterSpacing: '2px' }}>VETO ACCESS AUTHORIZED</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {['admin', 'teamA', 'teamB'].map(key => (
+                                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 900, width: '60px', color: key === 'admin' ? '#fff' : key === 'teamA' ? '#00d4ff' : '#ff0055' }}>{key.toUpperCase()}</span>
+                                        <input readOnly value={createdLinks[key]} onClick={() => copyToClipboard(createdLinks[key])} style={{ flex: 1, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '4px', color: '#fff', fontSize: '11px', cursor: 'pointer' }} />
+                                        <button className="glass-panel" style={{ padding: '8px', cursor: 'pointer' }} onClick={() => window.open(createdLinks[key], '_blank')}><ExternalLinkIcon size={12} /></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </section>
+
+                {/* ── HISTORY SIDEBAR ── */}
+                <aside>
+                    <div className="glass-panel" style={{ padding: '24px', height: 'fit-content' }}>
+                        <h2 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <ActivityIcon size={18} color={accentColor} /> ARCHIVE DATA
+                        </h2>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {historyData.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.2)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px' }}>NO RECORDS FOUND</div>
+                            ) : (
+                                historyData.slice(0, 10).map(match => (
+                                    <div 
+                                        key={match.id} 
+                                        className="match-history-card"
+                                        style={{ padding: '16px', borderLeft: `3px solid ${match.finished ? 'rgba(255,255,255,0.1)' : '#00ff88'}`, background: 'rgba(0,0,0,0.2)', borderRadius: '0 8px 8px 0', border: '1px solid rgba(255,255,255,0.03)' }}
+                                    >
+                                        <div style={{ fontWeight: 900, fontSize: '11px', marginBottom: '4px' }}>
+                                            {match.teamA} <span style={{ opacity: 0.3 }}>VS</span> {match.teamB}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.4 }}>{new Date(match.date).toLocaleDateString()} | {match.format.toUpperCase()}</span>
+                                            <button 
+                                                onClick={() => navigate(`/${orgId}/${tournamentId}/veto/${match.id}`)}
+                                                style={{ padding: '4px 12px', fontSize: '9px', fontWeight: 900, background: 'none', border: `1px solid ${accentColor}`, color: accentColor, borderRadius: '4px', cursor: 'pointer' }}
+                                            >
+                                                SPECTATE
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </aside>
+            </main>
+
+            {/* Notification Toast */}
+            <AnimatePresence>
+                {showNotification && (
+                    <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', background: '#00ff88', color: '#000', padding: '12px 32px', borderRadius: '50px', fontWeight: 900, letterSpacing: '2px', zIndex: 10000 }}>
+                        <CheckIcon size={14} /> LINK SECURED
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <style>{`
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                .match-history-card:hover { background: rgba(255,255,255,0.05) !important; }
+            `}</style>
         </div>
     );
 }
-
-const getStyles = (isMobile) => ({
-    container: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'Rajdhani', sans-serif", color: 'white', padding: isMobile ? '20px 10px' : '40px 20px', boxSizing: 'border-box', position: 'relative' },
-    glassPanel: { background: 'rgba(15, 18, 25, 0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px', padding: isMobile ? '20px' : '40px', width: '100%', maxWidth: '600px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10 },
-    logo: { width: isMobile ? '40px' : '60px', height: isMobile ? '40px' : '60px', borderRadius: '50%', border: '2px solid #00d4ff', boxShadow: '0 0 15px rgba(0, 212, 255, 0.5)' },
-    neonTitle: { fontSize: isMobile ? '2rem' : '3.5rem', fontWeight: '900', margin: '0', background: 'linear-gradient(to right, #fff, #00d4ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 0 20px rgba(0, 212, 255, 0.3)', letterSpacing: '2px' },
-    input: { width: '100%', maxWidth: '400px', padding: '15px', margin: '15px 0', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', borderRadius: '8px', color: 'white', fontSize: '1.2rem', textAlign: 'center', outline: 'none', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', boxSizing: 'border-box' },
-    modeBtn: { background: 'transparent', border: '1px solid #333', color: '#888', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', transition: 'all 0.3s' },
-    modeBtnActive: { background: 'rgba(0, 212, 255, 0.1)', border: '1px solid #00d4ff', color: '#00d4ff', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 'bold', boxShadow: '0 0 10px rgba(0, 212, 255, 0.2)' },
-    tinyBtn: { background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '2px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem', fontFamily: "'Rajdhani', sans-serif" },
-    generatingBox: { marginTop: '20px', padding: '20px', display: 'flex', justifyContent: 'center' },
-    spinner: { width: '40px', height: '40px', border: '4px solid rgba(0, 212, 255, 0.1)', borderTopColor: '#00d4ff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
-    linksBox: { marginTop: '25px', background: '#000', padding: '15px', borderRadius: '8px', border: '1px solid #333', textAlign: 'left', animation: 'fadeIn 0.5s ease-out' },
-    linkRow: { display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '10px' },
-    linkInput: { flex: 1, background: '#111', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer', outline: 'none' },
-    iconBtn: { background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '5px' },
-    notification: { position: 'fixed', bottom: '20px', left: '50%', marginLeft: '-125px', width: '250px', background: '#00ff00', color: '#000', padding: '10px 20px', borderRadius: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', zIndex: 4000, transition: 'all 0.3s ease' },
-    homeBtn: { position: 'absolute', top: '20px', left: '20px', background: 'rgba(0,0,0,0.5)', border: '1px solid #333', color: '#aaa', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 20 }
-});

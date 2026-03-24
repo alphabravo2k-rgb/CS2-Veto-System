@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
+import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon } from '../components/SharedUI';
 
+/**
+ * ⚡ UI LAYER — PREMIUM AUTHENTICATION PORTAL
+ * =============================================================================
+ * Responsibility: Secure gateway for agent authorization.
+ * Features: Hardware-accelerated glassmorphism, neon-glow signaling,
+ *           and seamless biometric-inspired state transitions.
+ * =============================================================================
+ */
 export default function Login() {
     const navigate = useNavigate();
     const { login } = useAuthStore();
@@ -21,150 +30,96 @@ export default function Login() {
             await login({ email: form.email.trim(), password: form.password });
             navigate('/');
         } catch (err) {
-            setError(err.message);
+            setError(err.message.toUpperCase());
         } finally {
             setLoading(false);
         }
     };
 
+    const accentColor = 'var(--brand-primary, #00d4ff)';
+
     return (
-        <div className="auth-page">
-            <div className="auth-bg-grid" />
+        <div className="auth-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', padding: '20px' }}>
+            <AnimatedBackground />
+
             <motion.div
-                className="auth-card"
-                initial={{ opacity: 0, y: 32 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="glass-panel"
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                style={{ width: '100%', maxWidth: '440px', padding: '48px', position: 'relative', overflow: 'hidden' }}
             >
-                <div className="auth-logo">
-                    <span className="auth-logo-icon">⚡</span>
-                    <h1>VetoPortal</h1>
+                {/* ── LOGO & HEADER ── */}
+                <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                    <div style={{ width: '60px', height: '60px', margin: '0 auto 20px', background: `${accentColor}22`, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${accentColor}44`, boxShadow: `0 0 20px ${accentColor}22` }}>
+                        <ShieldIcon size={32} color={accentColor} />
+                    </div>
+                    <h1 className="neon-text" style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>VETO.GG</h1>
+                    <div style={{ fontSize: '10px', fontWeight: 900, opacity: 0.4, letterSpacing: '4px', marginTop: '4px' }}>ACCESS GRANTED ONLY</div>
                 </div>
-                <h2 className="auth-title">Sign In</h2>
-                <p className="auth-subtitle">Access your tournament dashboard</p>
 
-                {error && (
-                    <motion.div
-                        className="auth-error"
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                    >
-                        {error}
-                    </motion.div>
-                )}
+                <AnimatePresence mode="wait">
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            style={{ 
+                                background: 'rgba(255,75,43,0.1)', border: '1px solid rgba(255,75,43,0.2)', 
+                                color: '#ff4b2b', padding: '12px 16px', borderRadius: '8px', 
+                                marginBottom: '24px', fontSize: '11px', fontWeight: 900, letterSpacing: '1px'
+                            }}
+                        >
+                            [ERR] {error}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                <form className="auth-form" onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label htmlFor="email">Email</label>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>COORDINATES (EMAIL)</label>
                         <input
-                            id="email"
-                            name="email"
-                            type="email"
-                            placeholder="you@example.com"
-                            value={form.email}
-                            onChange={handleChange}
-                            required
-                            autoComplete="email"
+                            name="email" type="email" required
+                            placeholder="agent@esports.network"
+                            value={form.email} onChange={handleChange}
+                            style={{ 
+                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', 
+                                padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 
+                            }}
                         />
                     </div>
 
-                    <div className="form-group">
-                        <label htmlFor="password">Password</label>
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>SECURITY PHRASE</label>
                         <input
-                            id="password"
-                            name="password"
-                            type="password"
+                            name="password" type="password" required
                             placeholder="••••••••"
-                            value={form.password}
-                            onChange={handleChange}
-                            required
-                            autoComplete="current-password"
+                            value={form.password} onChange={handleChange}
+                            style={{ 
+                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', 
+                                padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 
+                            }}
                         />
                     </div>
 
                     <button
                         type="submit"
-                        className="btn-primary btn-full"
+                        className="premium-button"
                         disabled={loading}
-                        id="login-submit"
+                        style={{ width: '100%', padding: '18px', marginTop: '12px', fontSize: '13px' }}
                     >
-                        {loading ? <span className="btn-spinner" /> : 'Sign In'}
+                        {loading ? <RefreshIcon className="spin" size={16} /> : 'INITIALIZE SESSION'}
                     </button>
                 </form>
 
-                <p className="auth-footer">
-                    No account?{' '}
-                    <Link to="/register" className="auth-link">Create one</Link>
-                </p>
+                <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '12px', fontWeight: 600, opacity: 0.6 }}>
+                    NO CLEARANCE? <Link to="/register" style={{ color: accentColor, textDecoration: 'none', fontWeight: 900 }}>ENLIST NOW</Link>
+                </div>
             </motion.div>
 
             <style>{`
-                .auth-page {
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: #050a14;
-                    position: relative;
-                    overflow: hidden;
-                    font-family: 'Inter', sans-serif;
-                }
-                .auth-bg-grid {
-                    position: absolute; inset: 0;
-                    background-image:
-                        linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
-                    background-size: 40px 40px;
-                }
-                .auth-card {
-                    position: relative; z-index: 1;
-                    background: rgba(255,255,255,0.03);
-                    border: 1px solid rgba(0,212,255,0.15);
-                    border-radius: 20px;
-                    padding: 48px 44px;
-                    width: 100%; max-width: 420px;
-                    backdrop-filter: blur(20px);
-                    box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,212,255,0.06);
-                }
-                .auth-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-                .auth-logo-icon { font-size: 24px; }
-                .auth-logo h1 { font-size: 20px; font-weight: 800; color: #00d4ff; letter-spacing: -0.5px; margin: 0; }
-                .auth-title { font-size: 26px; font-weight: 700; color: #fff; margin: 0 0 6px; }
-                .auth-subtitle { color: #6b7fa3; font-size: 14px; margin: 0 0 28px; }
-                .auth-error {
-                    background: rgba(255,60,60,0.1); border: 1px solid rgba(255,60,60,0.3);
-                    color: #ff6b6b; border-radius: 10px; padding: 12px 16px;
-                    font-size: 13px; margin-bottom: 20px;
-                }
-                .auth-form { display: flex; flex-direction: column; gap: 18px; }
-                .form-group { display: flex; flex-direction: column; gap: 7px; }
-                .form-group label { font-size: 13px; font-weight: 600; color: #8fa3c7; letter-spacing: 0.3px; }
-                .form-group input {
-                    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-                    border-radius: 10px; padding: 12px 16px; color: #fff; font-size: 15px;
-                    transition: border-color 0.2s;
-                    outline: none;
-                }
-                .form-group input:focus { border-color: rgba(0,212,255,0.4); background: rgba(0,212,255,0.04); }
-                .form-group input::placeholder { color: #3d5070; }
-                .btn-primary {
-                    background: linear-gradient(135deg, #00d4ff, #0077cc);
-                    color: #fff; border: none; border-radius: 10px;
-                    padding: 13px 24px; font-size: 15px; font-weight: 700;
-                    cursor: pointer; transition: opacity 0.2s, transform 0.1s;
-                    display: flex; align-items: center; justify-content: center;
-                }
-                .btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-                .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-                .btn-full { width: 100%; }
-                .btn-spinner {
-                    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
-                    border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
-                }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: #6b7fa3; }
-                .auth-link { color: #00d4ff; text-decoration: none; font-weight: 600; }
-                .auth-link:hover { text-decoration: underline; }
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             `}</style>
         </div>
     );

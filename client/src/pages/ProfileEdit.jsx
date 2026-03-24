@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
+import { AnimatedBackground, CheckIcon, RefreshIcon, ShieldIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 
 const REGIONS  = ['EU','NA','SEA','ME','Faceit'];
 const PLATFORMS = [
@@ -10,6 +11,14 @@ const PLATFORMS = [
     { id: 'faceit', label: '🔥 FACEIT', placeholder: 'FACEIT username' },
 ];
 
+/**
+ * ⚡ UI LAYER — PREMIUM PROFILE EDITOR
+ * =============================================================================
+ * Responsibility: Secure interface for agent calibration and account linking.
+ * Features: Multi-phase glass forms, real-time validation, and 
+ *           integrated identity telemetry.
+ * =============================================================================
+ */
 export default function ProfileEdit() {
     const navigate = useNavigate();
     const { authFetch, user } = useAuthStore();
@@ -21,7 +30,6 @@ export default function ProfileEdit() {
     const [error,    setError]    = useState('');
     const [success,  setSuccess]  = useState('');
 
-    // Platform link state
     const [linkPlatform, setLinkPlatform] = useState({ platform: '', platformId: '', platformUsername: '' });
     const [linkSaving, setLinkSaving] = useState(false);
 
@@ -41,7 +49,7 @@ export default function ProfileEdit() {
             })
             .catch(() => setError('Failed to load profile'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [authFetch]);
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -66,7 +74,8 @@ export default function ProfileEdit() {
                 throw new Error(msg);
             }
             setProfile(data);
-            setSuccess('Profile saved!');
+            setSuccess('CALIBRATION COMPLETE');
+            setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -85,7 +94,8 @@ export default function ProfileEdit() {
             if (!res.ok) throw new Error(data.error);
             setProfile(p => ({ ...p, linkedAccounts: [...(p?.linkedAccounts || []).filter(a => a.platform !== linkPlatform.platform), { platform: linkPlatform.platform, platform_username: linkPlatform.platformUsername, platform_id: linkPlatform.platformId }] }));
             setLinkPlatform({ platform: '', platformId: '', platformUsername: '' });
-            setSuccess('Account linked!');
+            setSuccess('TELEMETRY LINKED');
+            setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -97,149 +107,153 @@ export default function ProfileEdit() {
         ? new Date(profile.usernameLockedUntil).toLocaleDateString()
         : null;
 
-    if (loading) return <div className="pf-loading"><span className="spinner" /></div>;
+    if (loading) {
+        return (
+            <div className="profile-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
+                <AnimatedBackground />
+                <div className="spinner-large" />
+            </div>
+        );
+    }
+
+    const accentColor = 'var(--brand-primary, #00d4ff)';
 
     return (
-        <div className="pf-page">
-            <div className="pf-bg" />
-            <div className="pf-content">
-                <motion.div className="pf-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                    <div className="pf-card-header">
-                        <h1 className="pf-title">Edit Profile</h1>
-                        <button className="btn-ghost-sm" onClick={() => navigate(-1)}>← Back</button>
-                    </div>
+        <div className="pf-page" style={{ minHeight: '100vh', background: '#050a14', color: '#fff', padding: '60px 20px' }}>
+            <AnimatedBackground />
+            
+            <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '40px', position: 'relative', zIndex: 10 }}>
+                
+                {/* ── CORE SETTINGS ── */}
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+                    <div className="glass-panel" style={{ padding: '40px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+                            <div>
+                                <h1 className="neon-text" style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>AGENT CALIBRATION</h1>
+                                <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.5, marginTop: '4px' }}>PERMANENT IDENTITY DATA</div>
+                            </div>
+                            <button className="glass-panel" onClick={() => navigate(-1)} style={{ padding: '8px 16px', fontSize: '10px', fontWeight: 900, cursor: 'pointer' }}>BACK</button>
+                        </div>
 
-                    {error   && <div className="pf-error">{error}</div>}
-                    {success && <div className="pf-success">{success}</div>}
+                        {error   && <div style={{ background: 'rgba(255,75,43,0.1)', border: '1px solid rgba(255,75,43,0.2)', color: '#ff4b2b', padding: '16px', borderRadius: '8px', marginBottom: '24px', fontSize: '13px', fontWeight: 700 }}>[ALERT] {error}</div>}
+                        {success && <div style={{ background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.2)', color: '#00ff88', padding: '16px', borderRadius: '8px', marginBottom: '24px', fontSize: '13px', fontWeight: 700 }}>[SUCCESS] {success}</div>}
 
-                    <form onSubmit={handleSave} className="pf-form">
-                        <div className="pf-section">
-                            <h3 className="pf-section-label">Identity</h3>
-                            <div className="form-row-2">
-                                <div className="form-group">
-                                    <label>
-                                        Username
-                                        {usernameLockedUntil && <span className="lock-badge">🔒 Locked until {usernameLockedUntil}</span>}
-                                    </label>
-                                    <input
-                                        type="text" value={form.username}
-                                        onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                                        disabled={!!usernameLockedUntil}
-                                        placeholder="your_handle"
+                        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>IDENTIFIER (Locked: 30 days)</label>
+                                    <input 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700, opacity: !!usernameLockedUntil ? 0.4 : 1 }}
+                                        value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} disabled={!!usernameLockedUntil}
+                                    />
+                                    {usernameLockedUntil && <div style={{ fontSize: '9px', color: '#ffd700', fontWeight: 900 }}>🔒 SIGNAL LOCKED UNTIL {usernameLockedUntil}</div>}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>DISPLAY NAME</label>
+                                    <input 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 }}
+                                        value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
                                     />
                                 </div>
-                                <div className="form-group">
-                                    <label>Display Name</label>
-                                    <input type="text" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="How others see you" />
-                                </div>
                             </div>
-                        </div>
 
-                        <div className="pf-section">
-                            <h3 className="pf-section-label">Bio</h3>
-                            <textarea className="pf-textarea" value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Tell the community about yourself..." maxLength={500} rows={3} />
-                            <span className="char-count">{form.bio.length}/500</span>
-                        </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>OPERATIONAL BRIEFING (BIO)</label>
+                                <textarea 
+                                    style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 400, minHeight: '100px', resize: 'vertical' }}
+                                    value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} maxLength={500}
+                                />
+                                <div style={{ textAlign: 'right', fontSize: '10px', opacity: 0.3 }}>{form.bio.length}/500 CHARS</div>
+                            </div>
 
-                        <div className="pf-section">
-                            <h3 className="pf-section-label">Location & Region</h3>
-                            <div className="form-row-2">
-                                <div className="form-group">
-                                    <label>Country</label>
-                                    <input type="text" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="e.g. Germany" />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>NATIONAL CODE</label>
+                                    <input 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 }}
+                                        value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="e.g. GER"
+                                    />
                                 </div>
-                                <div className="form-group">
-                                    <label>Server Region</label>
-                                    <select value={form.serverRegion} onChange={e => setForm(f => ({ ...f, serverRegion: e.target.value }))} className="pf-select">
-                                        <option value="">Select region</option>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>SECTOR REGION</label>
+                                    <select 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700, appearance: 'none' }}
+                                        value={form.serverRegion} onChange={e => setForm(f => ({ ...f, serverRegion: e.target.value }))}
+                                    >
+                                        <option value="">UNCATEGORIZED</option>
                                         {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
                                     </select>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="pf-section">
-                            <h3 className="pf-section-label">Avatar URL</h3>
-                            <div className="avatar-row">
-                                {form.avatarUrl && <img src={form.avatarUrl} alt="preview" className="avatar-preview" onError={e => e.target.style.display='none'} />}
-                                <input type="url" value={form.avatarUrl} onChange={e => setForm(f => ({ ...f, avatarUrl: e.target.value }))} placeholder="https://..." className="pf-input" />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>AVATAR SOURCE URL</label>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    {form.avatarUrl && <img src={form.avatarUrl} alt="preview" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'cover', border: `1px solid ${accentColor}` }} onError={e => e.target.style.display='none'} />}
+                                    <input 
+                                        style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none' }}
+                                        value={form.avatarUrl} onChange={e => setForm(f => ({ ...f, avatarUrl: e.target.value }))} placeholder="https://..."
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        <button type="submit" className="btn-primary" disabled={saving}>
-                            {saving ? <span className="btn-spinner" /> : '💾 Save Changes'}
-                        </button>
-                    </form>
+                            <button type="submit" className="premium-button" style={{ width: '100%', padding: '16px' }} disabled={saving}>
+                                {saving ? <RefreshIcon className="spin" size={16} /> : 'APPLY PERMANENT CHANGES'}
+                            </button>
+                        </form>
+                    </div>
                 </motion.div>
 
-                {/* Platform linking */}
-                <motion.div className="pf-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <h2 className="pf-title">Linked Accounts</h2>
-                    {profile?.linkedAccounts?.length > 0 && (
-                        <div className="linked-list">
-                            {profile.linkedAccounts.map(acc => (
-                                <div key={acc.platform} className="linked-item">
-                                    <span className="platform-chip">{acc.platform}</span>
-                                    <span className="platform-user">{acc.platform_username || acc.platform_id}</span>
+                {/* ── LINKING ── */}
+                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+                    <div className="glass-panel" style={{ padding: '32px' }}>
+                        <h2 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <ShieldIcon size={18} color={accentColor} /> SECURE LINKS
+                        </h2>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+                            {profile?.linkedAccounts?.map(acc => (
+                                <div key={acc.platform} className="glass-panel" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)' }}>
+                                    <span style={{ fontSize: '9px', fontWeight: 900, color: accentColor }}>{acc.platform.toUpperCase()}</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.5 }}>{acc.platform_username || "VERIFIED"}</span>
                                 </div>
                             ))}
                         </div>
-                    )}
-                    <div className="link-form">
-                        <select value={linkPlatform.platform} onChange={e => setLinkPlatform(l => ({ ...l, platform: e.target.value }))} className="pf-select">
-                            <option value="">Choose Platform</option>
-                            {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                        </select>
-                        {linkPlatform.platform && (
-                            <>
-                                <input type="text" value={linkPlatform.platformId} onChange={e => setLinkPlatform(l => ({ ...l, platformId: e.target.value }))} placeholder={PLATFORMS.find(p => p.id === linkPlatform.platform)?.placeholder || 'ID'} className="pf-input" />
-                                <input type="text" value={linkPlatform.platformUsername} onChange={e => setLinkPlatform(l => ({ ...l, platformUsername: e.target.value }))} placeholder="Display name (optional)" className="pf-input" />
-                                <button className="btn-primary" onClick={handleLinkPlatform} disabled={linkSaving}>
-                                    {linkSaving ? <span className="btn-spinner" /> : 'Link Account'}
-                                </button>
-                            </>
-                        )}
+
+                        <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <select 
+                                style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#fff', outline: 'none' }}
+                                value={linkPlatform.platform} onChange={e => setLinkPlatform(l => ({ ...l, platform: e.target.value }))}
+                            >
+                                <option value="">SELECT PLATFORM</option>
+                                {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                            </select>
+                            
+                            {linkPlatform.platform && (
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <input 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#fff', outline: 'none', fontSize: '12px' }}
+                                        value={linkPlatform.platformId} onChange={e => setLinkPlatform(l => ({ ...l, platformId: e.target.value }))}
+                                        placeholder={PLATFORMS.find(p => p.id === linkPlatform.platform)?.placeholder || 'ID'}
+                                    />
+                                    <input 
+                                        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#fff', outline: 'none', fontSize: '12px' }}
+                                        value={linkPlatform.platformUsername} onChange={e => setLinkPlatform(l => ({ ...l, platformUsername: e.target.value }))}
+                                        placeholder="Display Identifier"
+                                    />
+                                    <button className="premium-button" style={{ padding: '12px' }} onClick={handleLinkPlatform} disabled={linkSaving}>
+                                        {linkSaving ? <RefreshIcon className="spin" size={14} /> : 'AUTHORIZE LINK'}
+                                    </button>
+                                </motion.div>
+                            )}
+                        </div>
                     </div>
-                </motion.div>
+                </aside>
             </div>
 
             <style>{`
-                .pf-page { min-height:100vh; background:#050a14; font-family:'Inter',sans-serif; position:relative; }
-                .pf-bg { position:absolute; inset:0; background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px); background-size:40px 40px; }
-                .pf-loading { min-height:100vh; display:flex; align-items:center; justify-content:center; background:#050a14; }
-                .spinner { width:32px; height:32px; border:3px solid rgba(0,212,255,0.2); border-top-color:#00d4ff; border-radius:50%; animation:spin .7s linear infinite; }
-                @keyframes spin { to { transform:rotate(360deg); } }
-                .pf-content { position:relative; z-index:1; max-width:680px; margin:0 auto; padding:44px 20px; display:flex; flex-direction:column; gap:24px; }
-                .pf-card { background:rgba(255,255,255,0.03); border:1px solid rgba(0,212,255,0.12); border-radius:20px; padding:32px; }
-                .pf-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
-                .pf-title { font-size:20px; font-weight:800; color:#fff; margin:0 0 20px; }
-                .btn-ghost-sm { background:transparent; border:1px solid rgba(255,255,255,0.1); color:#8fa3c7; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; }
-                .pf-error { background:rgba(255,60,60,0.1); border:1px solid rgba(255,60,60,0.3); color:#ff6b6b; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:20px; }
-                .pf-success { background:rgba(0,255,100,0.07); border:1px solid rgba(0,255,100,0.2); color:#00ff9d; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:20px; }
-                .pf-form { display:flex; flex-direction:column; gap:22px; }
-                .pf-section { display:flex; flex-direction:column; gap:12px; }
-                .pf-section-label { font-size:11px; font-weight:700; color:#3d5070; text-transform:uppercase; letter-spacing:1px; margin:0; }
-                .form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-                .form-group { display:flex; flex-direction:column; gap:6px; }
-                .form-group label { font-size:13px; font-weight:600; color:#8fa3c7; display:flex; align-items:center; gap:8px; }
-                .lock-badge { background:rgba(255,150,0,0.1); border-radius:20px; padding:2px 8px; font-size:11px; color:#ffcc00; }
-                .form-group input, .pf-input { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; color:#fff; font-size:14px; outline:none; transition:border-color .2s; }
-                .form-group input:focus, .pf-input:focus { border-color:rgba(0,212,255,0.4); }
-                .form-group input:disabled { opacity:.4; cursor:not-allowed; }
-                .pf-textarea { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px 14px; color:#fff; font-size:14px; outline:none; resize:vertical; font-family:inherit; width:100%; }
-                .char-count { font-size:11px; color:#3d5070; text-align:right; }
-                .pf-select { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; color:#fff; font-size:14px; outline:none; }
-                .avatar-row { display:flex; align-items:center; gap:12px; }
-                .avatar-preview { width:44px; height:44px; border-radius:50%; object-fit:cover; }
-                .btn-primary { background:linear-gradient(135deg,#00d4ff,#0077cc); color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:14px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
-                .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
-                .btn-spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
-                .linked-list { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
-                .linked-item { display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:10px; }
-                .platform-chip { background:rgba(0,212,255,0.1); color:#00d4ff; border-radius:20px; padding:3px 10px; font-size:12px; font-weight:700; text-transform:capitalize; }
-                .platform-user { color:#8fa3c7; font-size:13px; }
-                .link-form { display:flex; flex-direction:column; gap:10px; }
-                @media (max-width:520px) { .form-row-2 { grid-template-columns:1fr; } .pf-content { padding:24px 12px; } }
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             `}</style>
         </div>
     );
