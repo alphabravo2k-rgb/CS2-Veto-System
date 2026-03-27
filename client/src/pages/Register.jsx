@@ -14,7 +14,25 @@ const REGIONS = [
 ];
 
 const COUNTRIES = [
-    'USA', 'GBR', 'GER', 'FRA', 'CAN', 'BRA', 'IND', 'CHN', 'JPN', 'AUS', 'RUS', 'TUR'
+    { code: 'USA', name: 'United States' },
+    { code: 'GBR', name: 'United Kingdom' },
+    { code: 'GER', name: 'Germany' },
+    { code: 'FRA', name: 'France' },
+    { code: 'CAN', name: 'Canada' },
+    { code: 'BRA', name: 'Brazil' },
+    { code: 'IND', name: 'India' },
+    { code: 'CHN', name: 'China' },
+    { code: 'JPN', name: 'Japan' },
+    { code: 'AUS', name: 'Australia' },
+    { code: 'RUS', name: 'Russia' },
+    { code: 'TUR', name: 'Turkey' },
+    { code: 'PAK', name: 'Pakistan' },
+    { code: 'KOR', name: 'South Korea' },
+    { code: 'ESP', name: 'Spain' },
+    { code: 'ITA', name: 'Italy' },
+    { code: 'POL', name: 'Poland' },
+    { code: 'SWE', name: 'Sweden' },
+    { code: 'ARG', name: 'Argentina' }
 ];
 
 /**
@@ -205,10 +223,18 @@ export default function Register() {
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>COUNTRY</label>
-                                        <select style={inputStyle} name="country" value={form.country} onChange={handle}>
-                                            <option value="">SELECT COUNTRY</option>
-                                            {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
+                                        <input 
+                                            list="country_list" 
+                                            style={inputStyle} 
+                                            name="country" 
+                                            value={form.country} 
+                                            onChange={handle} 
+                                            placeholder="Type or select a country (e.g. PAK)" 
+                                            autoComplete="off"
+                                        />
+                                        <datalist id="country_list">
+                                            {COUNTRIES.map(c => <option key={c.code} value={`${c.code} (${c.name})`} />)}
+                                        </datalist>
                                     </div>
                                 </div>
                             )}

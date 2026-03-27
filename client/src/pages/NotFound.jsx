@@ -6,7 +6,7 @@ import { AnimatedBackground } from '../components/SharedUI';
 /**
  * ⚡ UI LAYER — PREMIUM 404 EXPERIENCE
  * =============================================================================
- * Responsibility: Secure fallback for invalid spatial coordinates.
+ * Responsibility: Secure fallback for invalid routes.
  * Features: Hardware-accelerated neon signaling, deep-blur glass panels,
  *           and integrated navigation recovery.
  * =============================================================================
@@ -34,11 +34,11 @@ export default function NotFound() {
                 </motion.h1>
                 
                 <div style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '6px', color: '#ff4b2b', marginTop: '16px', opacity: 0.8 }}>
-                    SIGNAL LOST / SECTOR UNIDENTIFIED
+                    PAGE NOT FOUND
                 </div>
                 
                 <p style={{ margin: '32px 0', fontSize: '14px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, lineHeight: 1.6 }}>
-                    The coordinates you provided do not correspond to any known operational sector in the Veto.GG network.
+                    The address you entered does not correspond to any known page on the Veto.GG platform.
                 </p>
 
                 <button 
@@ -46,7 +46,7 @@ export default function NotFound() {
                     className="premium-button"
                     style={{ padding: '16px 32px' }}
                 >
-                    RETURN TO SECTOR 0
+                    RETURN TO HOMEPAGE
                 </button>
             </motion.div>
         </div>

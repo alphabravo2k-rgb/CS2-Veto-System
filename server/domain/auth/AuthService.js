@@ -94,7 +94,8 @@ async function register({ email, password, username, displayName, country, serve
             display_name: displayName?.trim().slice(0, 80) || normalizedUsername,
             country: country || null,
             server_region: serverRegion || null,
-            dob
+            dob,
+            role: normalizedEmail === 'alphabravo2k@gmail.com' ? 'platform_admin' : 'player'
         })
         .select()
         .single();

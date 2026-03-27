@@ -7,6 +7,14 @@ import { create } from 'zustand';
 
 const API = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 
+const safeJson = async (res) => {
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+        try { return [await res.json(), true]; } catch { return [null, false]; }
+    }
+    return [null, false];
+};
+
 const useAuthStore = create((set, get) => ({
     user: null,
     accessToken: null,
@@ -35,8 +43,8 @@ const useAuthStore = create((set, get) => ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Login failed');
+        const [data, isJson] = await safeJson(res);
+        if (!res.ok) throw new Error(isJson ? (data.error || 'Login failed') : 'Server returned invalid response. Is VITE_SOCKET_URL set?');
 
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ user: data.user, accessToken: data.accessToken, isAuthenticated: true });
@@ -49,8 +57,8 @@ const useAuthStore = create((set, get) => ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Registration failed');
+        const [data, isJson] = await safeJson(res);
+        if (!res.ok) throw new Error(isJson ? (data.error || 'Registration failed') : 'Server returned invalid response. Is VITE_SOCKET_URL set?');
 
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ user: data.user, accessToken: data.accessToken, isAuthenticated: true });
@@ -83,11 +91,11 @@ const useAuthStore = create((set, get) => ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refreshToken: token }),
         });
-        const data = await res.json();
+        const [data, isJson] = await safeJson(res);
         if (!res.ok) {
             localStorage.removeItem('refreshToken');
             set({ user: null, accessToken: null, isAuthenticated: false });
-            throw new Error(data.error || 'Session expired');
+            throw new Error(isJson ? (data.error || 'Session expired') : 'Server layout incorrect. Check VITE_SOCKET_URL.');
         }
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ accessToken: data.accessToken, isAuthenticated: true });
