@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 
-const API = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '') || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 
 const REGION_LABELS = { EU: '🌍 Europe', NA: '🌎 North America', SEA: '🌏 Southeast Asia', ME: '🌍 Middle East', Faceit: '🎯 Faceit' };
 const PLATFORM_ICONS = { steam: '🎮', riot: '⚡', epic: '🎯', faceit: '🔥' };
@@ -11,9 +11,9 @@ const PLATFORM_ICONS = { steam: '🎮', riot: '⚡', epic: '🎯', faceit: '🔥
 /**
  * ⚡ UI LAYER — PREMIUM PLAYER PROFILE
  * =============================================================================
- * Responsibility: Public-facing agent identity card.
- * Features: Hardware-accelerated glass panels, neon avatar signaling, 
- *           integrated account telemetry.
+ * Responsibility: Public-facing player profile card.
+ * Features: Hardware-accelerated glass panels, avatar display,
+ *           integrated account links.
  * =============================================================================
  */
 export default function PlayerProfile() {
@@ -44,9 +44,9 @@ export default function PlayerProfile() {
             <div className="profile-error" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14' }}>
                 <AnimatedBackground />
                 <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <h2 style={{ color: '#ff4b2b' }}>[SECTOR NOT FOUND]</h2>
-                    <p style={{ opacity: 0.6 }}>The requested agent ID does not exist in the database.</p>
-                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN TO SECTOR 0</Link>
+                    <h2 style={{ color: '#ff4b2b' }}>[PLAYER NOT FOUND]</h2>
+                    <p style={{ opacity: 0.6 }}>The requested player ID does not exist in the database.</p>
+                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN HOME</Link>
                 </div>
             </div>
         );
@@ -77,7 +77,7 @@ export default function PlayerProfile() {
                         )}
                     </div>
                     <h1 className="neon-text" style={{ fontSize: '2rem', fontWeight: 900, margin: 0 }}>{profile.display_name || profile.username}</h1>
-                    <p style={{ opacity: 0.4, fontSize: '0.9rem', fontWeight: 700, marginTop: '8px' }}>AGENT: @{profile.username}</p>
+                    <p style={{ opacity: 0.4, fontSize: '0.9rem', fontWeight: 700, marginTop: '8px' }}>PLAYER: @{profile.username}</p>
                     
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
                         {profile.country && (
@@ -97,7 +97,7 @@ export default function PlayerProfile() {
                 <div style={{ padding: '0 40px 32px' }}>
                     <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <p style={{ margin: 0, fontSize: '0.95rem', color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.6 }}>
-                            {profile.bio || "This agent has not yet provided an operational briefing."}
+                            {profile.bio || "This player has not provided a bio."}
                         </p>
                     </div>
                 </div>
@@ -106,7 +106,7 @@ export default function PlayerProfile() {
                 {profile.linkedAccounts && profile.linkedAccounts.length > 0 && (
                     <div style={{ padding: '0 40px 32px' }}>
                         <h4 style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.4, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <ShieldIcon size={12} /> SECURE LINKS
+                            <ShieldIcon size={12} /> LINKED ACCOUNTS
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {profile.linkedAccounts.map(acc => (
@@ -126,10 +126,10 @@ export default function PlayerProfile() {
                 {/* ── FOOTER ── */}
                 <div style={{ padding: '24px 40px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontSize: '10px', opacity: 0.3, fontWeight: 700 }}>
-                        ENLISTED: {new Date(profile.created_at).toLocaleDateString().toUpperCase()}
+                        JOINED: {new Date(profile.created_at).toLocaleDateString().toUpperCase()}
                     </div>
                     <Link to="/" style={{ color: accentColor, textDecoration: 'none', fontSize: '10px', fontWeight: 900, letterSpacing: '2px' }}>
-                        BACK TO PORTAL
+                        BACK HOME
                     </Link>
                 </div>
             </motion.div>

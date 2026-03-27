@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
-import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon, CheckIcon } from '../components/SharedUI';
+import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon, CheckIcon, EyeIcon, EyeOffIcon } from '../components/SharedUI';
 
 const STEPS = ['Identity', 'Profile', 'Sector', 'Finalize'];
 const REGIONS = [
@@ -38,6 +38,8 @@ export default function Register() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [direction, setDirection] = useState(1);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
     const handle = (e) => {
@@ -116,7 +118,7 @@ export default function Register() {
             >
                 {/* ── HEADER & TELEMETRY ── */}
                 <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                    <h1 className="neon-text" style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>ENLISTMENT CENTER</h1>
+                    <h1 className="neon-text" style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>Create Account</h1>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '20px' }}>
                         {STEPS.map((s, i) => (
                             <div key={s} style={{ 
@@ -151,20 +153,46 @@ export default function Register() {
                             {step === 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>COORDINATES (EMAIL)</label>
-                                        <input style={inputStyle} name="email" value={form.email} onChange={handle} placeholder="agent@esports.network" />
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>EMAIL ADDRESS</label>
+                                        <input style={inputStyle} name="email" value={form.email} onChange={handle} placeholder="user@example.com" />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>IDENTIFIER (USERID)</label>
-                                        <input style={inputStyle} name="username" value={form.username} onChange={handle} placeholder="unique_handle" />
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>USERNAME</label>
+                                        <input style={inputStyle} name="username" value={form.username} onChange={handle} placeholder="Choose a username" />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>SECURITY PHRASE</label>
-                                        <input style={inputStyle} type="password" name="password" value={form.password} onChange={handle} placeholder="••••••••" />
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>PASSWORD</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input style={{ ...inputStyle, paddingRight: '48px' }} type={showPassword ? "text" : "password"} name="password" value={form.password} onChange={handle} placeholder="••••••••" />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                style={{
+                                                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                                                    background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}
+                                            >
+                                                {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>RE-AUTHENTICATE PHRASE</label>
-                                        <input style={inputStyle} type="password" name="confirmPassword" value={form.confirmPassword} onChange={handle} placeholder="••••••••" />
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>CONFIRM PASSWORD</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input style={{ ...inputStyle, paddingRight: '48px' }} type={showConfirmPassword ? "text" : "password"} name="confirmPassword" value={form.confirmPassword} onChange={handle} placeholder="••••••••" />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                style={{
+                                                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                                                    background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}
+                                            >
+                                                {showConfirmPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -172,13 +200,13 @@ export default function Register() {
                             {step === 1 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>PUBLIC IDENTITY (OPTIONAL)</label>
-                                        <input style={inputStyle} name="displayName" value={form.displayName} onChange={handle} placeholder="Alias" />
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>DISPLAY NAME (OPTIONAL)</label>
+                                        <input style={inputStyle} name="displayName" value={form.displayName} onChange={handle} placeholder="Display Name" />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>ORIGIN CODE (COUNTRY)</label>
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>COUNTRY</label>
                                         <select style={inputStyle} name="country" value={form.country} onChange={handle}>
-                                            <option value="">SELECT ORIGIN</option>
+                                            <option value="">SELECT COUNTRY</option>
                                             {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
@@ -187,7 +215,7 @@ export default function Register() {
 
                             {step === 2 && (
                                 <div>
-                                    <p style={{ fontSize: '13px', opacity: 0.6, marginBottom: '24px', textAlign: 'center' }}>Select your primary sector for optimal signal synchronization.</p>
+                                    <p style={{ fontSize: '13px', opacity: 0.6, marginBottom: '24px', textAlign: 'center' }}>Select your primary region for optimal server routing.</p>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                         {REGIONS.map(r => (
                                             <button
@@ -211,7 +239,7 @@ export default function Register() {
                             {step === 3 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>TEMPORAL ORIGIN (DOB)</label>
+                                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5 }}>DATE OF BIRTH</label>
                                         <input style={inputStyle} type="date" name="dob" value={form.dob} onChange={handle} />
                                     </div>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -230,12 +258,12 @@ export default function Register() {
                         <button className="glass-panel" style={{ flex: 1, padding: '16px', fontWeight: 900, fontSize: '12px', cursor: 'pointer' }} onClick={prevStep} disabled={loading}>BACK</button>
                     )}
                     <button className="premium-button" style={{ flex: 2, padding: '16px', fontSize: '12px' }} onClick={step < STEPS.length - 1 ? nextStep : handleSubmit} disabled={loading}>
-                        {loading ? <RefreshIcon className="spin" size={16} /> : step < STEPS.length - 1 ? 'CONTINUE SIGNAL' : 'FINALIZE ENLISTMENT'}
+                        {loading ? <RefreshIcon className="spin" size={16} /> : step < STEPS.length - 1 ? 'CONTINUE' : 'REGISTER'}
                     </button>
                 </div>
 
                 <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '12px', fontWeight: 600, opacity: 0.6 }}>
-                    ALREADY ENLISTED? <Link to="/login" style={{ color: accentColor, textDecoration: 'none', fontWeight: 900 }}>SIGN IN</Link>
+                    ALREADY HAVE AN ACCOUNT? <Link to="/login" style={{ color: accentColor, textDecoration: 'none', fontWeight: 900 }}>SIGN IN</Link>
                 </div>
             </motion.div>
 

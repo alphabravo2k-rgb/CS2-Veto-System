@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 
-const API = import.meta.env.VITE_SOCKET_URL?.replace(/\/$/, '') || 'http://localhost:3001';
+const API = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 
 const useAuthStore = create((set, get) => ({
     user: null,

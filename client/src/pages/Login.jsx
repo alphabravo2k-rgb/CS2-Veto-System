@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
-import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon } from '../components/SharedUI';
+import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon, EyeIcon, EyeOffIcon } from '../components/SharedUI';
 
 /**
  * ⚡ UI LAYER — PREMIUM AUTHENTICATION PORTAL
  * =============================================================================
- * Responsibility: Secure gateway for agent authorization.
- * Features: Hardware-accelerated glassmorphism, neon-glow signaling,
- *           and seamless biometric-inspired state transitions.
+ * Responsibility: Secure gateway for user authorization.
+ * Features: Hardware-accelerated glassmorphism, fluid state transitions.
  * =============================================================================
  */
 export default function Login() {
@@ -19,6 +18,7 @@ export default function Login() {
     const [form, setForm] = useState({ email: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -55,7 +55,7 @@ export default function Login() {
                         <ShieldIcon size={32} color={accentColor} />
                     </div>
                     <h1 className="neon-text" style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>VETO.GG</h1>
-                    <div style={{ fontSize: '10px', fontWeight: 900, opacity: 0.4, letterSpacing: '4px', marginTop: '4px' }}>ACCESS GRANTED ONLY</div>
+                    <div style={{ fontSize: '10px', fontWeight: 900, opacity: 0.4, letterSpacing: '4px', marginTop: '4px' }}>AUTHORIZED PERSONNEL ONLY</div>
                 </div>
 
                 <AnimatePresence mode="wait">
@@ -77,10 +77,10 @@ export default function Login() {
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>COORDINATES (EMAIL)</label>
+                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>EMAIL ADDRESS</label>
                         <input
                             name="email" type="email" required
-                            placeholder="agent@esports.network"
+                            placeholder="user@example.com"
                             value={form.email} onChange={handleChange}
                             style={{ 
                                 background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', 
@@ -89,17 +89,31 @@ export default function Login() {
                         />
                     </div>
 
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>SECURITY PHRASE</label>
-                        <input
-                            name="password" type="password" required
-                            placeholder="••••••••"
-                            value={form.password} onChange={handleChange}
-                            style={{ 
-                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', 
-                                padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 
-                            }}
-                        />
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PASSWORD</label>
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                name="password" type={showPassword ? "text" : "password"} required
+                                placeholder="••••••••"
+                                value={form.password} onChange={handleChange}
+                                style={{ 
+                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', 
+                                    padding: '16px', paddingRight: '48px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700,
+                                    width: '100%', boxSizing: 'border-box'
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                                    background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}
+                            >
+                                {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                            </button>
+                        </div>
                     </div>
 
                     <button
@@ -108,12 +122,12 @@ export default function Login() {
                         disabled={loading}
                         style={{ width: '100%', padding: '18px', marginTop: '12px', fontSize: '13px' }}
                     >
-                        {loading ? <RefreshIcon className="spin" size={16} /> : 'INITIALIZE SESSION'}
+                        {loading ? <RefreshIcon className="spin" size={16} /> : 'SIGN IN'}
                     </button>
                 </form>
 
                 <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '12px', fontWeight: 600, opacity: 0.6 }}>
-                    NO CLEARANCE? <Link to="/register" style={{ color: accentColor, textDecoration: 'none', fontWeight: 900 }}>ENLIST NOW</Link>
+                    DON'T HAVE AN ACCOUNT? <Link to="/register" style={{ color: accentColor, textDecoration: 'none', fontWeight: 900 }}>REGISTER NOW</Link>
                 </div>
             </motion.div>
 

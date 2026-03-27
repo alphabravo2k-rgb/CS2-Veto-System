@@ -12,7 +12,7 @@ const COLOR_PRESETS = [
 /**
  * ⚡ UI LAYER — PREMIUM ORGANIZATION CREATOR
  * =============================================================================
- * Responsibility: Secure interface for initializing new tournament sectors.
+ * Responsibility: Secure interface for initializing new organizations.
  * Features: Real-time brand preview, auto-slug generation, 
  *           and integrated identity vetting.
  * =============================================================================
@@ -72,8 +72,8 @@ export default function OrgCreate() {
                 style={{ width: '100%', maxWidth: '600px', padding: '48px', position: 'relative' }}
             >
                 <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                    <h1 className="neon-text" style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>INITIALIZE ORGANIZATION</h1>
-                    <div style={{ fontSize: '10px', fontWeight: 900, opacity: 0.4, letterSpacing: '4px', marginTop: '4px' }}>SECTOR REGISTRATION UNIT</div>
+                    <h1 className="neon-text" style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>Create Organization</h1>
+                    <div style={{ fontSize: '10px', fontWeight: 900, opacity: 0.4, letterSpacing: '4px', marginTop: '4px' }}>Organization Registration</div>
                 </div>
 
                 {error && <div style={{ background: 'rgba(255,75,43,0.1)', border: '1px solid rgba(255,75,43,0.2)', color: '#ff4b2b', padding: '16px', borderRadius: '8px', marginBottom: '24px', fontSize: '12px', fontWeight: 900 }}>[ERR] {error}</div>}
@@ -86,7 +86,7 @@ export default function OrgCreate() {
                             <input style={inputStyle} name="name" value={form.name} onChange={handle} placeholder="e.g. ALPHA BRAVO ESPORTS" required />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>SECTOR SLUG (URL)</label>
+                            <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>ORGANIZATION SLUG (URL)</label>
                             <div style={{ position: 'relative' }}>
                                 <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', opacity: 0.3, fontWeight: 700 }}>veto.gg/</span>
                                 <input style={{ ...inputStyle, paddingLeft: '75px' }} name="slug" value={form.slug} onChange={handle} placeholder="unique-id" required />
@@ -95,7 +95,7 @@ export default function OrgCreate() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>PRIMARY VISUAL SIGNAL (BRAND COLOR)</label>
+                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>PRIMARY BRAND COLOR</label>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                             <input type="color" name="primaryColor" value={form.primaryColor} onChange={handle} style={{ width: '48px', height: '48px', cursor: 'pointer', border: 'none', background: 'none' }} />
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -111,7 +111,7 @@ export default function OrgCreate() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>LOGO SOURCE URL (OPTIONAL)</label>
+                        <label style={{ fontSize: '10px', fontWeight: 900, opacity: 0.5, letterSpacing: '1px' }}>LOGO URL (OPTIONAL)</label>
                         <input style={inputStyle} type="url" name="logoUrl" value={form.logoUrl} onChange={handle} placeholder="https://..." />
                     </div>
 
@@ -121,13 +121,13 @@ export default function OrgCreate() {
                             <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: form.logoUrl ? 'transparent' : accentColor, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${accentColor}44` }}>
                                 {form.logoUrl ? <img src={form.logoUrl} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} /> : <ShieldIcon size={20} color="#000" />}
                             </div>
-                            <span style={{ fontWeight: 900, fontSize: '1rem', letterSpacing: '1px' }}>{form.name || "NEW SECTOR"}</span>
+                            <span style={{ fontWeight: 900, fontSize: '1rem', letterSpacing: '1px' }}>{form.name || "NEW ORGANIZATION"}</span>
                         </div>
-                        <div style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '2px', color: accentColor, border: `1px solid ${accentColor}44`, padding: '4px 10px', borderRadius: '4px' }}>LIVE SIGNAL</div>
+                        <div style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '2px', color: accentColor, border: `1px solid ${accentColor}44`, padding: '4px 10px', borderRadius: '4px' }}>LIVE PREVIEW</div>
                     </div>
 
                     <button type="submit" className="premium-button" style={{ width: '100%', padding: '18px' }} disabled={loading}>
-                        {loading ? <RefreshIcon className="spin" size={16} /> : 'CONSTRUCT ORGANIZATION'}
+                        {loading ? <RefreshIcon className="spin" size={16} /> : 'CREATE ORGANIZATION'}
                     </button>
 
                 </form>

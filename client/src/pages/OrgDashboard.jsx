@@ -122,7 +122,7 @@ export default function OrgDashboard() {
                 <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
                     <h2 style={{ color: '#ff4b2b' }}>[ERROR]</h2>
                     <p>{error}</p>
-                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN TO SECTOR 0</Link>
+                    <Link to="/" className="premium-button" style={{ marginTop: '1rem' }}>RETURN HOME</Link>
                 </div>
             </div>
         );
@@ -147,16 +147,16 @@ export default function OrgDashboard() {
                             <h1 className="neon-text" style={{ fontSize: '3.5rem', fontWeight: 900, margin: 0, textShadow: `0 0 20px ${accentColor}44` }}>{org.branding?.display_name || org.name}</h1>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', opacity: 0.6 }}>
                                 <GlobeIcon size={14} />
-                                <span style={{ letterSpacing: '2px', fontWeight: 700 }}>SECTOR: {orgId.toUpperCase()}</span>
+                                <span style={{ letterSpacing: '2px', fontWeight: 700 }}>ORGANIZATION: {orgId.toUpperCase()}</span>
                             </div>
                         </div>
                     </div>
                     <div className="org-header-right" style={{ display: 'flex', gap: '16px' }}>
                         <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setEditBranding(true)}>
-                            CUSTOMIZE SIGNAL
+                            EDIT BRANDING
                         </button>
                         <Link to={`/org/${orgId}/tournament`} className="premium-button">
-                            GENERATE MATCH
+                            CREATE TOURNAMENT
                         </Link>
                     </div>
                 </div>
@@ -193,13 +193,13 @@ export default function OrgDashboard() {
                         {tab === 'tournaments' && (
                             <div className="tab-pane">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                                    <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px' }}>ACTIVE OPERATIONS</h2>
-                                    <button className="premium-button" style={{ padding: '8px 24px', fontSize: '12px' }} onClick={createTournament}>INITIALIZE TOURNAMENT</button>
+                                    <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px' }}>ACTIVE TOURNAMENTS</h2>
+                                    <button className="premium-button" style={{ padding: '8px 24px', fontSize: '12px' }} onClick={createTournament}>CREATE TOURNAMENT</button>
                                 </div>
                                 
                                 {tournaments.length === 0 ? (
                                     <div className="glass-panel" style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.2)' }}>
-                                        <p style={{ letterSpacing: '4px', fontStyle: 'italic' }}>NO DATA STREAMS FOUND</p>
+                                        <p style={{ letterSpacing: '4px', fontStyle: 'italic' }}>NO TOURNAMENTS FOUND</p>
                                     </div>
                                 ) : (
                                     <div className="tournament-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
@@ -234,10 +234,10 @@ export default function OrgDashboard() {
 
                         {tab === 'members' && (
                             <div className="tab-pane">
-                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>ROSTER DATA</h2>
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>MEMBERS</h2>
                                 <div className="glass-panel" style={{ overflow: 'hidden' }}>
                                     {members.length === 0 ? (
-                                        <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>ACCESSING SECURE DATA...</div>
+                                        <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>LOADING MEMBERS...</div>
                                     ) : (
                                         <div className="members-list">
                                             {members.map(m => (
@@ -283,7 +283,7 @@ export default function OrgDashboard() {
                             style={{ padding: '40px', width: '100%', maxWidth: '500px' }}
                             onClick={e => e.stopPropagation()}
                         >
-                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>CALIBRATE SIGNAL</h2>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>EDIT BRANDING</h2>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -296,7 +296,7 @@ export default function OrgDashboard() {
                                     />
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PRIMARY ACCENT</label>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PRIMARY BRAND COLOR</label>
                                     <div style={{ display: 'flex', gap: '12px' }}>
                                         <input 
                                             type="color" 
@@ -313,7 +313,7 @@ export default function OrgDashboard() {
                                     </div>
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>LOGO SOURCE URL</label>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>LOGO URL</label>
                                     <input 
                                         type="url" 
                                         value={brandingForm.logoUrl} 
@@ -327,7 +327,7 @@ export default function OrgDashboard() {
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
                                 <button className="glass-panel" style={{ padding: '12px 24px', cursor: 'pointer' }} onClick={() => setEditBranding(false)}>CANCEL</button>
                                 <button className="premium-button" onClick={saveBranding} disabled={savingBrand}>
-                                    {savingBrand ? <RefreshIcon size={14} className="spin" /> : 'APPLY SIGNAL'}
+                                    {savingBrand ? <RefreshIcon size={14} className="spin" /> : 'SAVE CHANGES'}
                                 </button>
                             </div>
                         </motion.div>

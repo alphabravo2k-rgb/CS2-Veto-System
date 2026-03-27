@@ -5,7 +5,7 @@ import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon, 
 import useVetoStore from '../store/useVetoStore'; 
 import useOrgBranding from '../hooks/useOrgBranding';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
 
 /**
  * ⚡ UI LAYER — PREMIUM TOURNAMENT DASHBOARD
@@ -139,11 +139,11 @@ export default function TournamentDashboard() {
             
             <header style={{ maxWidth: '1200px', margin: '0 auto 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
                 <Link to={`/org/${orgId}`} className="glass-panel" style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#fff', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>
-                    <HomeIcon /> BACK TO HQ
+                    <HomeIcon /> BACK TO ORGANIZATION
                 </Link>
                 <div style={{ textAlign: 'center' }}>
                     <h1 className="neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0 }}>{tournamentId.toUpperCase()}</h1>
-                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '4px', opacity: 0.5, marginTop: '4px' }}>OPERATIONS COMMAND</div>
+                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '4px', opacity: 0.5, marginTop: '4px' }}>TOURNAMENT DASHBOARD</div>
                 </div>
                 <div style={{ width: '130px' }} /> {/* Spacer */}
             </header>
@@ -153,7 +153,7 @@ export default function TournamentDashboard() {
                 {/* ── GENERATE MATCH ── */}
                 <section>
                     <div className="glass-panel" style={{ padding: '40px' }}>
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px', color: accentColor }}>INITIALIZE NEW MATCH</h2>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px', color: accentColor }}>CREATE NEW MATCH</h2>
                         
                         {/* Mode Selection */}
                         <div style={{ display: 'flex', gap: '12px', marginBottom: '40px', flexWrap: 'wrap' }}>

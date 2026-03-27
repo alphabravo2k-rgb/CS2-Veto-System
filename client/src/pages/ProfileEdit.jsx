@@ -14,9 +14,10 @@ const PLATFORMS = [
 /**
  * ⚡ UI LAYER — PREMIUM PROFILE EDITOR
  * =============================================================================
- * Responsibility: Secure interface for agent calibration and account linking.
+ * =============================================================================
+ * Responsibility: Secure interface for editing profile and account linking.
  * Features: Multi-phase glass forms, real-time validation, and 
- *           integrated identity telemetry.
+ *           integrated account linking.
  * =============================================================================
  */
 export default function ProfileEdit() {
@@ -74,7 +75,7 @@ export default function ProfileEdit() {
                 throw new Error(msg);
             }
             setProfile(data);
-            setSuccess('CALIBRATION COMPLETE');
+            setSuccess('PROFILE SAVED');
             setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
             setError(err.message);
@@ -94,7 +95,7 @@ export default function ProfileEdit() {
             if (!res.ok) throw new Error(data.error);
             setProfile(p => ({ ...p, linkedAccounts: [...(p?.linkedAccounts || []).filter(a => a.platform !== linkPlatform.platform), { platform: linkPlatform.platform, platform_username: linkPlatform.platformUsername, platform_id: linkPlatform.platformId }] }));
             setLinkPlatform({ platform: '', platformId: '', platformUsername: '' });
-            setSuccess('TELEMETRY LINKED');
+            setSuccess('ACCOUNT LINKED');
             setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
             setError(err.message);
@@ -129,8 +130,8 @@ export default function ProfileEdit() {
                     <div className="glass-panel" style={{ padding: '40px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
                             <div>
-                                <h1 className="neon-text" style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>AGENT CALIBRATION</h1>
-                                <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.5, marginTop: '4px' }}>PERMANENT IDENTITY DATA</div>
+                                <h1 className="neon-text" style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>EDIT PROFILE</h1>
+                                <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.5, marginTop: '4px' }}>ACCOUNT INFORMATION</div>
                             </div>
                             <button className="glass-panel" onClick={() => navigate(-1)} style={{ padding: '8px 16px', fontSize: '10px', fontWeight: 900, cursor: 'pointer' }}>BACK</button>
                         </div>
@@ -141,12 +142,12 @@ export default function ProfileEdit() {
                         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>IDENTIFIER (Locked: 30 days)</label>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>USERNAME (Locked for 30 days after change)</label>
                                     <input 
                                         style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700, opacity: !!usernameLockedUntil ? 0.4 : 1 }}
                                         value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} disabled={!!usernameLockedUntil}
                                     />
-                                    {usernameLockedUntil && <div style={{ fontSize: '9px', color: '#ffd700', fontWeight: 900 }}>🔒 SIGNAL LOCKED UNTIL {usernameLockedUntil}</div>}
+                                    {usernameLockedUntil && <div style={{ fontSize: '9px', color: '#ffd700', fontWeight: 900 }}>🔒 USERNAME LOCKED UNTIL {usernameLockedUntil}</div>}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>DISPLAY NAME</label>
@@ -158,7 +159,7 @@ export default function ProfileEdit() {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>OPERATIONAL BRIEFING (BIO)</label>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>BIO</label>
                                 <textarea 
                                     style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 400, minHeight: '100px', resize: 'vertical' }}
                                     value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} maxLength={500}
@@ -168,14 +169,14 @@ export default function ProfileEdit() {
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>NATIONAL CODE</label>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>COUNTRY CODE</label>
                                     <input 
                                         style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700 }}
                                         value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="e.g. GER"
                                     />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>SECTOR REGION</label>
+                                    <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>SERVER REGION</label>
                                     <select 
                                         style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700, appearance: 'none' }}
                                         value={form.serverRegion} onChange={e => setForm(f => ({ ...f, serverRegion: e.target.value }))}
@@ -187,7 +188,7 @@ export default function ProfileEdit() {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>AVATAR SOURCE URL</label>
+                                <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>AVATAR URL</label>
                                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                                     {form.avatarUrl && <img src={form.avatarUrl} alt="preview" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'cover', border: `1px solid ${accentColor}` }} onError={e => e.target.style.display='none'} />}
                                     <input 
@@ -198,7 +199,7 @@ export default function ProfileEdit() {
                             </div>
 
                             <button type="submit" className="premium-button" style={{ width: '100%', padding: '16px' }} disabled={saving}>
-                                {saving ? <RefreshIcon className="spin" size={16} /> : 'APPLY PERMANENT CHANGES'}
+                                {saving ? <RefreshIcon className="spin" size={16} /> : 'SAVE CHANGES'}
                             </button>
                         </form>
                     </div>
@@ -208,7 +209,7 @@ export default function ProfileEdit() {
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
                     <div className="glass-panel" style={{ padding: '32px' }}>
                         <h2 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <ShieldIcon size={18} color={accentColor} /> SECURE LINKS
+                            <ShieldIcon size={18} color={accentColor} /> LINKED ACCOUNTS
                         </h2>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
@@ -242,7 +243,7 @@ export default function ProfileEdit() {
                                         placeholder="Display Identifier"
                                     />
                                     <button className="premium-button" style={{ padding: '12px' }} onClick={handleLinkPlatform} disabled={linkSaving}>
-                                        {linkSaving ? <RefreshIcon className="spin" size={14} /> : 'AUTHORIZE LINK'}
+                                        {linkSaving ? <RefreshIcon className="spin" size={14} /> : 'LINK ACCOUNT'}
                                     </button>
                                 </motion.div>
                             )}
