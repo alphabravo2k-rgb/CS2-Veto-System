@@ -53,6 +53,35 @@ app.get('/api/health', (req, res) =>
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
+// ── Root Diagnostic Dashboard ────────────────────────────────────────────────
+app.get('/', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Veto.GG | Backend System Core</title>
+            <style>
+                body { background: #050a14; color: #00d4ff; font-family: monospace; padding: 2rem; }
+                .panel { border: 1px solid rgba(0, 212, 255, 0.2); padding: 2rem; border-radius: 8px; background: rgba(0, 212, 255, 0.02); }
+                h1 { margin-top: 0; color: #fff; }
+                a { color: #00ff88; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+            </style>
+        </head>
+        <body>
+            <div class="panel">
+                <h1>VETO.GG CORE INFRASTRUCTURE</h1>
+                <p>Status: <strong>ONLINE</strong> (Node.js REST & WebSocket Engine)</p>
+                <p>Environment: ${IS_PROD ? 'Production' : 'Development'}</p>
+                <p>Allowed Origins: ${IS_PROD ? process.env.CORS_ORIGIN || 'None configured' : 'All (*)'}</p>
+                <hr style="border-color: rgba(0, 212, 255, 0.2); margin: 2rem 0;">
+                <p><a href="/api/health">Check API Health Node &rarr;</a></p>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
 // ── Route modules ─────────────────────────────────────────────────────────────
 app.use('/api/auth',    authRoutes);
 app.use('/api/orgs',    orgRoutes);
