@@ -5,7 +5,7 @@ import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon, 
 import useVetoStore from '../store/useVetoStore'; 
 import useOrgBranding from '../hooks/useOrgBranding';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
 
 /**
  * ⚡ UI LAYER — PREMIUM TOURNAMENT DASHBOARD

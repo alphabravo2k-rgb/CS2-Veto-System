@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
 
 const REGION_LABELS = { EU: '🌍 Europe', NA: '🌎 North America', SEA: '🌏 Southeast Asia', ME: '🌍 Middle East', Faceit: '🎯 Faceit' };
 const PLATFORM_ICONS = { steam: '🎮', riot: '⚡', epic: '🎯', faceit: '🔥' };

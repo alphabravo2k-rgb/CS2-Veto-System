@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 
-const API = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const API = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
 
 const safeJson = async (res) => {
     const contentType = res.headers.get("content-type");
@@ -44,7 +44,7 @@ const useAuthStore = create((set, get) => ({
             body: JSON.stringify({ email, password }),
         });
         const [data, isJson] = await safeJson(res);
-        if (!res.ok) throw new Error(isJson ? (data.error || 'Login failed') : 'Server returned invalid response. Is VITE_SOCKET_URL set?');
+        if (!res.ok) throw new Error(isJson ? (data.error || 'Login failed') : 'Server returned invalid response. Is the backend down?');
 
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ user: data.user, accessToken: data.accessToken, isAuthenticated: true });
@@ -58,7 +58,7 @@ const useAuthStore = create((set, get) => ({
             body: JSON.stringify(payload),
         });
         const [data, isJson] = await safeJson(res);
-        if (!res.ok) throw new Error(isJson ? (data.error || 'Registration failed') : 'Server returned invalid response. Is VITE_SOCKET_URL set?');
+        if (!res.ok) throw new Error(isJson ? (data.error || 'Registration failed') : 'Server returned invalid response. Is the backend down?');
 
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ user: data.user, accessToken: data.accessToken, isAuthenticated: true });
@@ -95,7 +95,7 @@ const useAuthStore = create((set, get) => ({
         if (!res.ok) {
             localStorage.removeItem('refreshToken');
             set({ user: null, accessToken: null, isAuthenticated: false });
-            throw new Error(isJson ? (data.error || 'Session expired') : 'Server layout incorrect. Check VITE_SOCKET_URL.');
+            throw new Error(isJson ? (data.error || 'Session expired') : 'Server layout incorrect. Is backend offline?');
         }
         localStorage.setItem('refreshToken', data.refreshToken);
         set({ accessToken: data.accessToken, isAuthenticated: true });

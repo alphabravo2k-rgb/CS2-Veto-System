@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import io from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : window.location.origin);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
 
 const useVetoStore = create((set, get) => ({
     _socket: null, 
