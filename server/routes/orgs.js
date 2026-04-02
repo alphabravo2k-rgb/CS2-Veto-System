@@ -1,8 +1,10 @@
 const express = require('express');
 const OrgService = require('../domain/organizations/OrgService');
 const TournamentService = require('../domain/tournaments/TournamentService');
+const MatchGenerationService = require('../domain/tournaments/MatchGenerationService');
+const AnalyticsService = require('../domain/organizations/AnalyticsService');
 const TenantResolver = require('../domain/organizations/TenantResolver');
-const { requireAuth, requireOrgAdmin } = require('../middleware/auth');
+const { requireAuth, requireOrgAdmin, requirePlatformAdmin } = require('../middleware/auth');
 const { log } = require('../infra/auditLog');
 
 const router = express.Router();
@@ -162,6 +164,32 @@ router.put('/:orgId/tournaments/:tId/maps', requireAuth, requireOrgAdmin, async 
         res.json(maps);
     } catch (err) {
         res.status(err.statusCode || 500).json({ error: err.message });
+    }
+});
+
+// GET /api/orgs/:orgId/analytics
+router.get('/:orgId/analytics', requireAuth, requireOrgAdmin, async (req, res) => {
+    try {
+        const { tournamentId } = req.query;
+        const mapStats = await AnalyticsService.getMapStats({ orgId: req.orgId, tournamentId });
+        const metrics = await AnalyticsService.getSummaryMetrics(req.orgId);
+        res.json({ mapStats, metrics });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch analytics' });
+    }
+});
+
+// ── Tournament Match Operations ──
+
+// POST /api/orgs/:orgId/tournaments/:tId/matches/generate
+router.post('/:orgId/tournaments/:tId/matches/generate', requireAuth, requireOrgAdmin, async (req, res) => {
+    try {
+        const { matchPairs, settings } = req.body;
+        const result = await MatchGenerationService.generateBatch(req.orgId, req.params.tId, matchPairs, settings);
+        await log({ actor_id: req.user.id, action: 'tournament.bulkGenerate', target_id: req.params.tId, meta: { count: result.successCount } });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

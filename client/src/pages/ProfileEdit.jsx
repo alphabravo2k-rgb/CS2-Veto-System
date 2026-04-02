@@ -31,6 +31,18 @@ export default function ProfileEdit() {
     const [error,    setError]    = useState('');
     const [success,  setSuccess]  = useState('');
 
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('steam_linked')) {
+            setSuccess('STEAM ACCOUNT VERIFIED AND LINKED');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        if (params.get('error') === 'steam_link_failed') {
+            setError('STEAM AUTHENTICATION FAILED');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }, []);
+
     const [linkPlatform, setLinkPlatform] = useState({ platform: '', platformId: '', platformUsername: '' });
     const [linkSaving, setLinkSaving] = useState(false);
 
@@ -230,7 +242,22 @@ export default function ProfileEdit() {
                                 {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                             </select>
                             
-                            {linkPlatform.platform && (
+                            {linkPlatform.platform === 'steam' && (
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div style={{ padding: '16px', background: 'rgba(0,0,0,0.4)', borderRadius: '8px', fontSize: '11px', opacity: 0.8 }}>
+                                        Steam linking requires official OpenID verification to ensure you own the account.
+                                    </div>
+                                    <button 
+                                        className="premium-button" 
+                                        style={{ padding: '12px', background: '#171a21', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }} 
+                                        onClick={() => window.location.href = `${API_URL}/api/auth/steam`}
+                                    >
+                                        <img src="https://community.cloudflare.steamstatic.com/public/images/signinthroughsteam/sits_01.png" alt="Steam Login" style={{ height: '24px' }} />
+                                    </button>
+                                </motion.div>
+                            )}
+
+                            {linkPlatform.platform && linkPlatform.platform !== 'steam' && (
                                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     <input 
                                         style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#fff', outline: 'none', fontSize: '12px' }}

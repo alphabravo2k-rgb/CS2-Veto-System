@@ -42,6 +42,15 @@ export default function TournamentDashboard() {
     const [customSequence, setCustomSequence] = useState([]);
     const [userCustomMap, setUserCustomMap] = useState('');
 
+    // Bulk Generation State
+    const [bulkInput, setBulkInput] = useState('');
+    const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+    const [bulkReport, setBulkReport] = useState(null);
+
+    // Analytics State
+    const [analytics, setAnalytics] = useState(null);
+    const [showAnalytics, setShowAnalytics] = useState(false);
+
     const fileInputA = useRef(null);
     const fileInputB = useRef(null);
 
@@ -62,6 +71,18 @@ export default function TournamentDashboard() {
         }).catch(() => { });
         fetchHistory();
     }, [fetchHistory]);
+
+    const fetchAnalytics = useCallback(() => {
+        const { authFetch } = useAuthStore.getState();
+        authFetch(`${API_URL}/api/orgs/${orgId}/analytics?tournamentId=${tournamentId}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => setAnalytics(data))
+            .catch(() => {});
+    }, [orgId, tournamentId]);
+
+    useEffect(() => {
+        if (showAnalytics) fetchAnalytics();
+    }, [showAnalytics, fetchAnalytics]);
 
     const handleLogoUpload = (e, team) => {
         const file = e.target.files[0];
@@ -105,7 +126,7 @@ export default function TournamentDashboard() {
             customSequence: format === 'custom' ? customSequence : null,
             useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim()
         }, (response) => {
-            const baseUrl = `${window.location.origin}/${orgId}/${tournamentId}/veto/${response.roomId}`;
+            const baseUrl = `${window.location.origin}/org/${orgId}/tournament/${tournamentId}/veto/${response.matchId}`;
             setCreatedLinks({
                 admin: `${baseUrl}?key=${response.keys.admin}`,
                 teamA: `${baseUrl}?key=${response.keys.A}`,
@@ -115,6 +136,40 @@ export default function TournamentDashboard() {
             setTeamA(''); setTeamB(''); setTeamALogo(''); setTeamBLogo(''); setUseCoinFlip(false);
             fetchHistory(); 
         });
+    };
+
+    const handleBulkGenerate = async () => {
+        if (!bulkInput.trim()) return;
+        setIsBulkProcessing(true);
+        
+        try {
+            const lines = bulkInput.split('\n').filter(l => l.trim().includes(','));
+            const pairs = lines.map(line => {
+                const [a, b] = line.split(',').map(s => s.trim());
+                return { teamA: a, teamB: b };
+            });
+
+            if (pairs.length === 0) throw new Error("No valid data found (format: Team A, Team B)");
+
+            const { authFetch } = useAuthStore.getState();
+            const res = await authFetch(`${API_URL}/api/tournaments/${tournamentId}/matches/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    matchPairs: pairs,
+                    settings: { useTimer, timerDuration, useCoinFlip, format: 'bo1' }
+                })
+            });
+
+            const result = await res.json();
+            setBulkReport(result);
+            setBulkInput('');
+            fetchHistory();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setIsBulkProcessing(false);
+        }
     };
 
     const copyToClipboard = (text) => { 
@@ -157,7 +212,7 @@ export default function TournamentDashboard() {
                         
                         {/* Mode Selection */}
                         <div style={{ display: 'flex', gap: '12px', marginBottom: '40px', flexWrap: 'wrap' }}>
-                            {['vrs', 'faceit', 'wingman', 'custom'].map(m => (
+                            {['vrs', 'faceit', 'wingman', 'custom', 'bulk'].map(m => (
                                 <button 
                                     key={m} 
                                     onClick={() => setVetoMode(m)}
@@ -168,7 +223,7 @@ export default function TournamentDashboard() {
                                         border: vetoMode === m ? 'none' : '1px solid rgba(255,255,255,0.1)'
                                     }}
                                 >
-                                    {m.toUpperCase()} MODE
+                                    {m === 'bulk' ? 'BULK COMMAND' : `${m.toUpperCase()} MODE`}
                                 </button>
                             ))}
                         </div>
@@ -217,8 +272,33 @@ export default function TournamentDashboard() {
                             </div>
                         </div>
 
-                        {/* Format buttons or Custom area */}
-                        {vetoMode !== 'custom' ? (
+                        {/* Format buttons or Custom area or Bulk area */}
+                        {vetoMode === 'bulk' ? (
+                            <div style={{ animation: 'fadeIn 0.3s' }}>
+                                <p style={{ fontSize: '11px', opacity: 0.6, marginBottom: '20px' }}>Enter team pairs (one per line, format: Team A, Team B)</p>
+                                <textarea 
+                                    value={bulkInput}
+                                    onChange={e => setBulkInput(e.target.value)}
+                                    placeholder="Liquid, NaVi&#10;G2, Vitality"
+                                    style={{ width: '100%', height: '150px', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', outline: 'none', marginBottom: '20px', fontFamily: 'monospace' }}
+                                />
+                                <button 
+                                    className="premium-button" 
+                                    style={{ width: '100%', padding: '16px' }}
+                                    onClick={handleBulkGenerate}
+                                    disabled={isBulkProcessing || !bulkInput.trim()}
+                                >
+                                    {isBulkProcessing ? <RefreshIcon className="spin" size={16} /> : "EXECUTE MASS GENERATION"}
+                                </button>
+
+                                {bulkReport && (
+                                    <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '8px' }}>
+                                        <div style={{ fontSize: '10px', color: '#00ff88', fontWeight: 900, marginBottom: '8px' }}>MASS GENERATION COMPLETE</div>
+                                        <div style={{ fontSize: '12px' }}>Success: {bulkReport.successCount} | Failed: {bulkReport.errorCount}</div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : vetoMode !== 'custom' ? (
                             <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
                                 {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
                                     <button 
@@ -293,9 +373,41 @@ export default function TournamentDashboard() {
                 {/* ── HISTORY SIDEBAR ── */}
                 <aside>
                     <div className="glass-panel" style={{ padding: '24px', height: 'fit-content' }}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <ActivityIcon size={18} color={accentColor} /> ARCHIVE DATA
+                        <h2 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <ActivityIcon size={18} color={accentColor} /> ARCHIVE DATA
+                            </div>
+                            <button 
+                                onClick={() => setShowAnalytics(!showAnalytics)}
+                                style={{ background: 'none', border: 'none', color: accentColor, fontSize: '10px', cursor: 'pointer', fontWeight: 900, letterSpacing: '1px' }}
+                            >
+                                {showAnalytics ? 'HIDE ANALYTICS' : 'SHOW ANALYTICS'}
+                            </button>
                         </h2>
+
+                        {showAnalytics && analytics && (
+                            <div style={{ marginBottom: '24px', animation: 'fadeIn 0.3s' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                                    <div className="glass-panel" style={{ padding: '12px', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '10px', opacity: 0.5 }}>TOTAL MATCHES</div>
+                                        <div style={{ fontSize: '20px', fontWeight: 900 }}>{analytics.metrics.totalMatches}</div>
+                                    </div>
+                                    <div className="glass-panel" style={{ padding: '12px', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '10px', opacity: 0.5 }}>AVG DURATION</div>
+                                        <div style={{ fontSize: '20px', fontWeight: 900 }}>{analytics.metrics.avgDurationMinutes}m</div>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>MAP PERFORMANCE</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {Object.entries(analytics.mapStats).sort((a,b) => b[1].total - a[1].total).slice(0, 5).map(([map, stat]) => (
+                                        <div key={map} style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                                            <span style={{ fontWeight: 700 }}>{map}</span>
+                                            <span style={{ opacity: 0.7 }}>{stat.picked}P / {stat.banned}B</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             {historyData.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.2)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px' }}>NO RECORDS FOUND</div>
@@ -312,7 +424,7 @@ export default function TournamentDashboard() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.4 }}>{new Date(match.date).toLocaleDateString()} | {match.format.toUpperCase()}</span>
                                             <button 
-                                                onClick={() => navigate(`/${orgId}/${tournamentId}/veto/${match.id}`)}
+                                                onClick={() => navigate(`/org/${orgId}/tournament/${tournamentId}/veto/${match.id}`)}
                                                 style={{ padding: '4px 12px', fontSize: '9px', fontWeight: 900, background: 'none', border: `1px solid ${accentColor}`, color: accentColor, borderRadius: '4px', cursor: 'pointer' }}
                                             >
                                                 SPECTATE

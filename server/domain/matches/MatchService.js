@@ -22,30 +22,23 @@ async function createMatch({ orgId, tournamentId, teamA, teamB, teamALogo, teamB
     }
 
     const matchId = crypto.randomUUID();
-    const adminKey = crypto.randomBytes(16).toString('hex');
-    const teamAKey = crypto.randomBytes(16).toString('hex');
-    const teamBKey = crypto.randomBytes(16).toString('hex');
 
     const { data: match, error } = await supabase
-        .from('match_history')
+        .from('veto_sessions')
         .insert({
             id: matchId,
             org_id: orgId,
             tournament_id: tournamentId || 'default',
-            teamA,
-            teamB,
-            teamALogo,
-            teamBLogo,
+            team_a: teamA,
+            team_b: teamB,
+            team_a_logo: teamALogo,
+            team_b_logo: teamBLogo,
             format,
             use_timer: settings.useTimer || false,
             timer_duration: settings.timerDuration || 60,
             use_coin_flip: settings.useCoinFlip || false,
-            admin_key: adminKey,
-            team_a_key: teamAKey,
-            team_b_key: teamBKey,
             finished: false,
-            status: 'scheduled',
-            date: new Date().toISOString()
+            status: 'scheduled'
         })
         .select()
         .single();
@@ -53,8 +46,7 @@ async function createMatch({ orgId, tournamentId, teamA, teamB, teamALogo, teamB
     if (error) throw new Error(`Match creation failed: ${error.message}`);
     
     return {
-        matchId: match.id,
-        keys: { admin: adminKey, A: teamAKey, B: teamBKey }
+        matchId: match.id
     };
 }
 
@@ -63,7 +55,7 @@ async function createMatch({ orgId, tournamentId, teamA, teamB, teamALogo, teamB
  */
 async function getMatch(matchId) {
     const { data, error } = await supabase
-        .from('match_history')
+        .from('veto_sessions')
         .select('*')
         .eq('id', matchId)
         .maybeSingle();
@@ -77,13 +69,12 @@ async function getMatch(matchId) {
  */
 async function finalizeMatch(matchId, { winner, deciderMap, logs }) {
     const { error } = await supabase
-        .from('match_history')
+        .from('veto_sessions')
         .update({
             finished: true,
             status: 'completed',
-            winner,
-            decider_map: deciderMap,
-            logs
+            finished_at: new Date().toISOString(),
+            logs // Logs include maps and events in JSONB
         })
         .eq('id', matchId);
 

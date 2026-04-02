@@ -21,6 +21,7 @@ import OrgCreate         from './pages/OrgCreate';
 import OrgDashboard      from './pages/OrgDashboard';
 import PlayerProfile     from './pages/PlayerProfile';
 import OrgList        from './pages/OrgList';
+import TournamentPublic from './pages/TournamentPublic';
 
 // Components
 import TopNav from './components/layout/TopNav';
@@ -79,6 +80,7 @@ export default function App() {
                             <Route path="/register"  element={<Register />} />
                             <Route path="/history"   element={<GlobalHome view="history" />} />
                             <Route path="/players/:userId" element={<PlayerProfile />} />
+                            <Route path="/org/:orgId/tournament/:tournamentId/live" element={<TournamentPublic />} />
 
                             {/* ── PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
