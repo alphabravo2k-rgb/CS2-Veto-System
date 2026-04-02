@@ -44,6 +44,7 @@ const TopNav = () => {
         { label: 'HOME', path: '/' },
         { label: 'MY ORGS', path: '/orgs', authRequired: true },
         { label: 'HISTORY', path: '/history' },
+        { label: 'SUPPORT', path: '/support' },
         { label: 'ADMIN', path: '/admin', adminOnly: true }
     ].filter(item => {
         if (item.authRequired && !isAuthenticated) return false;
@@ -61,9 +62,14 @@ const TopNav = () => {
                             {isMobileMenuOpen ? <path d="M18 6L6 18M6 6l12 12"/> : <path d="M4 6h16M4 12h16M4 18h16"/>}
                         </svg>
                     </button>
-                    <Link to="/" className="nav-logo">
-                        <span className="logo-accent">VETO</span>.GG
-                    </Link>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <Link to="/" className="nav-logo">
+                            <span className="logo-accent">VETO</span>.GG
+                        </Link>
+                        <div className="desktop-only" style={{ fontSize: '8px', fontWeight: 900, opacity: 0.3, letterSpacing: '2px', marginTop: '-4px' }}>
+                            ENGINEERED BY <span style={{ color: '#00d4ff' }}>AB2K</span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* ── Center: Desktop Links ── */}

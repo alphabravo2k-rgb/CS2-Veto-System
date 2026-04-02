@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from './SharedUI';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const FAQ_DATA = [

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { AnimatedBackground, ShieldIcon, ActivityIcon, CheckIcon } from './SharedUI';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, CheckIcon } from '../components/SharedUI';
 import { supabase } from '../utils/supabase.js';
 import useAuthStore from '../store/useAuthStore';
 
