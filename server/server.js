@@ -25,6 +25,7 @@ const orgRoutes     = require('./routes/orgs');
 const playerRoutes  = require('./routes/players');
 const adminRoutes   = require('./routes/admin');
 const matchRoutes   = require('./routes/matches');
+const paymentRoutes = require('./routes/payments');
 
 // ── Optional auth middleware (for identifying logged-in users on public routes)
 const { optionalAuth } = require('./middleware/auth');

@@ -8,12 +8,14 @@ import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
 import LogLineRenderer from '../components/veto/LogLineRenderer';
 import Countdown from '../components/veto/Countdown';
 import { AnimatedBackground, HomeIcon, CheckIcon, ActivityIcon, RefreshIcon } from '../components/SharedUI';
+import Watermark from '../components/Watermark';
+import { NeonText, GlassPanel, ScanlineOverlay, GlowButton } from '../components/veto/VetoUIPrimitives';
 
 /**
- * ⚡ UI LAYER — PREMIUM VETO ROOM
+ * ⚡ UI LAYER — CINEMATIC VETO ROOM (UE5 FIDELITY)
  * =============================================================================
  * Responsibility: Live map selection interface for teams and observers.
- * Features: Real-time WebSocket sync, glassmorphic UI, neon signaling.
+ * Design: Motion-intensive, scanlined, holographic esports experience.
  * =============================================================================
  */
 const VetoRoom = () => {
@@ -37,7 +39,7 @@ const VetoRoom = () => {
         sendCoinDecide 
     } = useVetoStore();
 
-    const { branding } = useOrgBranding();
+    const { branding } = useOrgBranding(gameState?.org_id);
     const [showCopyNotify, setShowCopyNotify] = useState(false);
     const logContainerRef = useRef(null);
 
@@ -95,7 +97,7 @@ const VetoRoom = () => {
                     style={{ textAlign: 'center', zIndex: 10 }}
                 >
                     <div style={{ width: '40px', height: '40px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1.5rem' }} />
-                    <h2 style={{ letterSpacing: '4px', fontWeight: 900 }}>INITIALIZING MATCH...</h2>
+                    <NeonText fontSize="1.5rem">Initializing Terminal Signal...</NeonText>
                     {serverError && <p style={{ color: '#ff4b2b', marginTop: '1rem' }}>{serverError}</p>}
                 </motion.div>
             </div>
@@ -105,128 +107,151 @@ const VetoRoom = () => {
     return (
         <div className="veto-room-page">
             <AnimatedBackground />
+            <ScanlineOverlay />
 
             {/* ── STATUS BAR ── */}
-            <div className="room-status-bar glass-panel" style={{ borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'space-between', padding: '12px 24px', fontSize: '11px', zIndex: 100, position: 'relative' }}>
-                <div className="spectator-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.7)' }}>
+            <div className="room-status-bar" style={{ background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'space-between', padding: '12px 40px', fontSize: '11px', zIndex: 100, position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'rgba(255,255,255,0.7)' }}>
                     <ActivityIcon size={14} color="var(--brand-primary)" />
-                    <span style={{ letterSpacing: '2px', fontWeight: 900 }}>{roomUserCount} SPECTATORS</span>
+                    <span style={{ letterSpacing: '3px', fontWeight: 900 }}>LIVE TERMINAL FEED // {roomUserCount} SPECTATORS</span>
                 </div>
-                <div className={`connection-status ${isConnected ? 'online' : 'reconnecting'}`} style={{ letterSpacing: '2px', fontWeight: 900, color: isConnected ? '#00ff88' : '#ffaa00' }}>
-                    {isConnected ? 'CONNECTED' : 'DISCONNECTED - RECONNECTING...'}
+                <div style={{ letterSpacing: '3px', fontWeight: 900, color: isConnected ? '#00ff88' : '#ffaa00' }}>
+                    {isConnected ? 'SIGNAL: SECURED' : 'SIGNAL: LOSS DETECTED'}
                 </div>
             </div>
 
-            {/* ── MATCH HEADER ── */}
-            <header className="match-header fade-enter-active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 24px', gap: '80px', position: 'relative', zIndex: 10 }}>
-                <div className={`team-block team-a ${gameState.sequence[gameState.step]?.t === 'A' ? 'active-turn' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '32px', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
-                    <div className="team-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '20px' }}>
+            {/* ── CINEMATIC HEADER ── */}
+            <header style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                padding: '80px 40px', 
+                gap: '100px', 
+                position: 'relative', 
+                zIndex: 10,
+                background: 'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%)'
+            }}>
+                {/* Team A */}
+                <motion.div 
+                    initial={{ x: -100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '40px', textAlign: 'left' }}
+                >
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', opacity: 0.4, letterSpacing: '4px', marginBottom: '8px' }}>CORE TEAM</div>
+                        <h2 style={{ fontSize: '3.5rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamA}</h2>
+                        {gameState.ready?.A ? <span style={{ color: '#00ff88', fontSize: '11px', fontWeight: 900, letterSpacing: '2px' }}>[ READY ]</span> : <span style={{ opacity: 0.3, fontSize: '11px', letterSpacing: '2px' }}>[ SYNCING... ]</span>}
+                    </div>
+                    <GlassPanel style={{ width: '160px', height: '160px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: gameState.sequence[gameState.step]?.t === 'A' ? '2px solid var(--brand-primary)' : '1px solid rgba(255,255,255,0.1)' }}>
                         <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div className="team-info">
-                        <h2 className={gameState.sequence[gameState.step]?.t === 'A' ? "team-name neon-text" : "team-name"} style={{ fontSize: '3rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamA}</h2>
-                        {gameState.ready?.A ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING FOR PLAYERS</span>}
-                    </div>
-                </div>
+                    </GlassPanel>
+                </motion.div>
 
-                <div className="match-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                    <div className="vs-label neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, opacity: 0.3 }}>VS</div>
-                    <div className="format-badge premium-button" style={{ borderRadius: '50px', padding: '4px 16px', border: '1px solid var(--brand-primary)', fontFamily: 'Rajdhani' }}>{gameState.format.toUpperCase()}</div>
+                {/* Center / VS */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                    <NeonText fontSize="3rem" color="rgba(255,255,255,0.2)">VS</NeonText>
+                    <div style={{ padding: '6px 20px', border: '1px solid var(--brand-primary)', borderRadius: '50px', fontSize: '12px', fontWeight: 900, letterSpacing: '4px' }}>{gameState.format.toUpperCase()}</div>
                     {gameState.useTimer && !gameState.finished && (
-                        <div className="timer-wrapper" style={{ fontSize: '3.5rem', fontWeight: 900, letterSpacing: '-2px' }}>
+                        <div style={{ fontSize: '4rem', fontWeight: 900, letterSpacing: '-4px', color: '#fff' }}>
                             <Countdown target={gameState.timerEndsAt} key={gameState.step} />
                         </div>
                     )}
                 </div>
 
-                <div className={`team-block team-b ${gameState.sequence[gameState.step]?.t === 'B' ? 'active-turn' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '32px', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
-                    <div className="team-info" style={{ textAlign: 'right' }}>
-                        <h2 className={gameState.sequence[gameState.step]?.t === 'B' ? "team-name neon-text" : "team-name"} style={{ fontSize: '3rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamB}</h2>
-                        {gameState.ready?.B ? <span className="ready-tag">READY</span> : <span className="waiting-tag">WAITING FOR PLAYERS</span>}
-                    </div>
-                    <div className="team-logo-wrapper glass-panel" style={{ width: '120px', height: '120px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '20px' }}>
+                {/* Team B */}
+                <motion.div 
+                    initial={{ x: 100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '40px', textAlign: 'right' }}
+                >
+                    <GlassPanel style={{ width: '160px', height: '160px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: gameState.sequence[gameState.step]?.t === 'B' ? '2px solid #ff0055' : '1px solid rgba(255,255,255,0.1)' }}>
                         <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    </GlassPanel>
+                    <div>
+                        <div style={{ fontSize: '12px', opacity: 0.4, letterSpacing: '4px', marginBottom: '8px' }}>CHALLENGER</div>
+                        <h2 style={{ fontSize: '3.5rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamB}</h2>
+                        {gameState.ready?.B ? <span style={{ color: '#00ff88', fontSize: '11px', fontWeight: 900, letterSpacing: '2px' }}>[ READY ]</span> : <span style={{ opacity: 0.3, fontSize: '11px', letterSpacing: '2px' }}>[ SYNCING... ]</span>}
                     </div>
-                </div>
+                </motion.div>
             </header>
 
-            {/* ── MAIN LAYOUT ── */}
-            <main className="room-layout" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '40px', maxWidth: '1600px', margin: '0 auto', padding: '0 40px 80px', position: 'relative', zIndex: 10 }}>
-                {/* LOGS & CONTROLS */}
-                <aside className="room-sidebar">
-                    <div className="action-card glass-panel" style={{ padding: '2rem', marginBottom: '2rem', position: 'relative' }}>
-                        <h4 className="card-title neon-text" style={{ fontSize: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', fontWeight: 900 }}>MATCH LOGS</h4>
+            {/* ── CORE LAYOUT ── */}
+            <main style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '48px', maxWidth: '1700px', margin: '0 auto', padding: '0 40px 100px', position: 'relative', zIndex: 10 }}>
+                {/* Sidebar */}
+                <aside style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <GlassPanel style={{ padding: '32px' }}>
+                        <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>TERMINAL LOGS</h4>
                         <div className="log-container" ref={logContainerRef} style={{ maxHeight: '450px', overflowY: 'auto' }}>
                             <AnimatePresence initial={false}>
-                                {gameState.logs.slice(-8).map((log, idx) => (
+                                {gameState.logs.slice(-10).map((log, idx) => (
                                     <motion.div 
                                         key={`${idx}-${log}`}
-                                        initial={{ opacity: 0, x: -10 }}
+                                        initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        style={{ marginBottom: '12px' }}
+                                        style={{ marginBottom: '14px', borderLeft: '2px solid rgba(255,255,255,0.05)', paddingLeft: '16px' }}
                                     >
                                         <LogLineRenderer log={log} teamA={gameState.teamA} teamB={gameState.teamB} />
                                     </motion.div>
                                 ))}
                             </AnimatePresence>
                         </div>
-                    </div>
+                    </GlassPanel>
 
                     {!gameState.finished && (
-                        <div className="action-card controls glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-                            <h4 className="card-title neon-text" style={{ fontSize: '10px', margin: '0 0 24px 0', letterSpacing: '0.4em', fontWeight: 900 }}>MATCH CONTROLS</h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <GlassPanel style={{ padding: '32px' }}>
+                            <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>OPERATIONS</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 {myRole && !gameState.ready?.[myRole] && (
-                                    <button className="premium-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
-                                        MARK AS READY
-                                    </button>
+                                    <GlowButton style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
+                                        INITIALIZE READY SIGNAL
+                                    </GlowButton>
                                 )}
-                                <button className="glass-panel" style={{ width: '100%', cursor: 'pointer', padding: '12px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px' }} onClick={copyInvite}>
-                                    COPY INVITE LINK
+                                <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={copyInvite}>
+                                    COPY MATCH TERMINAL LINK
                                 </button>
-                                {myRole === 'admin' && (
-                                    <button className="premium-button" style={{ width: '100%', justifyContent: 'center', background: '#ff4b2b' }} onClick={() => navigate('/admin')}>
-                                        PLATFORM ADMIN
-                                    </button>
-                                )}
                             </div>
-                        </div>
+                        </GlassPanel>
                     )}
                 </aside>
 
-                {/* MAP GRID */}
-                <section className="map-grid-section" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    <div className="step-indicator glass-panel" style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', gap: '16px', fontWeight: 900, background: 'rgba(0,0,0,0.4)' }}>
-                        {gameState.finished ? (
-                            <span className="veto-complete neon-text" style={{ fontSize: '1.2rem', letterSpacing: '4px' }}>VETO COMPLETED</span>
-                        ) : (
-                            <>
-                                <span style={{ opacity: 0.5, letterSpacing: '2px' }}>PENDING ACTION:</span>
-                                <span className="neon-text" style={{ fontSize: '1.2rem', letterSpacing: '2px' }}>
-                                    {gameState.sequence[gameState.step]?.t} {gameState.sequence[gameState.step]?.a.toUpperCase()}
-                                </span>
-                            </>
-                        )}
+                {/* Map Selection Grid */}
+                <section style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '20px' }}>
+                        <div>
+                            <h4 style={{ fontSize: '12px', letterSpacing: '4px', color: 'rgba(255,255,255,0.4)', margin: '0 0 8px 0' }}>PHASE</h4>
+                            <NeonText fontSize="1.8rem">
+                                {gameState.finished ? 'VETO COMPLETED' : `${gameState.sequence[gameState.step]?.t} / ${gameState.sequence[gameState.step]?.a.toUpperCase()}`}
+                            </NeonText>
+                        </div>
+                        {isMyTurn && <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>⚡ YOUR ACTION REQUIRED</div>}
                     </div>
 
-                    <div className="map-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
                         <AnimatePresence mode="popLayout">
-                            {gameState.maps.map((m) => {
+                            {gameState.maps.map((m, index) => {
                                 const pickIndex = gameState.logs.filter(l => l.includes('[PICK]')).findIndex(l => l.includes(m.name));
                                 return (
-                                    <MapCard 
+                                    <motion.div
                                         key={m.name}
-                                        map={m}
-                                        isInteractive={isMyTurn}
-                                        onClick={() => handleMapClick(m.name)}
-                                        actionColor={currentActionColor}
-                                        mapOrderLabel={pickIndex !== -1 ? (pickIndex + 1).toString() : null}
-                                    />
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        transition={{ delay: index * 0.05 }}
+                                    >
+                                        <MapCard 
+                                            map={m}
+                                            isInteractive={isMyTurn}
+                                            onClick={() => handleMapClick(m.name)}
+                                            actionColor={currentActionColor}
+                                            mapOrderLabel={pickIndex !== -1 ? (pickIndex + 1).toString() : null}
+                                        />
+                                    </motion.div>
                                 );
                             })}
                         </AnimatePresence>
                     </div>
                 </section>
+                
+                <Watermark branding={branding} />
             </main>
 
             {/* OVERLAYS */}
@@ -239,42 +264,21 @@ const VetoRoom = () => {
                 />
             )}
 
-            {/* TOASTS */}
+            {/* NOTIFICATIONS */}
             <AnimatePresence>
                 {!isConnected && (
                     <motion.div 
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
-                        className="glass-panel"
-                        style={{ position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', fontWeight: 900, zIndex: 2000, display: 'flex', alignItems: 'center', gap: '10px', background: '#ff4b2b', color: '#fff', border: 'none', letterSpacing: '2px' }}
+                        style={{ position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', fontWeight: 900, zIndex: 2000, display: 'flex', alignItems: 'center', gap: '10px', background: '#ff4b2b', color: '#fff', borderRadius: '8px', letterSpacing: '2px' }}
                     >
-                        <RefreshIcon /> SYSTEM DISCONNECTED — RECONNECTING...
-                    </motion.div>
-                )}
-
-                {showCopyNotify && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 50 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 50 }}
-                        className="glass-panel"
-                        style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', padding: '16px 32px', borderRadius: '50px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 2000, background: 'var(--brand-primary)', color: '#000', border: 'none', letterSpacing: '2px' }}
-                    >
-                        <CheckIcon /> INVITE LINK COPIED
+                        <RefreshIcon /> SIGNAL LOST - ATTEMPTING RECOVERY...
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <style>{`
-                .veto-room-page { min-height: 100vh; background: #050a14; color: #fff; font-family: 'Rajdhani', sans-serif; position: relative; }
-                .ready-tag { font-size: 10px; color: #00ff88; background: rgba(0,255,136,0.1); padding: 4px 12px; border-radius: 50px; border: 1px solid rgba(0,255,136,0.2); font-weight: 900; letter-spacing: 2px; }
-                .waiting-tag { font-size: 10px; color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.1); font-weight: 900; letter-spacing: 2px; }
-                .team-block.active-turn { transform: scale(1.1); }
-                .team-block.active-turn .team-logo-wrapper { border-color: var(--brand-primary); box-shadow: 0 0 40px rgba(0, 212, 255, 0.4); }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                .log-container::-webkit-scrollbar { display: none; }
-            `}</style>
+            <style>{`.log-container::-webkit-scrollbar { display: none; }`}</style>
         </div>
     );
 };

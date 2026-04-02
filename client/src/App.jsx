@@ -29,23 +29,33 @@ import BrandingProvider from './components/layout/BrandingProvider';
 // Lazy-loaded Admin Dashboards
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
 const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
+const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
 
 /**
- * 🛰️ SECURE ROUTE GUARD
- * Redirects unauthorized signals to the authentication portal.
+ * 🛰️ SECURE ROUTE GUARDS
+ * =============================================================================
  */
-function ProtectedRoute({ children }) {
-    const { isAuthenticated, isLoading } = useAuthStore();
+const ProtectedRoute = ({ children }) => {
+    const { isAuthenticated, loading } = useAuthStore();
     const location = useLocation();
 
-    if (isLoading) return <div style={{ minHeight: '100vh', background: '#050a14' }} />;
-
-    if (!isAuthenticated) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
-    }
-
+    if (loading) return <div>Checking security clearance...</div>;
+    if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
+    
     return children;
-}
+};
+
+const PlatformAdminRoute = ({ children }) => {
+    const { isAuthenticated, user, loading } = useAuthStore();
+    const location = useLocation();
+
+    if (loading) return <div>Validating terminal credentials...</div>;
+    if (!isAuthenticated || user?.role !== 'platform_admin') {
+        return <Navigate to="/" replace />;
+    }
+    
+    return children;
+};
 
 export default function App() {
     const { initialize } = useAuthStore();
@@ -74,21 +84,22 @@ export default function App() {
                             <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
                             <Route path="/orgs/create"  element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
                             <Route path="/org/:orgId"   element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
+                            <Route path="/org/:orgId/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
                             <Route path="/orgs"         element={<ProtectedRoute><OrgList /></ProtectedRoute>} />
                             
                             {/* Unified Tournament Routes */}
                             <Route path="/org/:orgId/tournament/:tournamentId" element={<ProtectedRoute><TournamentDashboard /></ProtectedRoute>} />
                             <Route path="/org/:orgId/tournament/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
-                            {/* ── PLATFORM CONTROL ── */}
-                            <Route path="/admin" element={<ProtectedRoute><GlobalAdmin /></ProtectedRoute>} />
-
                             {/* ── LEGACY SIGNAL COMPATIBILITY ── */}
                             <Route path="/:orgId/:tournamentId" element={<TournamentDashboard />} />
                             <Route path="/:orgId/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
                             {/* ── 404: SIGNAL LOST ── */}
-                            <Route path="*" element={<NotFound />} />
+                            {/* Master Admin Panel (Platform Admin Only) */}
+                            <Route path="/admin"        element={<PlatformAdminRoute><GlobalAdmin /></PlatformAdminRoute>} />
+                            
+                            <Route path="*"             element={<NotFound />} />
                         </Routes>
                     </BrandingProvider>
                 </div>
