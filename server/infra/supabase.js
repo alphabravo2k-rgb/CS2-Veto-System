@@ -4,6 +4,15 @@ require('dotenv').config();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
+// 🔍 STARTUP DIAGNOSTICS
+console.log('[DEBUG] SUPABASE_URL detected:', !!supabaseUrl);
+console.log('[DEBUG] SUPABASE_SERVICE_KEY detected:', !!supabaseServiceKey);
+if (supabaseServiceKey?.startsWith('eyJ')) {
+    console.log('[DEBUG] SUPABASE_SERVICE_KEY format: Valid JWT.');
+} else if (supabaseServiceKey) {
+    console.warn('[DEBUG] WARNING: SUPABASE_SERVICE_KEY does not look like a standard Supabase JWT.');
+}
+
 let realClient = null;
 
 if (supabaseUrl && supabaseServiceKey) {
@@ -23,14 +32,12 @@ if (supabaseUrl && supabaseServiceKey) {
  * accessing .auth.admin doesn't crash the entire process.
  */
 function wrapAuth(authClient) {
-    // If admin is already there, return the client as-is
     if (authClient && authClient.admin) return authClient;
     
-    // Otherwise, return a proxy that intercepts .admin access
     return new Proxy(authClient || {}, {
         get(target, prop) {
             if (prop === 'admin') {
-                console.error("🚨 [SUPABASE] CRITICAL: Attempted to access 'auth.admin' but it is missing. This usually means you are using the 'anon' key instead of the 'service_role' key in your environment variables.");
+                console.error("🚨 [SUPABASE] CRITICAL: Attempted to access 'auth.admin' but it is missing. This usually means you are using the 'anon' key instead of the 'service_role' key.");
                 return createSafetyProxy('supabase.auth.admin');
             }
             return target[prop];
@@ -48,11 +55,9 @@ function createSafetyProxy(path = 'supabase') {
     
     return new Proxy(proxyTarget, {
         get(target, prop) {
-            // If the real client exists at the root, try to get the property
             if (realClient && path === 'supabase') {
                 const val = realClient[prop];
                 if (val !== undefined) {
-                    // Special handle for .auth to protect against missing .admin
                     if (prop === 'auth') return wrapAuth(val);
                     return val;
                 }
@@ -63,7 +68,6 @@ function createSafetyProxy(path = 'supabase') {
             console.error(`🚨 [SUPABASE] Attempted to call "${path}()" but client is incorrectly initialized. Check SUPABASE_URL and SUPABASE_SERVICE_KEY.`);
             return {
                 then: (resolve) => resolve({ data: null, error: { message: `Supabase not initialized: ${path}` } }),
-                // Mock chainable methods to avoid "cannot read property of undefined" on further calls
                 select: () => createSafetyProxy(`${path}.select`),
                 eq: () => createSafetyProxy(`${path}.eq`),
                 single: () => createSafetyProxy(`${path}.single`),

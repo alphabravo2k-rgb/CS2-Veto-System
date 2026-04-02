@@ -1,0 +1,215 @@
+/**
+ * ⚡ SHARED DOMAIN — VETO ENGINE (TS/DENO)
+ * =============================================================================
+ * Deterministic State Machine for CS2 Vetoes.
+ * This version is designed to run in Supabase Edge Functions (Deno).
+ */
+
+import { SEQUENCES } from './sequences.ts';
+
+const VALID_SIDES = new Set(['CT', 'T']);
+
+export default class VetoEngine {
+    /**
+     * Build the initial veto state.
+     */
+    static initializeVeto({ format, mapPool, customSequence, useTimer, timerDuration, useCoinFlip }: any) {
+        if (!mapPool || mapPool.length === 0) {
+            throw new Error('Map pool cannot be empty');
+        }
+
+        let sequence;
+        if (format === 'custom' && Array.isArray(customSequence) && customSequence.length > 0) {
+            sequence = customSequence;
+        } else {
+            sequence = SEQUENCES[format];
+            if (!sequence) throw new Error(`Unknown veto format: ${format}`);
+        }
+
+        const maps = mapPool.map((m: any) => ({
+            name: String(m.name).trim().slice(0, 50),
+            customImage: m.customImage || null,
+            status: 'available',
+            pickedBy: null,
+            side: null,
+        }));
+
+        return {
+            format,
+            sequence,
+            step: 0,
+            maps,
+            logs: [],
+            finished: false,
+            lastPickedMap: null,
+            playedMaps: [],
+            useTimer: !!useTimer,
+            timerDuration: Number(timerDuration) || 60,
+            useCoinFlip: !!useCoinFlip,
+            coinFlip: useCoinFlip ? { status: 'waiting_call', winner: null, result: null } : null,
+            ready: { A: false, B: false },
+            timerEndsAt: null,
+        };
+    }
+
+    static validateTurn(state: any, teamKey: string, action: string) {
+        if (state.finished) return { valid: false, reason: 'Match is already finished' };
+        if (state.useTimer && (!state.ready.A || !state.ready.B)) {
+            return { valid: false, reason: 'Both teams must be ready before the veto starts' };
+        }
+        if (state.useCoinFlip && (!state.coinFlip || state.coinFlip.status !== 'done')) {
+            return { valid: false, reason: 'Coin flip must be completed first' };
+        }
+
+        const step = state.sequence[state.step];
+        if (!step) return { valid: false, reason: 'No more steps in sequence' };
+
+        if (teamKey !== 'admin' && step.t !== 'System' && step.t !== teamKey) {
+            return { valid: false, reason: `Not your turn. Expected team ${step.t}` };
+        }
+
+        return { valid: true, currentStep: step };
+    }
+
+    static banMap(state: any, teamKey: string, mapName: string, teamName: string) {
+        const { valid, reason, currentStep } = VetoEngine.validateTurn(state, teamKey, 'ban');
+        if (!valid) return { state, error: reason };
+        if (currentStep.a !== 'ban') return { state, error: `Expected action: ${currentStep.a}` };
+
+        const mapIdx = state.maps.findIndex((m: any) => m.name === mapName && m.status === 'available');
+        if (mapIdx === -1) return { state, error: `Map "${mapName}" is not available` };
+
+        const newState = VetoEngine._clone(state);
+        newState.maps[mapIdx].status = 'banned';
+        newState.step++;
+        newState.logs.push(`[BAN] ${teamName} banned ${mapName}`);
+
+        return { state: VetoEngine.finalizeSeries(newState) };
+    }
+
+    static pickMap(state: any, teamKey: string, mapName: string, teamName: string) {
+        const { valid, reason, currentStep } = VetoEngine.validateTurn(state, teamKey, 'pick');
+        if (!valid) return { state, error: reason };
+        if (currentStep.a !== 'pick') return { state, error: `Expected action: ${currentStep.a}` };
+
+        const mapIdx = state.maps.findIndex((m: any) => m.name === mapName && m.status === 'available');
+        if (mapIdx === -1) return { state, error: `Map "${mapName}" is not available` };
+
+        const newState = VetoEngine._clone(state);
+        newState.maps[mapIdx].status = 'picked';
+        newState.maps[mapIdx].pickedBy = (currentStep as any).t;
+        newState.lastPickedMap = mapName;
+        newState.playedMaps.push(mapName);
+        newState.step++;
+        newState.logs.push(`[PICK] ${teamName} picked ${mapName}`);
+
+        return { state: VetoEngine.finalizeSeries(newState) };
+    }
+
+    static pickSide(state: any, teamKey: string, side: string, teamName: string) {
+        if (!VALID_SIDES.has(side)) return { state, error: 'Invalid side. Must be CT or T' };
+
+        const { valid, reason, currentStep } = VetoEngine.validateTurn(state, teamKey, 'side');
+        if (!valid) return { state, error: reason };
+        if (currentStep.a !== 'side') return { state, error: `Expected action: ${currentStep.a}` };
+
+        const targetMap = state.lastPickedMap || (state.maps.find((m: any) => m.status === 'available')?.name);
+        if (!targetMap) return { state, error: 'No map available to assign a side to' };
+
+        const mapIdx = state.maps.findIndex((m: any) => m.name === targetMap);
+        const newState = VetoEngine._clone(state);
+        newState.maps[mapIdx].side = side;
+        newState.lastPickedMap = null;
+        newState.step++;
+
+        const lastLog = newState.logs[newState.logs.length - 1];
+        if (lastLog && lastLog.includes(`picked ${targetMap}`)) {
+            newState.logs[newState.logs.length - 1] = `${lastLog} (${teamName} chose ${side} on ${targetMap})`;
+        } else {
+            newState.logs.push(`[SIDE] ${teamName} chose ${side} on ${targetMap}`);
+        }
+
+        return { state: VetoEngine.finalizeSeries(newState) };
+    }
+
+    static coinCall(state: any, call: string, teamAName: string) {
+        if (!state.useCoinFlip || !state.coinFlip || state.coinFlip.status !== 'waiting_call') {
+            return { state, error: 'Coin flip not applicable at this time' };
+        }
+
+        // Deno native CSPRNG
+        const randomByte = new Uint8Array(1);
+        crypto.getRandomValues(randomByte);
+        const result = randomByte[0] % 2 === 0 ? 'heads' : 'tails';
+        const winner = call === result ? 'A' : 'B';
+
+        const newState = VetoEngine._clone(state);
+        newState.coinFlip.result = result;
+        newState.coinFlip.winner = winner;
+        newState.coinFlip.status = 'deciding';
+        newState.logs.push(`[COIN] Called ${call.toUpperCase()} → ${result.toUpperCase()}. Winner: ${winner === 'A' ? teamAName : 'Team B'}`);
+
+        return { state: newState, result, winner };
+    }
+
+    static coinDecision(state: any, winner: string, decision: string, winnerName: string) {
+        if (!state.useCoinFlip || !state.coinFlip || state.coinFlip.status !== 'deciding') {
+            return { state, error: 'No pending coin flip decision' };
+        }
+        if (state.coinFlip.winner !== winner) {
+            return { state, error: 'Only the coin flip winner can make this decision' };
+        }
+
+        const newState = VetoEngine._clone(state);
+        const shouldSwap = (winner === 'A' && decision === 'second') || (winner === 'B' && decision === 'first');
+
+        if (shouldSwap) {
+            newState.sequence = newState.sequence.map((step: any) => ({
+                ...step,
+                t: step.t === 'A' ? 'B' : step.t === 'B' ? 'A' : step.t,
+            }));
+        }
+
+        newState.coinFlip.status = 'done';
+        newState.logs.push(`[COIN] ${winnerName} chose to go ${decision}`);
+
+        return { state: newState };
+    }
+
+    static finalizeSeries(state: any) {
+        if (state.finished) return state;
+        const step = state.sequence[state.step];
+
+        if (step && step.a === 'knife') {
+            const decider = state.maps.find((m: any) => m.status === 'available');
+            if (decider) {
+                const newState = VetoEngine._clone(state);
+                const mapIdx = newState.maps.findIndex((m: any) => m.name === decider.name);
+                newState.maps[mapIdx].status = 'decider';
+                newState.maps[mapIdx].side = 'Knife';
+                newState.playedMaps.push(decider.name);
+                newState.logs.push(`[DECIDER] ${decider.name} — knife for side`);
+                newState.finished = true;
+                return newState;
+            }
+        }
+
+        if (state.step >= state.sequence.length) {
+            const newState = VetoEngine._clone(state);
+            const lastAvailable = newState.maps.find((m: any) => m.status === 'available');
+            if (lastAvailable) {
+                const mapIdx = newState.maps.findIndex((m: any) => m.name === lastAvailable.name);
+                newState.maps[mapIdx].status = 'decider';
+                newState.playedMaps.push(lastAvailable.name);
+            }
+            newState.finished = true;
+            return newState;
+        }
+
+        return state;
+    }
+
+    static _clone(state: any) {
+        return structuredClone(state);
+    }
+}

@@ -1,130 +1,119 @@
 /**
- * ⚡ COMP-OS — GLOBAL VETO STORE
+ * ⚡ COMP-OS — GLOBAL VETO STORE (SERVERLESS PIVOT)
  * =============================================================================
- * FILE          : useVetoStore.js
- * RESPONSIBILITY: Decoupled WebSocket engine and Global State Management
+ * RESPONSIBILITY: Supabase Realtime & Edge Functions Orchestration
  * LAYER         : Client Data Layer (Zustand)
- * RISK LEVEL    : SECURE (Auditor Hardened)
+ * VERSION       : v5.0.0 (Serverless Native)
  * =============================================================================
  */
 
 import { create } from 'zustand';
-import io from 'socket.io-client';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
+import { supabase } from '../utils/supabase.js';
 
 const useVetoStore = create((set, get) => ({
-    _socket: null, 
+    _channel: null, 
     gameState: null,
     myRole: null,
     serverError: null,
     roomUserCount: 0,
     isConnected: false,
 
-    connectToRoom: (matchId, key) => {
-        const existingSocket = get()._socket;
-        if (existingSocket) {
-            existingSocket.removeAllListeners();
-            existingSocket.disconnect();
+    connectToRoom: async (matchId, key) => {
+        // 1. Cleanup existing channel
+        const existingChannel = get()._channel;
+        if (existingChannel) {
+            existingChannel.unsubscribe();
         }
 
-        const socket = io(SOCKET_URL, { autoConnect: true });
+        // 2. Initial State Fetch (Important for fast first-render)
+        const { data: initialData, error: fetchError } = await supabase
+            .from('veto_sessions')
+            .select('*')
+            .eq('id', matchId)
+            .single();
 
-        socket.on('connect', () => {
-            set({ isConnected: true });
-            socket.emit('join_room', { roomId: matchId, key });
-        });
+        if (fetchError) {
+            set({ serverError: 'Match not found or signal lost.' });
+            return;
+        }
 
-        socket.on('disconnect', () => {
-            set({ isConnected: false });
-        });
+        set({ gameState: initialData, isConnected: true });
 
-        socket.on('update_state', (data) => set({ gameState: data }));
-        socket.on('role_assigned', (role) => set({ myRole: role }));
-        socket.on('room_user_count', ({ count }) => set({ roomUserCount: count }));
-        
-        socket.on('error', (msg) => {
-            set({ serverError: msg });
-            setTimeout(() => set({ serverError: null }), 4000);
-        });
+        // 3. Authorization (Local check for role)
+        const keys = initialData.keys_data || {};
+        let role = 'viewer';
+        if (key === keys.admin) role = 'admin';
+        else if (key === keys.A) role = 'A';
+        else if (key === keys.B) role = 'B';
+        set({ myRole: role });
 
-        set({ _socket: socket });
+        // 4. Set up Realtime Subscription
+        const channel = supabase.channel(`match:${matchId}`)
+            .on(
+                'postgres_changes', 
+                { event: 'UPDATE', schema: 'public', table: 'veto_sessions', filter: `id=eq.${matchId}` },
+                (payload) => {
+                    console.log('[REALTIME] State Sync:', payload.new);
+                    set({ gameState: payload.new });
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') set({ isConnected: true });
+                if (status === 'CLOSED' || status === 'TIMED_OUT') set({ isConnected: false });
+            });
+
+        set({ _channel: channel });
     },
 
     disconnectRoom: () => {
-        const socket = get()._socket;
-        if (socket) {
-            socket.removeAllListeners();
-            socket.disconnect();
-        }
-        set({ _socket: null, isConnected: false, gameState: null, myRole: null, roomUserCount: 0 });
+        const channel = get()._channel;
+        if (channel) channel.unsubscribe();
+        set({ _channel: null, isConnected: false, gameState: null, myRole: null, roomUserCount: 0 });
     },
 
-    // 🛡️ ARCHITECTURE FIX: Temporary/Reused socket specifically for Match Creation
-    createMatch: (payload, onSuccess) => {
-        let socket = get()._socket;
-        let ownSocket = false;
-
-        if (!socket || !get().isConnected) {
-            socket = io(SOCKET_URL, { autoConnect: true });
-            ownSocket = true;
-        }
-
-        // 🛡️ RELIABILITY FIX: Prevent infinite loading if server drops the request
-        let creationTimeout;
-
-        const handleError = (msg) => {
-            clearTimeout(creationTimeout);
-            set({ serverError: msg });
-            setTimeout(() => set({ serverError: null }), 4000);
-            
-            if (ownSocket) {
-                socket.removeAllListeners();
-                socket.disconnect();
-            }
-        };
-
-        const handleCreated = (response) => {
-            clearTimeout(creationTimeout);
-            if (onSuccess) onSuccess(response);
-            set({ serverError: null });
-            
-            if (ownSocket) {
-                socket.removeAllListeners();
-                socket.disconnect();
-            }
-        };
-
-        creationTimeout = setTimeout(() => {
-            handleError('Match creation timed out. Server may be unreachable.');
-        }, 10000);
-
-        if (ownSocket) {
-            socket.once('connect', () => {
-                socket.emit('create_match', payload);
+    /** Call Supabase Edge Function to Create Match */
+    createMatch: async (payload, onSuccess) => {
+        try {
+            const { data, error } = await supabase.functions.invoke('create-match', {
+                body: payload
             });
-        } else {
-            socket.emit('create_match', payload);
+
+            if (error) throw error;
+            if (onSuccess) onSuccess(data);
+        } catch (err) {
+            set({ serverError: err.message });
+            setTimeout(() => set({ serverError: null }), 4000);
         }
-
-        socket.once('match_created', handleCreated);
-        socket.once('error', handleError);
     },
 
-    sendAction: (matchId, actionData, key) => {
-        get()._socket?.emit('action', { roomId: matchId, data: actionData, key });
-    },
-    
-    sendReady: (matchId, key) => {
-        get()._socket?.emit('team_ready', { roomId: matchId, key });
-    },
-
-    sendCoinCall: (matchId, call, key) => {
-        get()._socket?.emit('coin_call', { roomId: matchId, call, key });
+    /** Send Veto Action via Edge Function (The "Brain") */
+    sendAction: async (matchId, actionData, key) => {
+        const { error } = await supabase.functions.invoke('veto-action', {
+            body: { matchId, action: 'ban', data: actionData, key } // default 'ban' is just a placeholder here, the component passes correctly
+        });
+        if (error) set({ serverError: error.message });
     },
 
-    sendCoinDecide: (matchId, decision, key) => {
-        get()._socket?.emit('coin_decision', { roomId: matchId, decision, key });
+    /** Specific Action Wrappers */
+    sendReady: async (matchId, key) => {
+        const { error } = await supabase.functions.invoke('veto-action', {
+            body: { matchId, action: 'ready', key }
+        });
+        if (error) set({ serverError: error.message });
+    },
+
+    sendCoinCall: async (matchId, call, key) => {
+        const { error } = await supabase.functions.invoke('veto-action', {
+            body: { matchId, action: 'coin_call', data: { call }, key }
+        });
+        if (error) set({ serverError: error.message });
+    },
+
+    sendCoinDecide: async (matchId, decision, key) => {
+        const { error } = await supabase.functions.invoke('veto-action', {
+            body: { matchId, action: 'coin_decision', data: { decision }, key }
+        });
+        if (error) set({ serverError: error.message });
     }
 }));
 
