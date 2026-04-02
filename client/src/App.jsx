@@ -15,11 +15,8 @@ import useAuthStore from './store/useAuthStore';
 import GlobalHome        from './pages/GlobalHome';
 import NotFound          from './pages/NotFound';
 import TournamentDashboard from './pages/TournamentDashboard';
-import Login             from './pages/Login';
-import Register          from './pages/Register';
 import OrgCreate         from './pages/OrgCreate';
 import OrgDashboard      from './pages/OrgDashboard';
-import PlayerProfile     from './pages/PlayerProfile';
 import OrgList        from './pages/OrgList';
 import TournamentPublic from './pages/TournamentPublic';
 

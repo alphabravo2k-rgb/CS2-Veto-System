@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
 import useOrgBranding from '../hooks/useOrgBranding';
 import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, RefreshIcon, CheckIcon } from '../components/SharedUI';
+import { supabase } from '../utils/supabase.js';
 
 /**
  * ⚡ UI LAYER — PREMIUM ORGANIZATION DASHBOARD
@@ -15,7 +16,7 @@ import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, Ref
 export default function OrgDashboard() {
     const { orgId } = useParams();
     const navigate = useNavigate();
-    const { authFetch, user } = useAuthStore();
+    const { user } = useAuthStore();
     const { branding: globalBranding } = useOrgBranding(orgId);
 
     const [org,         setOrg]         = useState(null);
@@ -33,15 +34,25 @@ export default function OrgDashboard() {
     useEffect(() => {
         (async () => {
             try {
-                const [orgRes, tRes] = await Promise.all([
-                    authFetch(`/api/orgs/${orgId}`),
-                    authFetch(`/api/orgs/${orgId}/tournaments`),
-                ]);
-                if (!orgRes.ok) throw new Error('Organization not found');
-                const orgData = await orgRes.json();
-                const tData   = tRes.ok ? await tRes.json() : [];
+                // Fetch Org Data
+                const { data: orgData, error: orgError } = await supabase
+                    .from('organizations')
+                    .select('*')
+                    .eq('id', orgId)
+                    .single();
+                
+                if (orgError) throw new Error('Organization not found');
+
+                // Fetch Tournaments
+                const { data: tData, error: tError } = await supabase
+                    .from('tournaments')
+                    .select('*')
+                    .eq('org_id', orgId)
+                    .order('created_at', { ascending: false });
+
                 setOrg(orgData);
-                setTournaments(tData);
+                setTournaments(tData || []);
+                
                 if (orgData.branding) {
                     setBrandingForm({
                         displayName:     orgData.branding.display_name || orgData.name || '',
@@ -56,13 +67,25 @@ export default function OrgDashboard() {
                 setLoading(false);
             }
         })();
-    }, [orgId, authFetch]);
+    }, [orgId]);
 
     const loadMembers = async () => {
         try {
-            const res = await authFetch(`/api/orgs/${orgId}/members`);
-            if (res.ok) setMembers(await res.json());
-        } catch {}
+            const { data, error } = await supabase
+                .from('org_members')
+                .select('*, users(*)')
+                .eq('org_id', orgId);
+            
+            if (data) {
+                const normalized = data.map(m => ({
+                    ...m.users,
+                    role: m.role
+                }));
+                setMembers(normalized);
+            }
+        } catch (e) {
+            console.error('[OrgDashboard] Load members error:', e);
+        }
     };
 
     useEffect(() => {
@@ -72,13 +95,22 @@ export default function OrgDashboard() {
     const saveBranding = async () => {
         setSavingBrand(true);
         try {
-            const res = await authFetch(`/api/orgs/${orgId}/branding`, {
-                method: 'PATCH',
-                body: JSON.stringify(brandingForm),
-            });
-            if (!res.ok) throw new Error((await res.json()).error);
-            const updated = await res.json();
-            setOrg(updated);
+            const { data, error } = await supabase
+                .from('organizations')
+                .update({
+                    branding: {
+                        display_name: brandingForm.displayName,
+                        primary_color: brandingForm.primaryColor,
+                        secondary_color: brandingForm.secondaryColor,
+                        logo_url: brandingForm.logoUrl
+                    }
+                })
+                .eq('id', orgId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            setOrg(data);
             setEditBranding(false);
             window.location.reload(); 
         } catch (e) {
@@ -91,16 +123,24 @@ export default function OrgDashboard() {
     const createTournament = async () => {
         const name = window.prompt('Tournament name:');
         if (!name) return;
-        const res = await authFetch(`/api/orgs/${orgId}/tournaments`, {
-            method: 'POST',
-            body: JSON.stringify({ name, defaultFormat: 'bo3', gameModule: 'cs2' }),
-        });
-        if (res.ok) {
-            const t = await res.json();
-            setTournaments(ts => [t, ...ts]);
-        } else {
-            const err = await res.json();
-            alert(err.error || 'Failed to create tournament');
+        
+        try {
+            const { data, error } = await supabase
+                .from('tournaments')
+                .insert([{
+                    name,
+                    org_id: orgId,
+                    format: 'bo3',
+                    game_module: 'cs2',
+                    status: 'active'
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
+            setTournaments(ts => [data, ...ts]);
+        } catch (e) {
+            alert(e.message || 'Failed to create tournament');
         }
     };
 
