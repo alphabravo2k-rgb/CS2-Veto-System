@@ -47,17 +47,7 @@ export default function Register() {
     const navigate = useNavigate();
     const { register } = useAuthStore();
 
-    const [step, setStep] = useState(0);
-    const [form, setForm] = useState({
-        email: '', password: '', confirmPassword: '', username: '',
-        displayName: '', country: '', serverRegion: '',
-        dob: '', ageConsent: false,
-    });
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [direction, setDirection] = useState(1);
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
 
     const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
     const handle = (e) => {
@@ -98,7 +88,7 @@ export default function Register() {
         if (err) { setError(err.toUpperCase()); return; }
         setLoading(true);
         try {
-            await register({
+            const user = await register({
                 email: form.email.trim(),
                 password: form.password,
                 username: form.username.trim(),
@@ -108,7 +98,9 @@ export default function Register() {
                 dob: form.dob,
                 ageConsent: form.ageConsent,
             });
-            navigate('/');
+            
+            // If Supabase returns a user but no session, it means confirmation is required
+            setShowSuccess(true);
         } catch (err) {
             setError(err.message.toUpperCase());
         } finally {
@@ -123,6 +115,29 @@ export default function Register() {
     };
 
     const accentColor = 'var(--brand-primary, #00d4ff)';
+
+    if (showSuccess) {
+        return (
+            <div className="auth-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', padding: '20px' }}>
+                <AnimatedBackground />
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '64px', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '80px', background: `${accentColor}11`, borderRadius: '50%', border: `2px solid ${accentColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 32px', boxShadow: `0 0 30px ${accentColor}44` }}>
+                        <GlobeIcon size={32} color={accentColor} />
+                    </div>
+                    <h2 style={{ fontSize: '10px', color: accentColor, fontWeight: 900, letterSpacing: '4px', marginBottom: '16px' }}>ENCRYPTION KEY DISPATCHED</h2>
+                    <h1 style={{ fontSize: '2rem', fontWeight: 900, margin: 0, color: '#fff' }}>CHECK YOUR EMAIL</h1>
+                    <p style={{ fontSize: '14px', opacity: 0.5, marginTop: '24px', lineHeight: 1.6, fontWeight: 500 }}>
+                        We have sent a secure authorization link to <br /><span style={{ color: '#fff', fontWeight: 700 }}>{form.email}</span>. <br />
+                        Please verify your identity to activate your account.
+                    </p>
+                    <button className="premium-button" style={{ marginTop: '40px', width: '100%', padding: '16px' }} onClick={() => navigate('/login')}>
+                        BACK TO LOGIN
+                    </button>
+                </motion.div>
+            </div>
+        );
+    }
+
 
     return (
         <div className="auth-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', padding: '20px' }}>

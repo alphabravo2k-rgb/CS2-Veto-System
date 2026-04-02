@@ -33,6 +33,8 @@ const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
 const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
 
+import AuthVerificationGuard from './components/auth/AuthVerificationGuard';
+
 /**
  * 🛰️ SECURE ROUTE GUARDS
  * =============================================================================
@@ -68,6 +70,7 @@ export default function App() {
 
     return (
         <React.Suspense fallback={<div style={{ minHeight: '100vh', background: '#050a14' }} />}>
+            <AuthVerificationGuard />
             <div className="app-container" style={{ minHeight: '100vh', background: '#050a14', color: '#fff' }}>
                 <TopNav />
                 

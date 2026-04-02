@@ -66,6 +66,7 @@ const useAuthStore = create((set, get) => ({
             email,
             password,
             options: {
+                emailRedirectTo: window.location.origin,
                 data: {
                     username,
                     dob,
