@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
 import { AnimatedBackground, ShieldIcon, RefreshIcon, GlobeIcon, CheckIcon, EyeIcon, EyeOffIcon } from '../components/SharedUI';
 
-const STEPS = ['Identity', 'Profile', 'Sector', 'Finalize'];
+const STEPS = ['Identity', 'Profile', 'Region', 'Finalize'];
 const REGIONS = [
     { id: 'EU', label: '🌍 Europe' },
     { id: 'NA', label: '🌎 North America' },
@@ -68,12 +68,12 @@ export default function Register() {
     const validateStep = () => {
         setError('');
         if (step === 0) {
-            if (!form.email || !form.email.includes('@')) return 'Valid coordinates required';
+            if (!form.email || !form.email.includes('@')) return 'Valid email required';
             if (!form.username || form.username.length < 3) return 'Identifier too short';
-            if (!form.password || form.password.length < 8) return 'Security phrase too weak';
+            if (!form.password || form.password.length < 8) return 'Password too weak';
             if (form.password !== form.confirmPassword) return 'Phrases do not match';
         }
-        if (step === 2 && !form.serverRegion) return 'Sector region required';
+        if (step === 2 && !form.serverRegion) return 'Server region required';
         if (step === 3) {
             if (!form.dob || !form.ageConsent) return 'Age verification required';
         }
@@ -241,6 +241,7 @@ export default function Register() {
 
                             {step === 2 && (
                                 <div>
+                                    <div style={{ fontSize: '10px', opacity: 0.5, letterSpacing: '2px', fontWeight: 900 }}>REGION CONFIGURATION</div>
                                     <p style={{ fontSize: '13px', opacity: 0.6, marginBottom: '24px', textAlign: 'center' }}>Select your primary region for optimal server routing.</p>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                         {REGIONS.map(r => (

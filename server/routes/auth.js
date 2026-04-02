@@ -67,13 +67,14 @@ router.post('/logout', requireAuth, async (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req, res) => {
-    const db = require('../infra/database');
     try {
-        const user = await db.get(
-            'SELECT id, email, username, display_name, country, server_region, avatar_url, bio, role, created_at FROM users WHERE id = ?',
-            [req.user.id]
-        );
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, email, username, display_name, country, server_region, avatar_url, bio, role, created_at')
+            .eq('id', req.user.id)
+            .single();
+
+        if (error || !user) return res.status(404).json({ error: 'User not found' });
         res.json(user);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch profile' });

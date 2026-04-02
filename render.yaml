@@ -1,0 +1,31 @@
+# ⚡ VETO.GG — RENDER BLUEPRINT (INFRASTRUCTURE AS CODE)
+# =============================================================================
+# Responsibility: Automated deployment of the Veto Engine & REST API.
+# Features: Health monitoring, Environment validation, and Auto-scaling.
+# =============================================================================
+
+services:
+  - type: web
+    name: veto-platform-server
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    rootDir: server
+    envVars:
+      - key: SUPABASE_URL
+        value: https://mpbiyrjutyzilkcresex.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false # Requires manual entry in Render Dashboard (SECURITY)
+      - key: JWT_SECRET
+        generateValue: true # Securely generate unique JWT secret on deploy
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        sync: false # Set this to your Cloudflare Pages URL
+      - key: PORT
+        value: 10000
+
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+# Note: Cloudflare Pages (Frontend) should be connected separately to the 'client' directory.

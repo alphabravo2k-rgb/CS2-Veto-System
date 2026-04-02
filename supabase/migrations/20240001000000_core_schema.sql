@@ -114,3 +114,70 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   meta JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add missing columns to users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS age_verified BOOLEAN 
+  NOT NULL DEFAULT FALSE;
+
+-- refresh_tokens table (missing entirely)
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_user 
+  ON refresh_tokens(user_id);
+
+-- player_accounts table (missing entirely)
+CREATE TABLE IF NOT EXISTS player_accounts (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  platform_id TEXT NOT NULL,
+  platform_username TEXT,
+  PRIMARY KEY (user_id, platform)
+);
+
+-- payments table (new — for USDT invoice tracking)
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL REFERENCES orgs(id),
+  amount_usd NUMERIC(10,2) NOT NULL,
+  amount_crypto NUMERIC(18,8),
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  network TEXT NOT NULL DEFAULT 'TRC20',
+  status TEXT NOT NULL DEFAULT 'pending',
+  nowpayments_id TEXT,
+  pay_address TEXT,
+  plan TEXT NOT NULL,
+  period_months INTEGER NOT NULL DEFAULT 1,
+  invoice_url TEXT,
+  confirmed_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  meta JSONB
+);
+
+-- plans table (pricing config, managed by master admin)
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  price_usd NUMERIC(10,2) NOT NULL,
+  veto_limit INTEGER,
+  allow_custom_domain BOOLEAN DEFAULT FALSE,
+  allow_own_branding BOOLEAN DEFAULT FALSE,
+  show_watermark BOOLEAN DEFAULT TRUE,
+  features JSONB,
+  active BOOLEAN DEFAULT TRUE
+);
+
+-- Seed default plans
+INSERT INTO plans (id, name, price_usd, veto_limit, 
+  allow_own_branding, show_watermark) VALUES
+('free_individual', 'Free Individual', 0, NULL, FALSE, TRUE),
+('org_trial', 'Org Trial', 0, 3, TRUE, FALSE),
+('org_pro', 'Org Pro', 19.99, NULL, TRUE, FALSE),
+('org_enterprise', 'Enterprise', 99.99, NULL, TRUE, FALSE)
+ON CONFLICT (id) DO NOTHING;

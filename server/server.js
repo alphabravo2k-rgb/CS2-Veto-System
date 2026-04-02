@@ -1,16 +1,7 @@
 /**
- * ⚡ SERVER ENTRY POINT — REWRITTEN (ARCHITECTURAL UPGRADE)
+ * ⚡ SERVER ENTRY POINT — SUPABASE NATIVE (FINAL REFINEMENT)
  * =============================================================================
- * PROBLEM (Architecture Flaw): The original server.js was a 900-line monolith
- * combining REST routes, WebSocket handlers, domain logic, and infrastructure
- * concerns in a single file with no separation of concerns.
- *
- * FIX: This file is now ~80 lines. It only:
- *   1. Initializes infrastructure (DB, WebSocket)
- *   2. Mounts route modules
- *   3. Starts the HTTP server
- *
- * All logic lives in the appropriate layer.
+ * Responsibility: Secure system initialization and route mounting.
  * =============================================================================
  */
 
@@ -20,11 +11,11 @@ const express    = require('express');
 const http       = require('http');
 const cors       = require('cors');
 const path       = require('path');
+const supabase   = require('./infra/supabase');
 
 require('dotenv').config();
 
 // ── Infrastructure ────────────────────────────────────────────────────────────
-const dbAdapter       = require('./infra/database');
 const { initWebSocket } = require('./infra/websocket');
 const settings        = require('./settings');
 
@@ -33,6 +24,7 @@ const authRoutes    = require('./routes/auth');
 const orgRoutes     = require('./routes/orgs');
 const playerRoutes  = require('./routes/players');
 const adminRoutes   = require('./routes/admin');
+const matchRoutes   = require('./routes/matches');
 
 // ── Optional auth middleware (for identifying logged-in users on public routes)
 const { optionalAuth } = require('./middleware/auth');
@@ -46,7 +38,7 @@ const allowedOrigins = IS_PROD
     : '*';
 
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json({ limit: '5mb' })); // 5MB limit to accommodate base64 logos
+app.use(express.json({ limit: '5mb' }));
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) =>
@@ -71,7 +63,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="panel">
                 <h1>VETO.GG CORE INFRASTRUCTURE</h1>
-                <p>Status: <strong>ONLINE</strong> (Node.js REST & WebSocket Engine)</p>
+                <p>Status: <strong>ONLINE</strong> (Supabase-Powered REST & WebSocket Engine)</p>
                 <p>Environment: ${IS_PROD ? 'Production' : 'Development'}</p>
                 <p>Allowed Origins: ${IS_PROD ? process.env.CORS_ORIGIN || 'None configured' : 'All (*)'}</p>
                 <hr style="border-color: rgba(0, 212, 255, 0.2); margin: 2rem 0;">
@@ -87,9 +79,9 @@ app.use('/api/auth',    authRoutes);
 app.use('/api/orgs',    orgRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/admin',   optionalAuth, adminRoutes);
+app.use('/api/matches', matchRoutes);
 
-// Legacy routes (maps, history) — kept for backward compatibility
-// with existing deployed clients while they migrate to /api/orgs/:orgId/tournaments/:tId/maps
+// Legacy routes (maps, history) — Refactored for Supabase
 app.get('/api/maps', async (req, res) => {
     try {
         const TournamentService = require('./domain/tournaments/TournamentService');
@@ -103,20 +95,34 @@ app.get('/api/maps', async (req, res) => {
 
 app.get('/api/history', async (req, res) => {
     try {
-        const db = require('./infra/database');
         const page  = parseInt(req.query.page)  || 1;
         const limit = parseInt(req.query.limit) || 10;
-        const offset = (page - 1) * limit;
-        const tId = req.query.tournamentId;
+        const from  = (page - 1) * limit;
+        const to    = from + limit - 1;
+        const tId   = req.query.tournamentId;
 
-        const where = tId ? 'WHERE finished = 1 AND tournament_id = ?' : 'WHERE finished = 1';
-        const params = tId ? [tId, limit, offset] : [limit, offset];
+        let query = supabase
+            .from('veto_sessions')
+            .select('*', { count: 'exact' })
+            .eq('finished', true)
+            .order('finished_at', { ascending: false })
+            .range(from, to);
 
-        const { total } = await db.get(`SELECT COUNT(*) as total FROM match_history ${where}`, tId ? [tId] : []);
-        const matches   = await db.all(`SELECT * FROM match_history ${where} ORDER BY date DESC LIMIT ? OFFSET ?`, params);
+        if (tId) {
+            query = query.eq('tournament_id', tId);
+        }
 
-        res.json({ matches, total, page, totalPages: Math.ceil(total / limit) });
+        const { data: matches, count: total, error } = await query;
+        if (error) throw error;
+
+        res.json({ 
+            matches, 
+            total, 
+            page, 
+            totalPages: Math.ceil(total / limit) 
+        });
     } catch (err) {
+        console.error('[HISTORY] Fetch error:', err.message);
         res.status(500).json({ error: 'Failed to fetch history' });
     }
 });
@@ -126,28 +132,25 @@ const server = http.createServer(app);
 
 async function start() {
     try {
-        // 1. Initialize DB connection
-        await dbAdapter.initDb();
-        console.log('[SERVER] Database initialized');
+        // 1. Initialize settings (Just handles logging/verification in the new version)
+        await settings.initSettingsTable();
+        console.log('[SERVER] Settings verified');
 
-        // 2. Initialize settings table (webhook storage)
-        const rawDb = dbAdapter.getRawInstance();
-        await settings.initSettingsTable(rawDb);
-
-        // 3. Initialize WebSocket (also restores active rooms from DB)
+        // 2. Initialize WebSocket (Restores active rooms from Supabase)
         initWebSocket(server, allowedOrigins);
-        console.log('[SERVER] WebSocket initialized');
+        console.log('[SERVER] WebSocket engine initialized');
 
-        // 4. Start listening
-        const PORT = parseInt(process.env.PORT) || 3001;
+        const PORT = process.env.PORT || 3001;
         server.listen(PORT, () => {
-            console.log(`[SERVER] ✅ Listening on port ${PORT}`);
-            if (!IS_PROD) console.log(`[SERVER] API: http://localhost:${PORT}/api`);
+            console.log(`[SERVER] Success. Veto System Core operational on port ${PORT}`);
         });
+
     } catch (err) {
-        console.error('[SERVER] ❌ Startup failed:', err.message);
+        console.error('[SERVER] Critical startup error:', err.message);
         process.exit(1);
     }
 }
 
 start();
+
+module.exports = server;

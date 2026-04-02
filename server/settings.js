@@ -1,120 +1,62 @@
 /**
- * ⚡ COMP-OS — SETTINGS PERSISTENCE
+ * ⚡ COMP-OS — SETTINGS PERSISTENCE (SUPABASE NATIVE)
  * =============================================================================
- * FILE          : settings.js
- * RESPONSIBILITY: Stores global server configurations in SQLite
- * LAYER         : Backend Persistence
- * RISK LEVEL    : LOW
+ * Responsibility: Stores global server configurations in Supabase.
  * =============================================================================
  */
+
+'use strict';
 
 const { isValidDiscordWebhook } = require('./discord-webhook');
+const supabase = require('./infra/supabase');
 
-const fs = require('fs');
-const path = require('path');
+// 🛡️ SECURITY FIX: Enumerate valid keys
+const VALID_KEYS = new Set(['admin_webhook', 'maintenance_mode']);
 
-let db = null;
-
-// 🛡️ SECURITY FIX: Enumerate valid keys to prevent arbitrary config injection
-const VALID_KEYS = new Set([
-    'admin_webhook'
-]);
-
-function initSettingsTable(database) {
-    if (db) return Promise.resolve();
-    db = database; 
-
-    return new Promise((resolve, reject) => {
-        try {
-            const sqlPath = path.join(__dirname, 'migrations', '005_settings_table.sql');
-            const sql = fs.readFileSync(sqlPath, 'utf8');
+async function getAdminWebhook() {
+    try {
+        const { data, error } = await supabase
+            .from('settings')
+            .select('value')
+            .eq('key', 'admin_webhook')
+            .maybeSingle();
             
-            db.run(sql, (err) => {
-                if (err) {
-                    console.error('[SETTINGS] Error creating settings table from migration:', err);
-                    reject(err);
-                } else {
-                    console.log('[SETTINGS] Settings table verified via migration 005');
-                    resolve();
-                }
-            });
-        } catch (err) {
-            console.error('[SETTINGS] Failed to read migration 005:', err);
-            reject(err);
-        }
-    });
+        if (error) throw error;
+        return data ? data.value : null;
+    } catch (err) {
+        console.error('[SETTINGS] Error getting admin_webhook:', err.message);
+        return null;
+    }
 }
 
-/**
- * 🧠 INTERNAL ENGINE: Generic Safe Getter (STRICTLY PRIVATE)
- */
-function getSetting(key) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject(new Error('Database not initialized'));
-        
-        // 🛡️ SECURITY FIX: Do not log the raw key to prevent log injection
-        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key requested`));
-
-        db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row) => {
-            if (err) {
-                console.error(`[SETTINGS] Error getting setting:`, err);
-                reject(err);
-            } else {
-                resolve(row ? row.value : null);
-            }
-        });
-    });
-}
-
-/**
- * 🧠 INTERNAL ENGINE: Generic Safe Setter (STRICTLY PRIVATE)
- */
-function setSetting(key, value) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject(new Error('Database not initialized'));
-        
-        if (!VALID_KEYS.has(key)) return reject(new Error(`[SETTINGS] Security Block: Unknown key injection attempted`));
-
-        const query = `
-            INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
-        `;
-
-        db.run(query, [key, value], (err) => {
-            if (err) {
-                console.error(`[SETTINGS] Error setting value:`, err);
-                reject(err);
-            } else {
-                console.log(`[SETTINGS] Key updated successfully`);
-                resolve();
-            }
-        });
-    });
-}
-
-// ============================================================================
-// 🌐 PUBLIC API WRAPPERS
-// ============================================================================
-
-function getAdminWebhook() {
-    return getSetting('admin_webhook');
-}
-
-function setAdminWebhook(url) {
-    // 🛡️ SECURITY FIX: Enforce absolute maximum length to prevent DB bloat/DoS
+async function setAdminWebhook(url) {
     if (url && url.length > 500) {
-        return Promise.reject(new Error('Webhook URL exceeds maximum allowed length'));
+        throw new Error('Webhook URL exceeds maximum allowed length');
     }
 
     if (url && !isValidDiscordWebhook(url)) {
-        return Promise.reject(new Error('Invalid Discord webhook URL'));
+        throw new Error('Invalid Discord webhook URL');
     }
 
-    // Store empty string if url is falsy to allow clearing the webhook safely
-    return setSetting('admin_webhook', url || '');
+    const { error } = await supabase
+        .from('settings')
+        .upsert({ 
+            key: 'admin_webhook', 
+            value: url || '', 
+            updated_at: new Date().toISOString() 
+        }, { onConflict: 'key' });
+
+    if (error) {
+        console.error('[SETTINGS] Error setting admin_webhook:', error.message);
+        throw new Error('Failed to update settings');
+    }
 }
 
-// Module Sealed. Internal engines are no longer exported.
+// Placeholder for future initialization if needed, but Supabase handles schema via migrations
+async function initSettingsTable() {
+    return Promise.resolve();
+}
+
 module.exports = {
     initSettingsTable,
     getAdminWebhook,

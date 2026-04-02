@@ -62,16 +62,32 @@ class OrgService {
     }
 
     /**
-     * Fetch all organizations where a user is a member.
+     * Fetch all organizations where a user is a member with branding and stats.
      */
     async getUserOrgs(userId) {
         const { data, error } = await supabase
             .from('org_members')
-            .select('orgs (*)')
+            .select(`
+                role,
+                orgs (
+                    id, name, slug, created_at,
+                    org_branding (*),
+                    tournaments (count)
+                )
+            `)
             .eq('user_id', userId);
 
-        if (error) return [];
-        return data.map(m => m.orgs);
+        if (error) {
+            console.error('[OrgService] getUserOrgs failed:', error.message);
+            return [];
+        }
+
+        return data.map(m => ({
+            ...m.orgs,
+            userRole: m.role,
+            branding: m.orgs.org_branding?.[0] || m.orgs.org_branding, // Handle potential array or single item
+            tournamentCount: m.orgs.tournaments[0]?.count || 0
+        }));
     }
 
     /**

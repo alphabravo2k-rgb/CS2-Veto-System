@@ -2,7 +2,7 @@
  * ⚡ APP ROUTING — PREMIUM GLOBAL ARCHITECTURE
  * =============================================================================
  * Unified multi-tenant routing with hardware-accelerated transitions.
- * Auth-guarded sectors for organizational and administrative domains.
+ * Auth-guarded modules for organizational and administrative domains.
  * Spectator-optimized public routes for live veto theaters.
  * =============================================================================
  */
@@ -20,18 +20,18 @@ import Register          from './pages/Register';
 import OrgCreate         from './pages/OrgCreate';
 import OrgDashboard      from './pages/OrgDashboard';
 import PlayerProfile     from './pages/PlayerProfile';
-import ProfileEdit       from './pages/ProfileEdit';
+import OrgList        from './pages/OrgList';
 
 // Components
 import TopNav from './components/layout/TopNav';
 import BrandingProvider from './components/layout/BrandingProvider';
 
-// Lazy-loaded Command Centers
+// Lazy-loaded Admin Dashboards
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
 const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 
 /**
- * 🛰️ SECURE SECTOR GUARD
+ * 🛰️ SECURE ROUTE GUARD
  * Redirects unauthorized signals to the authentication portal.
  */
 function ProtectedRoute({ children }) {
@@ -62,24 +62,25 @@ export default function App() {
                 <div className="app-content" style={{ paddingTop: '56px' }}>
                     <BrandingProvider>
                         <Routes>
-                            {/* ── SECTOR 0: PUBLIC ACCESS ── */}
+                            {/* ── PUBLIC ACCESS ── */}
                             <Route path="/"          element={<GlobalHome />} />
                             <Route path="/login"     element={<Login />} />
                             <Route path="/register"  element={<Register />} />
                             <Route path="/history"   element={<GlobalHome view="history" />} />
                             <Route path="/players/:userId" element={<PlayerProfile />} />
 
-                            {/* ── SECTOR 1: PROTECTED OPERATIONS ── */}
+                            {/* ── PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
                             <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
                             <Route path="/orgs/create"  element={<ProtectedRoute><OrgCreate /></ProtectedRoute>} />
                             <Route path="/org/:orgId"   element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
+                            <Route path="/orgs"         element={<ProtectedRoute><OrgList /></ProtectedRoute>} />
                             
                             {/* Unified Tournament Routes */}
                             <Route path="/org/:orgId/tournament/:tournamentId" element={<ProtectedRoute><TournamentDashboard /></ProtectedRoute>} />
                             <Route path="/org/:orgId/tournament/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
-                            {/* ── SECTOR 9: COMMAND & CONTROL ── */}
+                            {/* ── PLATFORM CONTROL ── */}
                             <Route path="/admin" element={<ProtectedRoute><GlobalAdmin /></ProtectedRoute>} />
 
                             {/* ── LEGACY SIGNAL COMPATIBILITY ── */}

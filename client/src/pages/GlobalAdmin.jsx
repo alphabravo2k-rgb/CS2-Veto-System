@@ -130,7 +130,7 @@ export default function GlobalAdmin() {
                 {/* 🎛️ MAIN INTERFACE */}
                 <div className="glass-panel" style={{ minHeight: '600px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        {['overview', 'users', 'orgs', 'history', 'audit'].map(tab => (
+                        {['overview', 'users', 'orgs', 'history', 'audit', 'settings'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -159,6 +159,7 @@ export default function GlobalAdmin() {
                                 {activeTab === 'orgs' && <OrgTable orgs={data.orgs} />}
                                 {activeTab === 'history' && <MatchTable matches={data.history} />}
                                 {activeTab === 'audit' && <AuditTable logs={data.audit} />}
+                                {activeTab === 'settings' && <SettingsView />}
                             </>
                         )}
                     </div>
@@ -246,6 +247,23 @@ const OrgTable = ({ orgs }) => (
                 <button className="premium-button" style={{ width: '100%', justifyContent: 'center' }}>MANAGE ORGANIZATION</button>
             </div>
         ))}
+    </div>
+);
+
+const SettingsView = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '800px' }}>
+        <div className="glass-panel" style={{ padding: '2rem', background: 'rgba(255,255,255,0.02)' }}>
+            <h3 className="neon-text" style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>GLOBAL WEBHOOK CONFIGURATION</h3>
+            <p style={{ opacity: 0.6, fontSize: '0.9rem', marginBottom: '1.5rem' }}>Configure the master Discord webhook for platform-wide alerts.</p>
+            <input type="text" placeholder="https://discord.com/api/webhooks/..." style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px', borderRadius: '12px', color: '#fff', outline: 'none', fontWeight: 700, marginBottom: '1rem' }} />
+            <button className="premium-button">SAVE CONFIGURATION</button>
+        </div>
+        
+        <div className="glass-panel" style={{ padding: '2rem', background: 'rgba(255,255,255,0.02)' }}>
+            <h3 className="neon-text" style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>SYSTEM MAINTENANCE</h3>
+            <p style={{ opacity: 0.6, fontSize: '0.9rem', marginBottom: '1.5rem' }}>Toggle global maintenance mode to restrict non-admin access.</p>
+            <button className="premium-button" style={{ background: '#ff4b2b', borderColor: '#ff4b2b' }}>ENABLE MAINTENANCE LOCKDOWN</button>
+        </div>
     </div>
 );
 

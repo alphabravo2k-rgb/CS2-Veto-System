@@ -10,7 +10,7 @@ const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_UR
 /**
  * ⚡ UI LAYER — PREMIUM TOURNAMENT DASHBOARD
  * =============================================================================
- * Responsibility: Command center for generating and managing veto sessions.
+ * Responsibility: Management hub for generating and managing veto sessions.
  * Features: Multi-mode veto generation (VRS, Faceit, Wingman, Custom), 
  *           automated timer controls, and real-time history telemetry.
  * =============================================================================
