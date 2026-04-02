@@ -10,8 +10,10 @@
 
 const express = require('express');
 const AuthService = require('../domain/auth/AuthService');
+const SteamAuthService = require('../domain/auth/SteamAuthService');
 const { requireAuth } = require('../middleware/auth');
 const { log } = require('../infra/auditLog');
+const supabase = require('../infra/supabase');
 
 const router = express.Router();
 
@@ -78,6 +80,41 @@ router.get('/me', requireAuth, async (req, res) => {
         res.json(user);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch profile' });
+    }
+});
+
+// ── STEAM OPENID ROUTES ──
+
+// GET /api/auth/steam
+// Redirects to Steam for authentication
+router.get('/steam', requireAuth, (req, res) => {
+    try {
+        const returnUrl = `${process.env.APP_URL || 'http://localhost:5000'}/api/auth/steam/return?userId=${req.user.id}`;
+        const redirectUrl = SteamAuthService.getRedirectUrl(returnUrl);
+        res.redirect(redirectUrl);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to initiate Steam login' });
+    }
+});
+
+// GET /api/auth/steam/return
+// Steam redirects back here after authentication
+router.get('/steam/return', async (req, res) => {
+    try {
+        const { userId } = req.query;
+        if (!userId) throw new Error('Missing user target for Steam link');
+
+        const returnUrl = `${process.env.APP_URL || 'http://localhost:5000'}/api/auth/steam/return?userId=${userId}`;
+        const steamId64 = await SteamAuthService.verify(req.query, returnUrl);
+        
+        await SteamAuthService.syncProfile(userId, steamId64);
+        await log({ actor_id: userId, action: 'auth.steam_link', target_id: steamId64 });
+
+        // Redirect back to frontend profile
+        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/profile?steam_linked=true`);
+    } catch (err) {
+        console.error('[Steam Return Error]', err.message);
+        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/profile?error=steam_link_failed`);
     }
 });
 

@@ -81,6 +81,7 @@ app.use('/api/orgs',    orgRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/admin',   optionalAuth, adminRoutes);
 app.use('/api/matches', matchRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Legacy routes (maps, history) — Refactored for Supabase
 app.get('/api/maps', async (req, res) => {

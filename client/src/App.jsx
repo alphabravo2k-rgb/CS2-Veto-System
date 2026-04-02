@@ -30,6 +30,7 @@ import BrandingProvider from './components/layout/BrandingProvider';
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
 const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
+const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
 
 /**
  * 🛰️ SECURE ROUTE GUARDS
