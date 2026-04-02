@@ -18,26 +18,52 @@ if (supabaseUrl && supabaseServiceKey) {
 }
 
 /**
- * 🛡️ RECURSIVE SAFETY PROXY
- * If Supabase is missing, we return a recursive proxy that prevents crashes
- * on deeply nested objects (like .auth.admin.createUser) and logs clear
- * warnings when the app tries to touch the DB.
+ * 🔒 WRAP AUTH
+ * Ensures that if a client is initialized with an 'anon' key, 
+ * accessing .auth.admin doesn't crash the entire process.
  */
-const createSafetyProxy = (path = 'supabase') => {
-    // Function target allows the proxy to be callable (e.g. supabase.from())
+function wrapAuth(authClient) {
+    // If admin is already there, return the client as-is
+    if (authClient && authClient.admin) return authClient;
+    
+    // Otherwise, return a proxy that intercepts .admin access
+    return new Proxy(authClient || {}, {
+        get(target, prop) {
+            if (prop === 'admin') {
+                console.error("🚨 [SUPABASE] CRITICAL: Attempted to access 'auth.admin' but it is missing. This usually means you are using the 'anon' key instead of the 'service_role' key in your environment variables.");
+                return createSafetyProxy('supabase.auth.admin');
+            }
+            return target[prop];
+        }
+    });
+}
+
+/**
+ * 🛡️ RECURSIVE SAFETY PROXY
+ * If Supabase is missing or partially initialized, we return a recursive 
+ * proxy that prevents crashes on deeply nested objects and logs warnings.
+ */
+function createSafetyProxy(path = 'supabase') {
     const proxyTarget = () => {};
     
     return new Proxy(proxyTarget, {
         get(target, prop) {
-            if (realClient && path === 'supabase') return realClient[prop];
+            // If the real client exists at the root, try to get the property
+            if (realClient && path === 'supabase') {
+                const val = realClient[prop];
+                if (val !== undefined) {
+                    // Special handle for .auth to protect against missing .admin
+                    if (prop === 'auth') return wrapAuth(val);
+                    return val;
+                }
+            }
             return createSafetyProxy(`${path}.${String(prop)}`);
         },
         apply(target, thisArg, args) {
-            console.error(`🚨 [SUPABASE] Attempted to call "${path}()" but client is not initialized. Check your environment variables (SUPABASE_URL, SUPABASE_SERVICE_KEY).`);
+            console.error(`🚨 [SUPABASE] Attempted to call "${path}()" but client is incorrectly initialized. Check SUPABASE_URL and SUPABASE_SERVICE_KEY.`);
             return {
-                // Return a dummy promise that resolves to an error object to prevent await crashes
                 then: (resolve) => resolve({ data: null, error: { message: `Supabase not initialized: ${path}` } }),
-                // Mock common chainable methods
+                // Mock chainable methods to avoid "cannot read property of undefined" on further calls
                 select: () => createSafetyProxy(`${path}.select`),
                 eq: () => createSafetyProxy(`${path}.eq`),
                 single: () => createSafetyProxy(`${path}.single`),
@@ -49,7 +75,7 @@ const createSafetyProxy = (path = 'supabase') => {
             };
         }
     });
-};
+}
 
 const supabase = createSafetyProxy();
 
