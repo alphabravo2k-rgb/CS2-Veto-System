@@ -18,33 +18,39 @@ if (supabaseUrl && supabaseServiceKey) {
 }
 
 /**
- * 🛡️ SAFETY PROXY
- * If Supabase is missing, we return a proxy that prevents crashes
- * and logs clear warnings when the app tries to touch the DB.
+ * 🛡️ RECURSIVE SAFETY PROXY
+ * If Supabase is missing, we return a recursive proxy that prevents crashes
+ * on deeply nested objects (like .auth.admin.createUser) and logs clear
+ * warnings when the app tries to touch the DB.
  */
-const supabase = new Proxy({}, {
-    get(target, prop) {
-        if (realClient) return realClient[prop];
-        
-        // Return a dummy 'from' that doesn't crash
-        if (prop === 'from') {
-            return (tableName) => {
-                console.error(`🚨 [SUPABASE] Attempted to access table "${tableName}" but client is not initialized.`);
-                return {
-                    select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: { message: 'Supabase not initialized' } }), maybeSingle: () => Promise.resolve({ data: null, error: { message: 'Supabase not initialized' } }) }) }),
-                    insert: () => Promise.resolve({ error: { message: 'Supabase not initialized' } }),
-                    update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: { message: 'Supabase not initialized' } }) }) }) }),
-                    upsert: () => Promise.resolve({ error: { message: 'Supabase not initialized' } }),
-                    delete: () => ({ eq: () => Promise.resolve({ error: { message: 'Supabase not initialized' } }) })
-                };
+const createSafetyProxy = (path = 'supabase') => {
+    // Function target allows the proxy to be callable (e.g. supabase.from())
+    const proxyTarget = () => {};
+    
+    return new Proxy(proxyTarget, {
+        get(target, prop) {
+            if (realClient && path === 'supabase') return realClient[prop];
+            return createSafetyProxy(`${path}.${String(prop)}`);
+        },
+        apply(target, thisArg, args) {
+            console.error(`🚨 [SUPABASE] Attempted to call "${path}()" but client is not initialized. Check your environment variables (SUPABASE_URL, SUPABASE_SERVICE_KEY).`);
+            return {
+                // Return a dummy promise that resolves to an error object to prevent await crashes
+                then: (resolve) => resolve({ data: null, error: { message: `Supabase not initialized: ${path}` } }),
+                // Mock common chainable methods
+                select: () => createSafetyProxy(`${path}.select`),
+                eq: () => createSafetyProxy(`${path}.eq`),
+                single: () => createSafetyProxy(`${path}.single`),
+                maybeSingle: () => createSafetyProxy(`${path}.maybeSingle`),
+                insert: () => createSafetyProxy(`${path}.insert`),
+                update: () => createSafetyProxy(`${path}.update`),
+                upsert: () => createSafetyProxy(`${path}.upsert`),
+                delete: () => createSafetyProxy(`${path}.delete`),
             };
         }
-        
-        return () => {
-            console.error(`🚨 [SUPABASE] Attempted to call "${prop}" but client is not initialized.`);
-            return Promise.resolve({ data: null, error: { message: 'Supabase not initialized' } });
-        };
-    }
-});
+    });
+};
+
+const supabase = createSafetyProxy();
 
 module.exports = supabase;
