@@ -20,9 +20,11 @@ const PLATFORMS = [
  *           integrated account linking.
  * =============================================================================
  */
+import { supabase } from '../utils/supabase.js';
+
 export default function ProfileEdit() {
     const navigate = useNavigate();
-    const { authFetch, user } = useAuthStore();
+    const { user } = useAuthStore();
 
     const [profile, setProfile] = useState(null);
     const [form, setForm] = useState({ username: '', displayName: '', country: '', serverRegion: '', bio: '', avatarUrl: '' });
@@ -47,9 +49,17 @@ export default function ProfileEdit() {
     const [linkSaving, setLinkSaving] = useState(false);
 
     useEffect(() => {
-        authFetch('/api/players/me')
-            .then(r => r.json())
-            .then(data => {
+        if (!user) return;
+        (async () => {
+            try {
+                const { data, error: fetchError } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', user.id)
+                    .single();
+                
+                if (fetchError) throw fetchError;
+                
                 setProfile(data);
                 setForm({
                     username:     data.username || '',
@@ -59,33 +69,34 @@ export default function ProfileEdit() {
                     bio:          data.bio || '',
                     avatarUrl:    data.avatar_url || '',
                 });
-            })
-            .catch(() => setError('Failed to load profile'))
-            .finally(() => setLoading(false));
-    }, [authFetch]);
+            } catch (e) {
+                setError('Failed to load profile');
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [user]);
 
     const handleSave = async (e) => {
         e.preventDefault();
         setError(''); setSuccess(''); setSaving(true);
         try {
-            const res = await authFetch('/api/players/me', {
-                method: 'PATCH',
-                body: JSON.stringify({
+            const { data, error: updateError } = await supabase
+                .from('users')
+                .update({
                     username:     form.username,
-                    displayName:  form.displayName,
+                    display_name: form.displayName,
                     country:      form.country || null,
-                    serverRegion: form.serverRegion || null,
+                    server_region: form.serverRegion || null,
                     bio:          form.bio || null,
-                    avatarUrl:    form.avatarUrl || null,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                const msg = data.lockedUntil
-                    ? `Username locked until ${new Date(data.lockedUntil).toLocaleDateString()}`
-                    : data.error;
-                throw new Error(msg);
-            }
+                    avatar_url:   form.avatarUrl || null,
+                })
+                .eq('id', user.id)
+                .select()
+                .single();
+
+            if (updateError) throw updateError;
+            
             setProfile(data);
             setSuccess('PROFILE SAVED');
             setTimeout(() => setSuccess(''), 3000);
@@ -99,13 +110,28 @@ export default function ProfileEdit() {
     const handleLinkPlatform = async () => {
         setLinkSaving(true);
         try {
-            const res = await authFetch('/api/players/me/accounts', {
-                method: 'POST',
-                body: JSON.stringify(linkPlatform),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-            setProfile(p => ({ ...p, linkedAccounts: [...(p?.linkedAccounts || []).filter(a => a.platform !== linkPlatform.platform), { platform: linkPlatform.platform, platform_username: linkPlatform.platformUsername, platform_id: linkPlatform.platformId }] }));
+            const newAccount = { 
+                platform: linkPlatform.platform, 
+                platform_username: linkPlatform.platformUsername, 
+                platform_id: linkPlatform.platformId 
+            };
+            
+            const currentAccounts = profile?.linked_accounts || [];
+            const updatedAccounts = [
+                ...currentAccounts.filter(a => a.platform !== linkPlatform.platform),
+                newAccount
+            ];
+
+            const { data, error: linkError } = await supabase
+                .from('users')
+                .update({ linked_accounts: updatedAccounts })
+                .eq('id', user.id)
+                .select()
+                .single();
+
+            if (linkError) throw linkError;
+
+            setProfile(data);
             setLinkPlatform({ platform: '', platformId: '', platformUsername: '' });
             setSuccess('ACCOUNT LINKED');
             setTimeout(() => setSuccess(''), 3000);

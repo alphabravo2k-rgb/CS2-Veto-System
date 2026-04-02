@@ -36,7 +36,7 @@ export default function OrgDashboard() {
             try {
                 // Fetch Org Data
                 const { data: orgData, error: orgError } = await supabase
-                    .from('organizations')
+                    .from('orgs')
                     .select('*')
                     .eq('id', orgId)
                     .single();
@@ -96,7 +96,7 @@ export default function OrgDashboard() {
         setSavingBrand(true);
         try {
             const { data, error } = await supabase
-                .from('organizations')
+                .from('orgs')
                 .update({
                     branding: {
                         display_name: brandingForm.displayName,

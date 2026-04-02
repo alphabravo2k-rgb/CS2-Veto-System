@@ -48,6 +48,14 @@ export default function Register() {
     const { register } = useAuthStore();
 
     const [showSuccess, setShowSuccess] = useState(false);
+    const [step, setStep] = useState(0);
+    const [form, setForm] = useState({
+        email: '', username: '', password: '', confirmPassword: '', 
+        displayName: '', country: '', serverRegion: '', dob: '', ageConsent: false,
+    });
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [direction, setDirection] = useState(0);
 
     const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
     const handle = (e) => {

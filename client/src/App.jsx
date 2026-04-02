@@ -22,6 +22,7 @@ import TournamentPublic from './pages/TournamentPublic';
 
 // Components
 import TopNav from './components/layout/TopNav';
+import Footer from './components/layout/Footer';
 import BrandingProvider from './components/layout/BrandingProvider';
 
 // Lazy-loaded Admin Dashboards
@@ -34,6 +35,8 @@ const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile'));
 const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
 const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
+const SupportHub = React.lazy(() => import('./pages/SupportHub'));
+const QuickVeto   = React.lazy(() => import('./pages/QuickVeto'));
 
 import AuthVerificationGuard from './components/auth/AuthVerificationGuard';
 
@@ -88,6 +91,8 @@ export default function App() {
                             <Route path="/history"   element={<GlobalHome view="history" />} />
                             <Route path="/players/:userId" element={<PlayerProfile />} />
                             <Route path="/org/:orgId/tournament/:tournamentId/live" element={<TournamentPublic />} />
+                            <Route path="/support"   element={<SupportHub />} />
+                            <Route path="/quick-veto" element={<QuickVeto />} />
 
                             {/* ── PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
@@ -111,6 +116,7 @@ export default function App() {
                             
                             <Route path="*"             element={<NotFound />} />
                         </Routes>
+                        <Footer />
                     </BrandingProvider>
                 </div>
             </div>

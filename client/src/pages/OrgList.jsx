@@ -1,12 +1,8 @@
-/**
- * ⚡ PAGE — MY ORGANIZATIONS (PREMIUM ESPORTS EXPERIENCE)
- * =============================================================================
- * Responsibility: Secure hub for organization discovery and navigation.
- * Design: High-contrast, FACEIT-inspired dark theme with staggered motion.
- * Features: Responsive grid, role badges, and tournament count metadata.
- * =============================================================================
- */
-
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import useAuthStore from '../store/useAuthStore';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, RefreshIcon, CheckIcon } from '../components/SharedUI';
 import { supabase } from '../utils/supabase.js';
 
 const OrgList = () => {
@@ -24,11 +20,11 @@ const OrgList = () => {
         try {
             setIsLoading(true);
             
-            // In the serverless schema, we query the organizations table.
+            // In the serverless schema, we query the orgs table.
             // If we have a many-to-many relationship (org_members), we would join there.
             // For now, let's assume the user can see all orgs or we filter by creator_id if that exists.
             const { data, error: fetchError } = await supabase
-                .from('organizations')
+                .from('orgs')
                 .select('*')
                 .order('created_at', { ascending: false });
 

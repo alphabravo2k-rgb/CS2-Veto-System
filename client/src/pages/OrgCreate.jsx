@@ -48,7 +48,7 @@ export default function OrgCreate() {
         setLoading(true);
         try {
             const { data, error: insertError } = await supabase
-                .from('organizations')
+                .from('orgs')
                 .insert([{
                     name: form.name.trim(),
                     slug: form.slug.trim(),

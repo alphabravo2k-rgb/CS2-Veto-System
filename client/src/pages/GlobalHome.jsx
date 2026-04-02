@@ -3,24 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatedBackground, ActivityIcon } from '../components/SharedUI';
 import useAuthStore from '../store/useAuthStore';
 
+import { supabase } from '../utils/supabase.js';
+
 const LOGO_URL = import.meta.env.VITE_ORG_LOGO_URL || "https://i.ibb.co/0yLfyyQt/LOT-LOGO-03.jpg";
 const PLATFORM_NAME = import.meta.env.VITE_PLATFORM_NAME || "VETO.GG";
 
 export default function GlobalHome({ view = 'home' }) {
     const navigate = useNavigate();
-    const { authFetch } = useAuthStore();
+    const { user } = useAuthStore();
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(view === 'history');
 
     useEffect(() => {
         if (view === 'history') {
-            authFetch('/api/admin/history?limit=50')
-                .then(res => res.json())
-                .then(data => {
-                    setHistory(data.matches || []);
+            (async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('veto_sessions')
+                        .select('*')
+                        .order('finished_at', { ascending: false })
+                        .limit(50);
+                    
+                    if (data) setHistory(data);
+                } catch (e) {
+                    console.error('[GlobalHome] History fetch error:', e);
+                } finally {
                     setLoading(false);
-                })
-                .catch(() => setLoading(false));
+                }
+            })();
         }
     }, [view]);
 
@@ -72,12 +82,28 @@ export default function GlobalHome({ view = 'home' }) {
                         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.1rem', marginBottom: '3rem', lineHeight: 1.6 }}>The industry-standard Counter-Strike 2 map veto platform. Engineered for stability, speed, and absolute multi-tenant isolation.</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                            <button className="premium-button" style={{ width: '100%', justifyContent: 'center', padding: '1.5rem', fontSize: '1.2rem' }} onClick={() => navigate('/history')}>
-                                EXPLORE GLOBAL HISTORY
+                            <button className="premium-button" style={{ width: '100%', justifyContent: 'center', padding: '1.5rem', fontSize: '1.2rem', background: 'linear-gradient(135deg, #00d4ff 0%, #0055ff 100%)' }} onClick={() => navigate('/quick-veto')}>
+                                START QUICK VETO (FREE)
                             </button>
-                            <button className="glass-panel" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, letterSpacing: '2px', transition: 'all 0.2s' }} onClick={() => navigate('/orgs')}>
-                                ORGANIZATION DASHBOARD
-                            </button>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <button className="glass-panel" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, letterSpacing: '2px', transition: 'all 0.2s' }} onClick={() => navigate('/orgs')}>
+                                    ORG DASHBOARD
+                                </button>
+                                <button className="glass-panel" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '1.2rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, letterSpacing: '2px', transition: 'all 0.2s' }} onClick={() => navigate('/history')}>
+                                    HISTORY
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Support Links */}
+                        <div style={{ marginTop: '3rem', display: 'flex', justifyContent: 'center', gap: '24px', opacity: 0.4, fontSize: '10px', fontWeight: 900, letterSpacing: '2px' }}>
+                            <span onClick={() => navigate('/support?tab=faq')} style={{ cursor: 'pointer' }}>FAQ</span>
+                            <span onClick={() => navigate('/support?tab=manual')} style={{ cursor: 'pointer' }}>MANUAL</span>
+                            <span onClick={() => navigate('/support?tab=help')} style={{ cursor: 'pointer' }}>HELP</span>
+                        </div>
+
+                        <div style={{ marginTop: '2rem', opacity: 0.2, fontSize: '9px', fontWeight: 900, letterSpacing: '4px' }}>
+                            ENGINEERED BY VETO.GG • CO-POWERED BY COMP-OS
                         </div>
                     </>
                 )}
