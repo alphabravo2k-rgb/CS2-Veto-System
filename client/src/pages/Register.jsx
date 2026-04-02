@@ -48,6 +48,8 @@ export default function Register() {
     const { register } = useAuthStore();
 
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [step, setStep] = useState(0);
     const [form, setForm] = useState({
         email: '', username: '', password: '', confirmPassword: '', 

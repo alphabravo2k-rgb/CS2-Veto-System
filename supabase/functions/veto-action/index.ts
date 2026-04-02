@@ -49,8 +49,8 @@ serve(async (req) => {
 
     // 3. Process Action via VetoEngine
     let result: any;
-    const teamA = match.teamA || 'Team A'
-    const teamB = match.teamB || 'Team B'
+    const teamA = match.team_a || 'Team A'
+    const teamB = match.team_b || 'Team B'
     const actingAs = role === 'admin' ? (match.sequence[match.step]?.t || role) : role
     const teamName = actingAs === 'A' ? teamA : teamB
 

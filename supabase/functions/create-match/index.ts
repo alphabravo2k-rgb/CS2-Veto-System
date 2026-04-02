@@ -75,11 +75,11 @@ serve(async (req) => {
         tournament_id: safeTId,
         date: new Date().toISOString(),
         keys_data: keys,
-        teamA: safeTeamA,
-        teamB: safeTeamB,
-        teamALogo,
-        teamBLogo,
-        tempWebhookUrl,
+        team_a: safeTeamA,
+        team_b: safeTeamB,
+        team_a_logo: teamALogo || null,
+        team_b_logo: teamBLogo || null,
+        temp_webhook_url: tempWebhookUrl || null,
         ...vetoState
       })
 
