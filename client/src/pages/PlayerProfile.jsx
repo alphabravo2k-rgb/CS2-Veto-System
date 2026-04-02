@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon, HomeIcon } from '../components/SharedUI';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
+import { supabase } from '../utils/supabase.js';
 
 const REGION_LABELS = { EU: '🌍 Europe', NA: '🌎 North America', SEA: '🌏 Southeast Asia', ME: '🌍 Middle East', Faceit: '🎯 Faceit' };
 const PLATFORM_ICONS = { steam: '🎮', riot: '⚡', epic: '🎯', faceit: '🔥' };
@@ -23,11 +23,27 @@ export default function PlayerProfile() {
     const [error,   setError]   = useState('');
 
     useEffect(() => {
-        fetch(`${API}/api/players/${userId}`)
-            .then(r => { if (!r.ok) throw new Error('Player not found'); return r.json(); })
-            .then(setProfile)
-            .catch(e => setError(e.message))
-            .finally(() => setLoading(false));
+        async function fetchProfile() {
+            try {
+                const { data: user, error: userError } = await supabase
+                    .from('users')
+                    .select('*, player_accounts(*)')
+                    .eq('id', userId)
+                    .single();
+
+                if (userError || !user) throw new Error('Player not found');
+                
+                setProfile({
+                    ...user,
+                    linkedAccounts: user.player_accounts || []
+                });
+            } catch (e) {
+                setError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchProfile();
     }, [userId]);
 
     if (loading) {

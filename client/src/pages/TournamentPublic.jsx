@@ -5,7 +5,7 @@ import { ScanlineOverlay, GlassPanel, NeonText } from '../components/veto/VetoUI
 import { ActivityIcon, ExternalLinkIcon } from '../components/SharedUI';
 import useOrgBranding from '../hooks/useOrgBranding';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
+import { supabase } from '../utils/supabase.js';
 
 /**
  * ⚡ UI LAYER — TOURNAMENT PUBLIC LIVE HUB
@@ -19,22 +19,39 @@ export default function TournamentPublic() {
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchMatches = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/history?tournamentId=${tournamentId}&limit=50`);
-            const data = await res.json();
-            setMatches(data.matches || []);
-        } catch (err) {
-            console.error('Failed to fetch tournament matches');
-        } finally {
+    useEffect(() => {
+        if (!tournamentId) return;
+
+        async function initialFetch() {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('veto_sessions')
+                .select('*')
+                .eq('tournament_id', tournamentId)
+                .order('date', { ascending: false });
+            
+            if (!error && data) setMatches(data);
             setLoading(false);
         }
-    };
 
-    useEffect(() => {
-        fetchMatches();
-        const interval = setInterval(fetchMatches, 15000); // Poll every 15s for live updates
-        return () => clearInterval(interval);
+        initialFetch();
+
+        // Realtime sync for live updates
+        const channel = supabase.channel(`public_tournament:${tournamentId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'veto_sessions', filter: `tournament_id=eq.${tournamentId}` },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        setMatches(prev => [payload.new, ...prev]);
+                    } else if (payload.eventType === 'UPDATE') {
+                        setMatches(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => channel.unsubscribe();
     }, [tournamentId]);
 
     const accentColor = branding?.primary_color || '#00d4ff';

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const API_URL = import.meta.env.VITE_SOCKET_URL ? import.meta.env.VITE_SOCKET_URL.replace(/\/$/, '') : (window.location.hostname === "localhost" ? "http://localhost:3001" : "https://cs2-veto-server-gh3n.onrender.com");
+import { supabase } from '../utils/supabase.js';
 
 const DEFAULT_BRANDING = {
     primary_color: '#00d4ff',
@@ -27,16 +27,19 @@ export default function useOrgBranding(orgId) {
 
         async function fetchBranding() {
             try {
-                const res = await fetch(`${API_URL}/api/orgs/${orgId}`);
-                if (!res.ok || cancelled) {
+                const { data, error } = await supabase
+                    .from('organizations')
+                    .select('*, org_branding(*)')
+                    .eq('id', orgId)
+                    .single();
+
+                if (error || cancelled) {
                     setIsLoading(false);
                     return;
                 }
                 
-                const data = await res.json();
                 const fetchedBranding = data.org_branding?.[0] || data.org_branding || DEFAULT_BRANDING;
                 
-                // Inject CSS Variables
                 const root = document.documentElement;
                 root.style.setProperty('--brand-primary', fetchedBranding.primary_color || DEFAULT_BRANDING.primary_color);
                 root.style.setProperty('--brand-secondary', fetchedBranding.secondary_color || DEFAULT_BRANDING.secondary_color);
@@ -52,7 +55,6 @@ export default function useOrgBranding(orgId) {
                 }
             } catch (err) {
                 console.error('[useOrgBranding] Error:', err);
-                // Fallback to default
             } finally {
                 if (!cancelled) setIsLoading(false);
             }
