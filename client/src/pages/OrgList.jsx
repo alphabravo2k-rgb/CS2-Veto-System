@@ -7,27 +7,41 @@
  * =============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import useAuthStore from '../store/useAuthStore';
+import { supabase } from '../utils/supabase.js';
 
 const OrgList = () => {
     const navigate = useNavigate();
-    const { authFetch } = useAuthStore();
+    const { user } = useAuthStore();
     const [organizations, setOrganizations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        fetchMyOrgs();
-    }, []);
+        if (user) fetchMyOrgs();
+    }, [user]);
 
     const fetchMyOrgs = async () => {
         try {
             setIsLoading(true);
-            const data = await authFetch('/api/orgs/mine');
-            setOrganizations(data || []);
+            
+            // In the serverless schema, we query the organizations table.
+            // If we have a many-to-many relationship (org_members), we would join there.
+            // For now, let's assume the user can see all orgs or we filter by creator_id if that exists.
+            const { data, error: fetchError } = await supabase
+                .from('organizations')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (fetchError) throw fetchError;
+
+            // Normalize data for UI
+            const normalized = (data || []).map(org => ({
+                ...org,
+                userRole: 'admin', // Defaulting to admin for testing, will integrate RBAC later
+                tournamentCount: 0 // Will integrate count query later
+            }));
+
+            setOrganizations(normalized);
         } catch (err) {
             console.error('[OrgList] Fetch error:', err);
             setError('Failed to sync organization data.');

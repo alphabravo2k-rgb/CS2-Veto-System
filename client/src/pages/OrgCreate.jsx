@@ -17,9 +17,11 @@ const COLOR_PRESETS = [
  *           and integrated identity vetting.
  * =============================================================================
  */
+import { supabase } from '../utils/supabase.js';
+
 export default function OrgCreate() {
     const navigate = useNavigate();
-    const { authFetch, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated } = useAuthStore();
 
     const [form, setForm] = useState({
         name: '', slug: '', primaryColor: '#00d4ff', secondaryColor: '#0a0f1e', logoUrl: '',
@@ -45,12 +47,22 @@ export default function OrgCreate() {
         }
         setLoading(true);
         try {
-            const res = await authFetch('/api/orgs', {
-                method: 'POST',
-                body: JSON.stringify(form),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to create org');
+            const { data, error: insertError } = await supabase
+                .from('organizations')
+                .insert([{
+                    name: form.name.trim(),
+                    slug: form.slug.trim(),
+                    branding: {
+                        primary_color: form.primaryColor,
+                        secondary_color: form.secondaryColor,
+                        logo_url: form.logoUrl
+                    },
+                    owner_id: user.id
+                }])
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
             navigate(`/org/${data.id}`);
         } catch (err) {
             setError(err.message.toUpperCase());

@@ -29,6 +29,11 @@ import BrandingProvider from './components/layout/BrandingProvider';
 
 // Lazy-loaded Admin Dashboards
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
+const Register      = React.lazy(() => import('./pages/Register'));
+const Login         = React.lazy(() => import('./pages/Login'));
+const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
+const UpdatePassword = React.lazy(() => import('./pages/UpdatePassword'));
+const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile'));
 const VetoRoom    = React.lazy(() => import('./pages/VetoRoom'));
 const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
 const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
@@ -79,7 +84,9 @@ export default function App() {
                         <Routes>
                             {/* ── PUBLIC ACCESS ── */}
                             <Route path="/"          element={<GlobalHome />} />
-                            <Route path="/login"     element={<Login />} />
+                            <Route path="/login"        element={<Login />} />
+                            <Route path="/forgot-password" element={<ForgotPassword />} />
+                            <Route path="/update-password" element={<UpdatePassword />} />
                             <Route path="/register"  element={<Register />} />
                             <Route path="/history"   element={<GlobalHome view="history" />} />
                             <Route path="/players/:userId" element={<PlayerProfile />} />

@@ -80,6 +80,22 @@ const useAuthStore = create((set, get) => ({
         return data.user;
     },
 
+    forgotPassword: async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/update-password`,
+        });
+        if (error) throw error;
+        return true;
+    },
+
+    updatePassword: async (newPassword) => {
+        const { error } = await supabase.auth.updateUser({
+            password: newPassword
+        });
+        if (error) throw error;
+        return true;
+    },
+
     logout: async () => {
         const { error } = await supabase.auth.signOut();
         if (error) console.error('[AUTH] Sign out error:', error.message);

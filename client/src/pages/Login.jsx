@@ -90,7 +90,10 @@ export default function Login() {
                     </div>
 
                     <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
-                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PASSWORD</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>PASSWORD</label>
+                            <Link to="/forgot-password" style={{ fontSize: '10px', fontWeight: 900, color: accentColor, textDecoration: 'none', letterSpacing: '1px', opacity: 0.7 }}>FORGOT PASSWORD?</Link>
+                        </div>
                         <div style={{ position: 'relative' }}>
                             <input
                                 name="password" type={showPassword ? "text" : "password"} required
