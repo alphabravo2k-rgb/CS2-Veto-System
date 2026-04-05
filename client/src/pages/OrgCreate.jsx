@@ -50,6 +50,7 @@ export default function OrgCreate() {
             const { data, error: insertError } = await supabase
                 .from('orgs')
                 .insert([{
+                    id: crypto.randomUUID(),
                     name: form.name.trim(),
                     slug: form.slug.trim(),
                     branding: {
