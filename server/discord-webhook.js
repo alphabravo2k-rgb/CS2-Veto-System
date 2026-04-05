@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — DISCORD INTEGRATION KERNEL
+ * ⚡ VETO.GG — DISCORD INTEGRATION KERNEL
  * =============================================================================
  * FILE          : discord-webhook.js
  * RESPONSIBILITY: Secure outbound notifications to Discord API

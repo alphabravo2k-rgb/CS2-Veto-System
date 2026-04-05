@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — REACT MOUNT POINT
+ * ⚡ VETO.GG — REACT MOUNT POINT
  * =============================================================================
  * FILE          : src/main.jsx
  * RESPONSIBILITY: Mounts the React application to the DOM

@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — AUTH STORE (SERVERLESS PIVOT)
+ * ⚡ VETO.GG — AUTH STORE (SERVERLESS PIVOT)
  * =============================================================================
  * Responsibility: Supabase Native Authentication & Session Management
  * LAYER         : Client Data Layer (Zustand)

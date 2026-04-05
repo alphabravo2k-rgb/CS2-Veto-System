@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — AUTH VERIFICATION GUARD
+ * ⚡ VETO.GG — AUTH VERIFICATION GUARD
  * =============================================================================
  * Responsibility: Intercepts Supabase email-link redirects and renders 
  *                 a high-end "Identity Verified" celebratory theater.

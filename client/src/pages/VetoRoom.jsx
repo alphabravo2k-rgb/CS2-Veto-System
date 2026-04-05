@@ -30,6 +30,7 @@ const VetoRoom = () => {
         myRole, 
         roomUserCount, 
         isConnected, 
+        isDisconnected,
         serverError,
         connectToRoom, 
         disconnectRoom, 
@@ -42,6 +43,16 @@ const VetoRoom = () => {
     const { branding } = useOrgBranding(gameState?.org_id);
     const [showCopyNotify, setShowCopyNotify] = useState(false);
     const logContainerRef = useRef(null);
+    const [timerRemaining, setTimerRemaining] = useState(999);
+    
+    useEffect(() => {
+        if (!gameState?.useTimer || gameState?.finished || !gameState?.timerEndsAt) return;
+        const interval = setInterval(() => {
+            const remaining = Math.max(0, Math.floor((new Date(gameState.timerEndsAt) - new Date()) / 1000));
+            setTimerRemaining(remaining);
+        }, 500);
+        return () => clearInterval(interval);
+    }, [gameState?.timerEndsAt, gameState?.useTimer, gameState?.finished]);
 
     // ── WebSocket Lifecycle ──
     useEffect(() => {
@@ -109,11 +120,47 @@ const VetoRoom = () => {
             <AnimatedBackground />
             <ScanlineOverlay />
 
+            {/* 4. RECONNECT TOAST */}
+            <AnimatePresence>
+            {isDisconnected && (
+              <motion.div
+                initial={{ y: -60, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -60, opacity: 0 }}
+                style={{
+                  position: 'fixed', top: 0, left: 0, right: 0,
+                  zIndex: 9999, padding: '12px 24px',
+                  background: 'rgba(220,38,38,0.95)',
+                  backdropFilter: 'blur(8px)',
+                  textAlign: 'center', fontFamily: 'Rajdhani',
+                  fontWeight: 700, letterSpacing: '0.1em',
+                  fontSize: '14px', color: '#fff'
+                }}
+              >
+                CONNECTION LOST — RECONNECTING...
+              </motion.div>
+            )}
+            </AnimatePresence>
+
             {/* ── STATUS BAR ── */}
             <div className="room-status-bar" style={{ background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'space-between', padding: '12px 40px', fontSize: '11px', zIndex: 100, position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'rgba(255,255,255,0.7)' }}>
                     <ActivityIcon size={14} color="var(--brand-primary)" />
-                    <span style={{ letterSpacing: '3px', fontWeight: 900 }}>LIVE TERMINAL FEED // {roomUserCount} SPECTATORS</span>
+                    <span style={{ letterSpacing: '3px', fontWeight: 900 }}>LIVE TERMINAL FEED</span>
+                    
+                    {/* 1. SPECTATOR COUNT */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      fontSize: '13px', color: 'rgba(255,255,255,0.5)',
+                      fontFamily: 'Rajdhani', letterSpacing: '0.05em',
+                      marginLeft: '12px'
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                      {roomUserCount || 0} WATCHING
+                    </div>
                 </div>
                 <div style={{ letterSpacing: '3px', fontWeight: 900, color: isConnected ? '#00ff88' : '#ffaa00' }}>
                     {isConnected ? 'SIGNAL: SECURED' : 'SIGNAL: LOSS DETECTED'}
@@ -142,7 +189,15 @@ const VetoRoom = () => {
                         <h2 style={{ fontSize: '3.5rem', fontWeight: 900, margin: 0, letterSpacing: '2px' }}>{gameState.teamA}</h2>
                         {gameState.ready?.A ? <span style={{ color: '#00ff88', fontSize: '11px', fontWeight: 900, letterSpacing: '2px' }}>[ READY ]</span> : <span style={{ opacity: 0.3, fontSize: '11px', letterSpacing: '2px' }}>[ SYNCING... ]</span>}
                     </div>
-                    <GlassPanel style={{ width: '160px', height: '160px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: gameState.sequence[gameState.step]?.t === 'A' ? '2px solid var(--brand-primary)' : '1px solid rgba(255,255,255,0.1)' }}>
+                    {/* 2. ACTIVE TEAM INDICATOR (A) */}
+                    <GlassPanel style={{ 
+                        width: '160px', height: '160px', padding: '24px', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderLeft: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'A') ? '3px solid var(--brand-primary, #00d4ff)' : undefined,
+                        animation: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'A') ? 'teamPulse 2s ease-in-out infinite' : 'none',
+                        opacity: (!gameState.finished && gameState.sequence[gameState.step]?.t !== 'A') ? 0.4 : 1
+                    }}>
                         <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </GlassPanel>
                 </motion.div>
@@ -152,7 +207,11 @@ const VetoRoom = () => {
                     <NeonText fontSize="3rem" color="rgba(255,255,255,0.2)">VS</NeonText>
                     <div style={{ padding: '6px 20px', border: '1px solid var(--brand-primary)', borderRadius: '50px', fontSize: '12px', fontWeight: 900, letterSpacing: '4px' }}>{gameState.format.toUpperCase()}</div>
                     {gameState.useTimer && !gameState.finished && (
-                        <div style={{ fontSize: '4rem', fontWeight: 900, letterSpacing: '-4px', color: '#fff' }}>
+                        <div style={{ 
+                            fontSize: '4rem', fontWeight: 900, letterSpacing: '-4px', color: '#fff',
+                            animation: timerRemaining <= 5 ? 'timerShake 0.1s ease-in-out infinite' : 'none'
+                        }}>
+                            {/* 3. TIMER SHAKE */}
                             <Countdown target={gameState.timerEndsAt} key={gameState.step} />
                         </div>
                     )}
@@ -164,7 +223,15 @@ const VetoRoom = () => {
                     animate={{ x: 0, opacity: 1 }}
                     style={{ display: 'flex', alignItems: 'center', gap: '40px', textAlign: 'right' }}
                 >
-                    <GlassPanel style={{ width: '160px', height: '160px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: gameState.sequence[gameState.step]?.t === 'B' ? '2px solid #ff0055' : '1px solid rgba(255,255,255,0.1)' }}>
+                    {/* 2. ACTIVE TEAM INDICATOR (B) */}
+                    <GlassPanel style={{ 
+                        width: '160px', height: '160px', padding: '24px', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderLeft: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'B') ? '3px solid var(--brand-primary, #00d4ff)' : undefined,
+                        animation: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'B') ? 'teamPulse 2s ease-in-out infinite' : 'none',
+                        opacity: (!gameState.finished && gameState.sequence[gameState.step]?.t !== 'B') ? 0.4 : 1
+                    }}>
                         <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </GlassPanel>
                     <div>
@@ -278,7 +345,18 @@ const VetoRoom = () => {
                 )}
             </AnimatePresence>
 
-            <style>{`.log-container::-webkit-scrollbar { display: none; }`}</style>
+            <style>{`
+                .log-container::-webkit-scrollbar { display: none; }
+                @keyframes teamPulse {
+                    0%, 100% { border-left-color: var(--brand-primary, #00d4ff) }
+                    50% { border-left-color: rgba(0,212,255,0.3) }
+                }
+                @keyframes timerShake {
+                    0%, 100% { transform: translateX(0) }
+                    25% { transform: translateX(-3px) }
+                    75% { transform: translateX(3px) }
+                }
+            `}</style>
         </div>
     );
 };

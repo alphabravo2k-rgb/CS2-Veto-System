@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — GLOBAL VETO STORE (SERVERLESS PIVOT)
+ * ⚡ VETO.GG — GLOBAL VETO STORE (SERVERLESS PIVOT)
  * =============================================================================
  * RESPONSIBILITY: Supabase Realtime & Edge Functions Orchestration
  * LAYER         : Client Data Layer (Zustand)
@@ -17,6 +17,7 @@ const useVetoStore = create((set, get) => ({
     serverError: null,
     roomUserCount: 0,
     isConnected: false,
+    isDisconnected: false,
 
     connectToRoom: async (matchId, key) => {
         // 1. Cleanup existing channel
@@ -48,7 +49,19 @@ const useVetoStore = create((set, get) => ({
         set({ myRole: role });
 
         // 4. Set up Realtime Subscription
-        const channel = supabase.channel(`match:${matchId}`)
+        const channel = supabase.channel(`match:${matchId}`, {
+            config: {
+                presence: { key: myRole || 'viewer' }
+            }
+        })
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState();
+                let activeCount = 0;
+                for (const id in state) {
+                    activeCount += state[id].length;
+                }
+                set({ roomUserCount: activeCount });
+            })
             .on(
                 'postgres_changes', 
                 { event: 'UPDATE', schema: 'public', table: 'veto_sessions', filter: `id=eq.${matchId}` },
@@ -58,8 +71,13 @@ const useVetoStore = create((set, get) => ({
                 }
             )
             .subscribe((status) => {
-                if (status === 'SUBSCRIBED') set({ isConnected: true });
-                if (status === 'CLOSED' || status === 'TIMED_OUT') set({ isConnected: false });
+                if (status === 'SUBSCRIBED') {
+                    channel.track({ online_at: new Date().toISOString() });
+                    set({ isConnected: true, isDisconnected: false });
+                }
+                if (status === 'CLOSED' || status === 'TIMED_OUT') {
+                    set({ isConnected: false, isDisconnected: true });
+                }
             });
 
         set({ _channel: channel });

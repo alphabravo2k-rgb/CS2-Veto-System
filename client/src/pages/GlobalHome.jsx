@@ -103,7 +103,7 @@ export default function GlobalHome({ view = 'home' }) {
                         </div>
 
                         <div style={{ marginTop: '2rem', opacity: 0.2, fontSize: '9px', fontWeight: 900, letterSpacing: '4px' }}>
-                            ENGINEERED BY VETO.GG • CO-POWERED BY COMP-OS
+                            ENGINEERED BY VETO.GG
                         </div>
                     </>
                 )}

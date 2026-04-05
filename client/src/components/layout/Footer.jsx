@@ -23,7 +23,7 @@ export default function Footer() {
 
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '9px', fontWeight: 900, opacity: 0.3, letterSpacing: '3px', marginBottom: '4px' }}>
-                        CO-POWERED BY COMP-OS
+                        POWERED BY VETO.GG
                     </div>
                     <div style={{ fontSize: '10px', fontWeight: 900, color: '#fff', letterSpacing: '2px' }}>
                         ENGINEERED BY <span style={{ color: '#00d4ff' }}>ALPHABRAVO2K</span>

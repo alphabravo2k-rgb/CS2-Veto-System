@@ -1,5 +1,5 @@
 /**
- * ⚡ COMP-OS — SETTINGS PERSISTENCE (SUPABASE NATIVE)
+ * ⚡ VETO.GG — SETTINGS PERSISTENCE (SUPABASE NATIVE)
  * =============================================================================
  * Responsibility: Stores global server configurations in Supabase.
  * =============================================================================
