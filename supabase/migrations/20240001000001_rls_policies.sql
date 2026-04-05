@@ -230,3 +230,10 @@ CREATE POLICY "members_admin_delete" ON org_members FOR DELETE
 
 CREATE POLICY "veto_admin_delete" ON veto_sessions FOR DELETE
   USING (auth.role() = 'service_role');
+
+-- Owner inserts
+CREATE POLICY "branding_owner_insert" ON org_branding
+  FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM orgs WHERE id = org_branding.org_id AND owner_id = auth.uid()::UUID));
+
+CREATE POLICY "members_owner_insert" ON org_members
+  FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM orgs WHERE id = org_members.org_id AND owner_id = auth.uid()::UUID));

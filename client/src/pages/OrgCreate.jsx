@@ -47,24 +47,48 @@ export default function OrgCreate() {
         }
         setLoading(true);
         try {
-            const { data, error: insertError } = await supabase
+            const orgId = crypto.randomUUID();
+            
+            const { data: orgData, error: orgError } = await supabase
                 .from('orgs')
                 .insert([{
-                    id: crypto.randomUUID(),
+                    id: orgId,
                     name: form.name.trim(),
                     slug: form.slug.trim(),
-                    branding: {
-                        primary_color: form.primaryColor,
-                        secondary_color: form.secondaryColor,
-                        logo_url: form.logoUrl
-                    },
-                    owner_id: user.id
+                    owner_id: user?.id || null
                 }])
                 .select()
                 .single();
 
-            if (insertError) throw insertError;
-            navigate(`/org/${data.id}`);
+            if (orgError) throw orgError;
+
+            const { error: brandingError } = await supabase
+                .from('org_branding')
+                .insert([{
+                    org_id: orgId,
+                    display_name: form.name.trim(),
+                    primary_color: form.primaryColor,
+                    secondary_color: form.secondaryColor,
+                    logo_url: form.logoUrl || null,
+                    plan: 'org_trial',
+                    trial_count: 0,
+                    trial_limit: 3,
+                    is_registered: false
+                }]);
+
+            if (brandingError) throw brandingError;
+
+            const { error: memberError } = await supabase
+                .from('org_members')
+                .insert([{
+                    org_id: orgId,
+                    user_id: user?.id,
+                    role: 'admin'
+                }]);
+
+            if (memberError) throw memberError;
+
+            navigate(`/org/${orgId}`);
         } catch (err) {
             setError(err.message.toUpperCase());
         } finally {
