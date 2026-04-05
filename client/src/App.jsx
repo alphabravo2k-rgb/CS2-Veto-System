@@ -93,6 +93,7 @@ export default function App() {
                             <Route path="/org/:orgId/tournament/:tournamentId/live" element={<TournamentPublic />} />
                             <Route path="/support"   element={<SupportHub />} />
                             <Route path="/quick-veto" element={<QuickVeto />} />
+                            <Route path="/veto/:matchId" element={<VetoRoom />} />
 
                             {/* ── PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />

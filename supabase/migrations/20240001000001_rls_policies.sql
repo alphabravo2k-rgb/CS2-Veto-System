@@ -41,6 +41,8 @@ CREATE POLICY "users_public_read" ON users FOR SELECT
   USING (suspended = FALSE OR id = auth.uid()::UUID);
 CREATE POLICY "users_self_update" ON users FOR UPDATE 
   USING (id = auth.uid()::UUID);
+CREATE POLICY "users_self_insert" ON users FOR INSERT 
+  WITH CHECK (id = auth.uid()::UUID);
 
 -- Org members: org members can read their org, admins can write
 CREATE POLICY "members_org_read" ON org_members FOR SELECT
@@ -209,3 +211,22 @@ CREATE POLICY "tournaments_admin_delete" ON tournaments
       AND role = 'admin'
     )
   );
+
+CREATE POLICY "branding_admin_delete" ON org_branding FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM org_members
+    WHERE org_id = org_branding.org_id
+    AND user_id = auth.uid()::UUID
+    AND role = 'admin'
+  ));
+
+CREATE POLICY "members_admin_delete" ON org_members FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM org_members om2
+    WHERE om2.org_id = org_members.org_id
+    AND om2.user_id = auth.uid()::UUID
+    AND om2.role = 'admin'
+  ));
+
+CREATE POLICY "veto_admin_delete" ON veto_sessions FOR DELETE
+  USING (auth.role() = 'service_role');

@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   bio TEXT,
   suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  linked_accounts JSONB,
   username_changed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -94,6 +95,11 @@ CREATE TABLE IF NOT EXISTS veto_sessions (
   use_coin_flip BOOLEAN DEFAULT FALSE,
   coin_flip JSONB,
   temp_webhook_url TEXT,
+  keys_data JSONB,
+  date TIMESTAMPTZ,
+  last_picked_map TEXT,
+  played_maps JSONB DEFAULT '[]',
+  ready JSONB DEFAULT '{"A":false,"B":false}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   finished_at TIMESTAMPTZ
 );

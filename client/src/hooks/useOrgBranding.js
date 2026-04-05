@@ -28,7 +28,7 @@ export default function useOrgBranding(orgId) {
         async function fetchBranding() {
             try {
                 const { data, error } = await supabase
-                    .from('organizations')
+                    .from('orgs')
                     .select('*, org_branding(*)')
                     .eq('id', orgId)
                     .single();

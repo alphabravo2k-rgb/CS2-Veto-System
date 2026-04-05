@@ -122,7 +122,7 @@ router.get('/history', async (req, res) => {
         const { tournamentId } = req.query;
 
         let query = supabase
-            .from('match_history')
+            .from('veto_sessions')
             .select('*', { count: 'exact' })
             .order('date', { ascending: false })
             .range((page - 1) * limit, page * limit - 1);
@@ -141,7 +141,7 @@ router.get('/history', async (req, res) => {
 // DELETE /api/admin/matches/:matchId
 router.delete('/matches/:matchId', async (req, res) => {
     try {
-        const { error } = await supabase.from('match_history').delete().eq('id', req.params.matchId);
+        const { error } = await supabase.from('veto_sessions').delete().eq('id', req.params.matchId);
         if (error) throw error;
 
         await log({ 

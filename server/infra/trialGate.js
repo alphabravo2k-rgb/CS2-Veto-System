@@ -14,8 +14,8 @@ async function checkMatchLimit(orgId) {
     try {
         // 1. Fetch org Tier and Current Match Count
         const { data: org, error: orgError } = await supabase
-            .from('org_settings')
-            .select('tier, match_limit, matches_created')
+            .from('org_branding')
+            .select('plan, trial_limit, trial_count')
             .eq('org_id', orgId)
             .single();
 
@@ -25,12 +25,12 @@ async function checkMatchLimit(orgId) {
         }
 
         // 2. Enforcement Logic
-        if (org.tier === 'trial' || org.tier === 'free') {
-            const limit = org.match_limit || 10;
-            if (org.matches_created >= limit) {
+        if (org.plan === 'free_individual' || org.plan === 'trial') {
+            const limit = org.trial_limit || 10;
+            if (org.trial_count >= limit) {
                 return { 
                     allowed: false, 
-                    reason: `MATCH LIMIT REACHED (${org.matches_created}/${limit}). Please upgrade your plan at portal.veto.gg` 
+                    reason: `MATCH LIMIT REACHED (${org.trial_count}/${limit}). Please upgrade your plan at portal.veto.gg` 
                 };
             }
         }
