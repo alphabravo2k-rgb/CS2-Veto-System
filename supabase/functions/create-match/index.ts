@@ -103,10 +103,15 @@ serve(async (req) => {
     })
 
   } catch (err: any) {
-    console.error('[create-match] Error:', err.message, err.stack)
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    console.error('[create-match] FULL ERROR:', err)
+    return new Response(
+      JSON.stringify({ 
+        error: err.message,
+        detail: err.stack || String(err),
+        mode: "debug_200"
+      }), 
+      { status: 200, headers: { ...corsHeaders, 
+        'Content-Type': 'application/json' } }
+    )
   }
 })

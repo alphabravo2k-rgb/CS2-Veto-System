@@ -128,6 +128,7 @@ export default function OrgDashboard() {
             const { data, error } = await supabase
                 .from('tournaments')
                 .insert([{
+                    id: crypto.randomUUID(),
                     name,
                     org_id: orgId,
                     format: 'bo3',
@@ -195,9 +196,9 @@ export default function OrgDashboard() {
                         <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setEditBranding(true)}>
                             EDIT BRANDING
                         </button>
-                        <Link to={`/org/${orgId}/tournament`} className="premium-button">
+                        <button onClick={createTournament} className="premium-button">
                             CREATE TOURNAMENT
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>

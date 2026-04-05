@@ -37,7 +37,16 @@ export default function QuickVeto() {
                     : {}
             });
 
-            if (matchError) throw matchError;
+            if (matchError || data?.error) {
+                let msg = matchError?.message || data?.error || 'EDGE FUNCTION FAILED';
+                try {
+                    if (matchError?.context) {
+                        const body = await matchError.context.json();
+                        msg = body.error || body.detail || msg;
+                    }
+                } catch(e) {}
+                throw new Error(msg);
+            }
             navigate(`/veto/${data.matchId}?key=${data.keys.admin}`);
         } catch (e) {
             setError(e.message || 'FAILED TO INITIALIZE VETO TERMINAL');

@@ -48,13 +48,14 @@ export default function OrgCreate() {
         setLoading(true);
         try {
             const orgId = crypto.randomUUID();
+            const slug = form.slug.trim().slice(0, 35) + '-' + crypto.randomUUID().slice(0, 4);
             
             const { data: orgData, error: orgError } = await supabase
                 .from('orgs')
                 .insert([{
                     id: orgId,
                     name: form.name.trim(),
-                    slug: form.slug.trim(),
+                    slug: slug,
                     owner_id: user?.id || null
                 }])
                 .select()
