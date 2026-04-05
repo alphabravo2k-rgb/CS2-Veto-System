@@ -132,6 +132,18 @@ export default class VetoEngine {
         return { state: VetoEngine.finalizeSeries(newState) };
     }
 
+    static setTeamReady(state: any, teamKey: string, teamName: string) {
+        if (!state.useTimer) return { state, error: 'Timer is not enabled for this match' };
+        if (state.finished) return { state, error: 'Match is already finished' };
+        if (teamKey !== 'A' && teamKey !== 'B') return { state, error: 'Only team A or B can set ready status' };
+
+        const newState = VetoEngine._clone(state);
+        newState.ready[teamKey] = true;
+        newState.logs.push(`[READY] ${teamName} is ready`);
+
+        return { state: newState };
+    }
+
     static coinCall(state: any, call: string, teamAName: string) {
         if (!state.useCoinFlip || !state.coinFlip || state.coinFlip.status !== 'waiting_call') {
             return { state, error: 'Coin flip not applicable at this time' };
