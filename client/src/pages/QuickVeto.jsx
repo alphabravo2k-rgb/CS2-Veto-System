@@ -18,6 +18,12 @@ export default function QuickVeto() {
         setLoading(true);
         try {
             // Create a match under a 'Global' context (null tournament/org)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                setError('Please sign in to start a Quick Veto');
+                return;
+            }
+
             const { data, error: matchError } = await supabase.functions.invoke('create-match', {
                 body: {
                     teamA: teamA.trim(),
@@ -25,7 +31,10 @@ export default function QuickVeto() {
                     format: 'bo1',
                     isQuickVeto: true,
                     watermark: true // All free vetoes are watermarked
-                }
+                },
+                headers: session?.access_token 
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {}
             });
 
             if (matchError) throw matchError;
@@ -69,7 +78,16 @@ export default function QuickVeto() {
                         </div>
                     </div>
 
-                    {error && <div style={{ color: '#ff4b2b', fontSize: '10px', fontWeight: 900, textAlign: 'center', marginBottom: '20px', letterSpacing: '1px' }}>{error}</div>}
+                    {error && (
+                        <div style={{ color: '#ff4b2b', fontSize: '10px', fontWeight: 900, textAlign: 'center', marginBottom: '20px', letterSpacing: '1px' }}>
+                            {error}
+                            {error === 'Please sign in to start a Quick Veto' && (
+                                <div style={{ marginTop: '10px' }}>
+                                    <button className="premium-button" onClick={() => navigate('/login')} style={{ width: '100%', padding: '12px', fontSize: '10px' }}>SIGN IN TO CONTINUE</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <button 
                         className="premium-button" 

@@ -92,8 +92,10 @@ const useVetoStore = create((set, get) => ({
     /** Call Supabase Edge Function to Create Match */
     createMatch: async (payload, onSuccess) => {
         try {
+            const { data: { session } } = await supabase.auth.getSession();
             const { data, error } = await supabase.functions.invoke('create-match', {
-                body: payload
+                body: payload,
+                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
             });
 
             if (error) throw error;
@@ -106,30 +108,38 @@ const useVetoStore = create((set, get) => ({
 
     /** Send Veto Action via Edge Function (The "Brain") */
     sendAction: async (matchId, actionData, key) => {
+        const { data: { session } } = await supabase.auth.getSession();
         const { error } = await supabase.functions.invoke('veto-action', {
-            body: { matchId, action: 'ban', data: actionData, key } // default 'ban' is just a placeholder here, the component passes correctly
+            body: { matchId, action: 'ban', data: actionData, key }, // default 'ban' is just a placeholder here, the component passes correctly
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
     },
 
     /** Specific Action Wrappers */
     sendReady: async (matchId, key) => {
+        const { data: { session } } = await supabase.auth.getSession();
         const { error } = await supabase.functions.invoke('veto-action', {
-            body: { matchId, action: 'ready', key }
+            body: { matchId, action: 'ready', key },
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
     },
 
     sendCoinCall: async (matchId, call, key) => {
+        const { data: { session } } = await supabase.auth.getSession();
         const { error } = await supabase.functions.invoke('veto-action', {
-            body: { matchId, action: 'coin_call', data: { call }, key }
+            body: { matchId, action: 'coin_call', data: { call }, key },
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
     },
 
     sendCoinDecide: async (matchId, decision, key) => {
+        const { data: { session } } = await supabase.auth.getSession();
         const { error } = await supabase.functions.invoke('veto-action', {
-            body: { matchId, action: 'coin_decision', data: { decision }, key }
+            body: { matchId, action: 'coin_decision', data: { decision }, key },
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
     }

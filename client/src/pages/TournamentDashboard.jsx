@@ -166,12 +166,14 @@ export default function TournamentDashboard() {
 
             if (pairs.length === 0) throw new Error("No valid data found (format: Team A, Team B)");
 
+            const { data: { session } } = await supabase.auth.getSession();
             const { data, error } = await supabase.functions.invoke('match-generation', {
                 body: {
                     tournamentId,
                     matchPairs: pairs,
                     settings: { useTimer, timerDuration, useCoinFlip, format: 'bo1' }
-                }
+                },
+                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
             });
 
             if (error) throw error;
