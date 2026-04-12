@@ -60,7 +60,7 @@ export default function ProfileEdit() {
                 
                 if (fetchError) throw fetchError;
                 
-                setProfile(data);
+                setProfile({ ...data, linkedAccounts: data.linked_accounts || [] });
                 setForm({
                     username:     data.username || '',
                     displayName:  data.display_name || '',
@@ -97,7 +97,7 @@ export default function ProfileEdit() {
 
             if (updateError) throw updateError;
             
-            setProfile(data);
+            setProfile({ ...data, linkedAccounts: data.linked_accounts || [] });
             setSuccess('PROFILE SAVED');
             setTimeout(() => setSuccess(''), 3000);
         } catch (err) {
@@ -131,7 +131,7 @@ export default function ProfileEdit() {
 
             if (linkError) throw linkError;
 
-            setProfile(data);
+            setProfile({ ...data, linkedAccounts: data.linked_accounts || [] });
             setLinkPlatform({ platform: '', platformId: '', platformUsername: '' });
             setSuccess('ACCOUNT LINKED');
             setTimeout(() => setSuccess(''), 3000);
@@ -276,7 +276,7 @@ export default function ProfileEdit() {
                                     <button 
                                         className="premium-button" 
                                         style={{ padding: '12px', background: '#171a21', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }} 
-                                        onClick={() => window.location.href = `${API_URL}/api/auth/steam`}
+                                        onClick={() => window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/steam`}
                                     >
                                         <img src="https://community.cloudflare.steamstatic.com/public/images/signinthroughsteam/sits_01.png" alt="Steam Login" style={{ height: '24px' }} />
                                     </button>

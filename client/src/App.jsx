@@ -7,9 +7,10 @@
  * =============================================================================
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from './store/useAuthStore';
+import { supabase } from './utils/supabase.js';
 
 // Pages
 import GlobalHome        from './pages/GlobalHome';
@@ -55,14 +56,27 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const PlatformAdminRoute = ({ children }) => {
-    const { isAuthenticated, user, loading } = useAuthStore();
-    const location = useLocation();
-
-    if (loading) return <div>Validating terminal credentials...</div>;
-    if (!isAuthenticated || user?.role !== 'platform_admin') {
-        return <Navigate to="/" replace />;
-    }
+    const { user, isAuthenticated } = useAuthStore();
+    const [adminChecked, setAdminChecked] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     
+    useEffect(() => {
+      if (!isAuthenticated || !user) {
+        setAdminChecked(true);
+        return;
+      }
+      supabase.from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          setIsAdmin(data?.role === 'platform_admin');
+          setAdminChecked(true);
+        });
+    }, [user, isAuthenticated]);
+    
+    if (!adminChecked) return null;
+    if (!isAuthenticated || !isAdmin) return <Navigate to="/" />;
     return children;
 };
 

@@ -13,7 +13,10 @@ function adminAuth(req, res, next) {
     if (req.user?.role === 'platform_admin') return next();
 
     const secret = req.body?.secret || req.headers['x-admin-secret'];
-    const MASTER_SECRET = process.env.ADMIN_SECRET || 'default_secret';
+    const MASTER_SECRET = process.env.ADMIN_SECRET;
+    if (!MASTER_SECRET) {
+        console.error('[SECURITY] ADMIN_SECRET env var not set');
+    }
     
     if (!secret || secret.length !== MASTER_SECRET.length) {
         return res.status(403).json({ error: 'Forbidden' });

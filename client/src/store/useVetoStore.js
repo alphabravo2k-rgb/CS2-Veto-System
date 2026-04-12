@@ -85,7 +85,6 @@ const useVetoStore = create((set, get) => ({
                 'postgres_changes', 
                 { event: 'UPDATE', schema: 'public', table: 'veto_sessions', filter: `id=eq.${matchId}` },
                 (payload) => {
-                    console.log('[REALTIME] State Sync:', payload.new);
                     set({ gameState: normalizeState(payload.new) });
                 }
             )

@@ -166,18 +166,38 @@ export default function TournamentDashboard() {
 
             if (pairs.length === 0) throw new Error("No valid data found (format: Team A, Team B)");
 
+            const results = [];
             const { data: { session } } = await supabase.auth.getSession();
-            const { data, error } = await supabase.functions.invoke('match-generation', {
-                body: {
-                    tournamentId,
-                    matchPairs: pairs,
-                    settings: { useTimer, timerDuration, useCoinFlip, format: 'bo1' }
-                },
-                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
-            });
-
-            if (error) throw error;
-            setBulkReport(data);
+            const authHeader = session?.access_token 
+                ? { Authorization: `Bearer ${session.access_token}` }
+                : {};
+            
+            for (const pair of pairs) {
+                const { data, error } = await supabase.functions.invoke('create-match', {
+                    body: {
+                        orgId,
+                        tournamentId,
+                        teamA: pair.teamA,
+                        teamB: pair.teamB,
+                        format: 'bo1',
+                        useTimer,
+                        timerDuration,
+                        useCoinFlip,
+                    },
+                    headers: authHeader
+                });
+                
+                if (error) {
+                    results.push({ ...pair, success: false, error: error.message });
+                } else {
+                    results.push({ ...pair, success: true, roomId: data.matchId }); 
+                }
+            }
+            
+            const successCount = results.filter(r => r.success).length;
+            const errorCount = results.length - successCount;
+            
+            setBulkReport({ successCount, errorCount, results });
             setBulkInput('');
             fetchHistory();
         } catch (err) {
@@ -434,7 +454,7 @@ export default function TournamentDashboard() {
                                         style={{ padding: '16px', borderLeft: `3px solid ${match.finished ? 'rgba(255,255,255,0.1)' : '#00ff88'}`, background: 'rgba(0,0,0,0.2)', borderRadius: '0 8px 8px 0', border: '1px solid rgba(255,255,255,0.03)' }}
                                     >
                                         <div style={{ fontWeight: 900, fontSize: '11px', marginBottom: '4px' }}>
-                                            {match.teamA} <span style={{ opacity: 0.3 }}>VS</span> {match.teamB}
+                                            {match.team_a} <span style={{ opacity: 0.3 }}>VS</span> {match.team_b}
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <span style={{ fontSize: '9px', fontWeight: 700, opacity: 0.4 }}>{new Date(match.date).toLocaleDateString()} | {match.format.toUpperCase()}</span>

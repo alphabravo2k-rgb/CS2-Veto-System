@@ -60,7 +60,7 @@ export default function GlobalHome({ view = 'home' }) {
                                             <div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '0.5px' }}>{m.teamA} <span style={{color: 'var(--brand-primary)', margin: '0 8px'}}>VS</span> {m.teamB}</div>
                                             <div style={{ fontSize: '0.8rem', opacity: 0.4, marginTop: '4px' }}>{new Date(m.date).toLocaleString()} • {m.id.slice(0,8).toUpperCase()}</div>
                                         </div>
-                                        <button className="premium-button" style={{ padding: '8px 16px', fontSize: '0.8rem' }} onClick={() => navigate(`/${m.tournament_id}/veto/${m.id}`)}>
+                                        <button className="premium-button" style={{ padding: '8px 16px', fontSize: '0.8rem' }} onClick={() => navigate(`/veto/${m.id}`)}>
                                             LAUNCH INTEL
                                         </button>
                                     </div>

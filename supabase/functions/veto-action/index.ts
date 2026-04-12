@@ -120,7 +120,7 @@ serve(async (req) => {
         detail: err.stack || String(err),
         mode: "debug_200"
       }), 
-      { status: 200, headers: { ...corsHeaders, 
+      { status: 400, headers: { ...corsHeaders, 
         'Content-Type': 'application/json' } }
     )
   }

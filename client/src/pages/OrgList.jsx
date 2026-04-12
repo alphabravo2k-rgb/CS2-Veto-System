@@ -24,17 +24,16 @@ const OrgList = () => {
             // If we have a many-to-many relationship (org_members), we would join there.
             // For now, let's assume the user can see all orgs or we filter by creator_id if that exists.
             const { data, error: fetchError } = await supabase
-                .from('orgs')
-                .select('*')
-                .order('created_at', { ascending: false });
-
+                .from('org_members')
+                .select('role, orgs(*)')
+                .eq('user_id', user.id);
+            
             if (fetchError) throw fetchError;
-
-            // Normalize data for UI
-            const normalized = (data || []).map(org => ({
-                ...org,
-                userRole: 'admin', // Defaulting to admin for testing, will integrate RBAC later
-                tournamentCount: 0 // Will integrate count query later
+            
+            const normalized = (data || []).map(item => ({
+                ...item.orgs,
+                userRole: item.role,
+                tournamentCount: 0
             }));
 
             setOrganizations(normalized);

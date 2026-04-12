@@ -342,8 +342,9 @@ const VetoRoom = () => {
                     </div>
                 </section>
                 
-                <Watermark branding={branding} />
             </main>
+            
+            <Watermark branding={branding} />
 
             {/* OVERLAYS */}
             {gameState.useCoinFlip && (

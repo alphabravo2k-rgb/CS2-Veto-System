@@ -6,7 +6,7 @@
  * =============================================================================
  */
 
-import { serve } from "https://deno.land/std/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0"
 import VetoEngine from "../_shared/VetoEngine.ts"
 import { getDefaultMapPool } from "../_shared/sequences.ts"
@@ -123,7 +123,7 @@ serve(async (req) => {
         detail: err.stack || String(err),
         mode: "debug_200"
       }), 
-      { status: 200, headers: { ...corsHeaders, 
+      { status: 400, headers: { ...corsHeaders, 
         'Content-Type': 'application/json' } }
     )
   }

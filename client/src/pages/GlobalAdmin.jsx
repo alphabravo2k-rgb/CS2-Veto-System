@@ -21,12 +21,17 @@ const GlobalAdmin = () => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        if (user && user.user_metadata?.role === 'platform_admin') {
-            fetchAdminData();
-        } else {
-            setError('UNAUTHORIZED: PLATFORM_ADMIN CLEARANCE REQUIRED');
-            setLoading(false);
-        }
+        if (!user) return;
+        (async () => {
+            const { data: userProfile } = await supabase
+                .from('users').select('role').eq('id', user.id).single();
+            if (userProfile?.role === 'platform_admin') {
+                fetchAdminData();
+            } else {
+                setError('UNAUTHORIZED: PLATFORM_ADMIN CLEARANCE REQUIRED');
+                setLoading(false);
+            }
+        })();
     }, [user]);
 
     const fetchAdminData = async () => {
@@ -95,11 +100,8 @@ const GlobalAdmin = () => {
     };
 
     const handleSetPlatformAdmin = async (userId) => {
-        const { error } = await supabase.rpc('set_custom_claim', { user_id: userId, claim: 'role', value: 'platform_admin' });
-        if (!error) {
-            await supabase.from('users').update({ role: 'platform_admin' }).eq('id', userId);
-            fetchAdminData();
-        }
+        const { error } = await supabase.from('users').update({ role: 'platform_admin' }).eq('id', userId);
+        if (!error) fetchAdminData();
     };
 
     const handleSuspendOrg = async (orgId, currentStatus) => {

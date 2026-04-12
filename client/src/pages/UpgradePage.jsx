@@ -11,6 +11,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
+import { supabase } from '../utils/supabase.js';
 
 const UpgradePage = () => {
     const { orgId } = useParams();
@@ -64,43 +65,38 @@ const UpgradePage = () => {
         return () => clearInterval(timer);
     }, [paymentStatus, invoice]);
 
-    // QR Code Placeholder Generator
+    // Generate Real QR Code
     useEffect(() => {
-        if (invoice && qrCanvasRef.current) {
-            const ctx = qrCanvasRef.current.getContext('2d');
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(0, 0, 200, 200);
-            ctx.fillStyle = '#000';
-            // Simple placeholder pattern to look like a QR
-            for (let i = 0; i < 400; i++) {
-                if (Math.random() > 0.5) {
-                    ctx.fillRect((i % 20) * 10, Math.floor(i / 20) * 10, 10, 10);
-                }
-            }
-            // Add prominent square corners
-            ctx.fillRect(0, 0, 60, 60);
-            ctx.fillRect(140, 0, 60, 60);
-            ctx.fillRect(0, 140, 60, 60);
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(10, 10, 40, 40);
-            ctx.fillRect(150, 10, 40, 40);
-            ctx.fillRect(10, 150, 40, 40);
-            ctx.fillStyle = '#000';
-            ctx.fillRect(20, 20, 20, 20);
-            ctx.fillRect(160, 20, 20, 20);
-            ctx.fillRect(20, 160, 20, 20);
+        if (invoice?.payAddress && qrCanvasRef.current) {
+            import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm')
+                .then(QRCode => {
+                    QRCode.default.toCanvas(
+                        qrCanvasRef.current,
+                        invoice.payAddress,
+                        { 
+                            width: 200, 
+                            color: { dark: '#000000', light: '#ffffff' }
+                        }
+                    );
+                });
         }
-    }, [invoice]);
+    }, [invoice?.payAddress]);
 
     const handleCreateInvoice = async (planId) => {
         try {
             setIsLoading(true);
             setPaymentStatus('creating');
-            const data = await authFetch('/api/payments/create', {
-                method: 'POST',
-                body: JSON.stringify({ orgId, planId, periodMonths: 1 })
+            
+            const { data: { session } } = await supabase.auth.getSession();
+            const response = await supabase.functions.invoke('create-payment', {
+                body: { orgId, planId, periodMonths: 1 },
+                headers: session?.access_token
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {}
             });
-            setInvoice(data);
+            
+            if (response.error) throw new Error(response.error.message);
+            setInvoice(response.data);
             setPaymentStatus('pending');
         } catch (err) {
             console.error('[Upgrade] Invoice creation failed:', err);
@@ -112,11 +108,17 @@ const UpgradePage = () => {
 
     const checkPaymentStatus = async () => {
         try {
-            const payments = await authFetch(`/api/payments/org/${orgId}`);
-            const currentPay = payments.find(p => p.id === invoice.invoiceId);
-            if (currentPay && currentPay.status === 'confirmed') {
+            if (!invoice?.invoiceId) return;
+            
+            const { data } = await supabase
+                .from('payments')
+                .select('status')
+                .eq('id', invoice.invoiceId)
+                .single();
+            
+            if (data?.status === 'confirmed') {
                 setPaymentStatus('confirmed');
-            } else if (currentPay && currentPay.status === 'expired') {
+            } else if (data?.status === 'expired') {
                 setPaymentStatus('expired');
             }
             setPollingCount(prev => prev + 1);

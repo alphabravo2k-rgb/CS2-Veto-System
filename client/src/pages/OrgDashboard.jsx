@@ -23,6 +23,7 @@ export default function OrgDashboard() {
     const [tournaments, setTournaments] = useState([]);
     const [members,     setMembers]     = useState([]);
     const [tab,         setTab]         = useState('tournaments');
+    const [membersLoading, setMembersLoading] = useState(false);
     const [loading,     setLoading]     = useState(true);
     const [error,       setError]       = useState('');
 
@@ -53,12 +54,19 @@ export default function OrgDashboard() {
                 setOrg(orgData);
                 setTournaments(tData || []);
                 
-                if (orgData.branding) {
+                const { data: brandingData } = await supabase
+                    .from('org_branding')
+                    .select('*')
+                    .eq('org_id', orgId)
+                    .single();
+                
+                if (brandingData) {
                     setBrandingForm({
-                        displayName:     orgData.branding.display_name || orgData.name || '',
-                        primaryColor:    orgData.branding.primary_color || '#00d4ff',
-                        secondaryColor:  orgData.branding.secondary_color || '#0a0f1e',
-                        logoUrl:         orgData.branding.logo_url || '',
+                        displayName: brandingData.display_name || '',
+                        primaryColor: brandingData.primary_color || '#00d4ff',
+                        secondaryColor: brandingData.secondary_color || '#0a0f1e',
+                        logoUrl: brandingData.logo_url || '',
+                        bannerUrl: brandingData.banner_url || '',
                     });
                 }
             } catch (e) {
@@ -70,6 +78,7 @@ export default function OrgDashboard() {
     }, [orgId]);
 
     const loadMembers = async () => {
+        setMembersLoading(true);
         try {
             const { data, error } = await supabase
                 .from('org_members')
@@ -85,6 +94,8 @@ export default function OrgDashboard() {
             }
         } catch (e) {
             console.error('[OrgDashboard] Load members error:', e);
+        } finally {
+            setMembersLoading(false);
         }
     };
 
@@ -95,22 +106,21 @@ export default function OrgDashboard() {
     const saveBranding = async () => {
         setSavingBrand(true);
         try {
-            const { data, error } = await supabase
-                .from('orgs')
+            const { error } = await supabase
+                .from('org_branding')
                 .update({
-                    branding: {
-                        display_name: brandingForm.displayName,
-                        primary_color: brandingForm.primaryColor,
-                        secondary_color: brandingForm.secondaryColor,
-                        logo_url: brandingForm.logoUrl
-                    }
+                    display_name: brandingForm.displayName,
+                    primary_color: brandingForm.primaryColor,
+                    secondary_color: brandingForm.secondaryColor,
+                    logo_url: brandingForm.logoUrl || null,
+                    banner_url: brandingForm.bannerUrl || null,
                 })
-                .eq('id', orgId)
-                .select()
-                .single();
+                .eq('org_id', orgId);
 
             if (error) throw error;
-            setOrg(data);
+            
+            // Reload branding to confirm save
+            window.dispatchEvent(new Event('brandingUpdated'));
             setEditBranding(false);
             window.location.reload(); 
         } catch (e) {
@@ -277,8 +287,10 @@ export default function OrgDashboard() {
                             <div className="tab-pane">
                                 <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>MEMBERS</h2>
                                 <div className="glass-panel" style={{ overflow: 'hidden' }}>
-                                    {members.length === 0 ? (
+                                    {membersLoading ? (
                                         <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>LOADING MEMBERS...</div>
+                                    ) : members.length === 0 ? (
+                                        <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>NO MEMBERS FOUND. INVITE YOUR TEAM.</div>
                                     ) : (
                                         <div className="members-list">
                                             {members.map(m => (
