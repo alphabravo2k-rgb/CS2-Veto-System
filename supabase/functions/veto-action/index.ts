@@ -61,8 +61,13 @@ serve(async (req) => {
       sequence: typeof match.sequence === 'string' ? JSON.parse(match.sequence) : match.sequence,
       logs: typeof match.logs === 'string' ? JSON.parse(match.logs) : match.logs,
       ready: typeof match.ready === 'string' ? JSON.parse(match.ready) : match.ready,
-      coinFlip: typeof match.coinFlip === 'string' ? JSON.parse(match.coinFlip) : match.coinFlip,
-      playedMaps: typeof match.playedMaps === 'string' ? JSON.parse(match.playedMaps) : match.playedMaps,
+      coinFlip: typeof match.coin_flip === 'string' ? JSON.parse(match.coin_flip) : match.coin_flip,
+      playedMaps: typeof match.played_maps === 'string' ? JSON.parse(match.played_maps) : match.played_maps,
+      useTimer: match.use_timer,
+      timerDuration: match.timer_duration,
+      useCoinFlip: match.use_coin_flip,
+      lastPickedMap: match.last_picked_map,
+      timerEndsAt: match.timer_ends_at,
     }
 
     if (action === 'ready') {
@@ -92,11 +97,12 @@ serve(async (req) => {
         maps: finalState.maps,
         logs: finalState.logs,
         finished: finalState.finished,
-        lastPickedMap: finalState.lastPickedMap,
-        playedMaps: finalState.playedMaps,
+        last_picked_map: finalState.lastPickedMap,
+        played_maps: finalState.playedMaps,
         ready: finalState.ready,
-        coinFlip: finalState.coinFlip,
+        coin_flip: finalState.coinFlip,
         sequence: finalState.sequence, // In case of coin flip swaps
+        timer_ends_at: finalState.timerEndsAt
       })
       .eq('id', matchId)
 

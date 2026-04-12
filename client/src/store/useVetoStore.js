@@ -10,6 +10,24 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase.js';
 
+const normalizeState = (db) => {
+    if (!db) return null;
+    return {
+        ...db,
+        teamA: db.team_a,
+        teamB: db.team_b,
+        teamALogo: db.team_a_logo,
+        teamBLogo: db.team_b_logo,
+        useTimer: db.use_timer,
+        timerDuration: db.timer_duration,
+        useCoinFlip: db.use_coin_flip,
+        coinFlip: db.coin_flip,
+        lastPickedMap: db.last_picked_map,
+        playedMaps: db.played_maps,
+        timerEndsAt: db.timer_ends_at,
+    };
+};
+
 const useVetoStore = create((set, get) => ({
     _channel: null, 
     gameState: null,
@@ -38,7 +56,8 @@ const useVetoStore = create((set, get) => ({
             return;
         }
 
-        set({ gameState: initialData, isConnected: true });
+        const normalizedInitial = normalizeState(initialData);
+        set({ gameState: normalizedInitial, isConnected: true });
 
         // 3. Authorization (Local check for role)
         const keys = initialData.keys_data || {};
@@ -67,7 +86,7 @@ const useVetoStore = create((set, get) => ({
                 { event: 'UPDATE', schema: 'public', table: 'veto_sessions', filter: `id=eq.${matchId}` },
                 (payload) => {
                     console.log('[REALTIME] State Sync:', payload.new);
-                    set({ gameState: payload.new });
+                    set({ gameState: normalizeState(payload.new) });
                 }
             )
             .subscribe((status) => {

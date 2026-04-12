@@ -93,7 +93,20 @@ serve(async (req) => {
         team_a_logo: teamALogo || null,
         team_b_logo: teamBLogo || null,
         temp_webhook_url: tempWebhookUrl || null,
-        ...vetoState
+        format: vetoState.format,
+        sequence: vetoState.sequence,
+        step: vetoState.step,
+        maps: vetoState.maps,
+        logs: vetoState.logs,
+        finished: vetoState.finished,
+        last_picked_map: vetoState.lastPickedMap,
+        played_maps: vetoState.playedMaps,
+        use_timer: vetoState.useTimer,
+        timer_duration: vetoState.timerDuration,
+        use_coin_flip: vetoState.useCoinFlip,
+        coin_flip: vetoState.coinFlip,
+        ready: vetoState.ready,
+        timer_ends_at: vetoState.timerEndsAt
       })
 
     if (insertError) throw new Error(insertError.message)
