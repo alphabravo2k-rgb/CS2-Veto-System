@@ -50,8 +50,8 @@ serve(async (req) => {
     // 1. Sanitize
     const safeTeamA = typeof teamA === 'string' ? teamA.trim().slice(0, 50) : 'Team A'
     const safeTeamB = typeof teamB === 'string' ? teamB.trim().slice(0, 50) : 'Team B'
-    const safeOrgId = orgId || 'global'
-    const safeTId = tournamentId || 'default'
+    const safeOrgId = (!orgId || orgId === 'global') ? null : orgId;
+    const safeTId = (!tournamentId || tournamentId === 'default') ? null : tournamentId;
 
     // 2. Map Pool
     let mapPool = getDefaultMapPool(format).map(n => ({ name: n, customImage: null }))
@@ -111,7 +111,7 @@ serve(async (req) => {
 
     if (insertError) throw new Error(insertError.message)
 
-    return new Response(JSON.stringify({ roomId, keys }), {
+    return new Response(JSON.stringify({ matchId: roomId, roomId, keys }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
