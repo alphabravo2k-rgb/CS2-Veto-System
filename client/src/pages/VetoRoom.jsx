@@ -89,7 +89,7 @@ const VetoRoom = () => {
         if (!isMyTurn) return;
         const currentStep = gameState.sequence[gameState.step];
         if (currentStep?.a === 'side' || currentStep?.a === 'knife') return;
-        sendAction(matchId, { mapName }, key);
+        sendAction(matchId, currentStep.a, { mapName }, key);
     };
 
     const copyInvite = () => {

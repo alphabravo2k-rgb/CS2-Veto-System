@@ -113,9 +113,15 @@ serve(async (req) => {
     })
 
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    console.error('[veto-action] FULL ERROR:', err)
+    return new Response(
+      JSON.stringify({ 
+        error: err.message,
+        detail: err.stack || String(err),
+        mode: "debug_200"
+      }), 
+      { status: 200, headers: { ...corsHeaders, 
+        'Content-Type': 'application/json' } }
+    )
   }
 })

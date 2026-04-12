@@ -70,7 +70,7 @@ const useVetoStore = create((set, get) => ({
         // 4. Set up Realtime Subscription
         const channel = supabase.channel(`match:${matchId}`, {
             config: {
-                presence: { key: myRole || 'viewer' }
+                presence: { key: role || 'viewer' }
             }
         })
             .on('presence', { event: 'sync' }, () => {
@@ -126,10 +126,10 @@ const useVetoStore = create((set, get) => ({
     },
 
     /** Send Veto Action via Edge Function (The "Brain") */
-    sendAction: async (matchId, actionData, key) => {
+    sendAction: async (matchId, actionString, actionData, key) => {
         const { data: { session } } = await supabase.auth.getSession();
         const { error } = await supabase.functions.invoke('veto-action', {
-            body: { matchId, action: 'ban', data: actionData, key }, // default 'ban' is just a placeholder here, the component passes correctly
+            body: { matchId, action: actionString, data: actionData, key },
             headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
