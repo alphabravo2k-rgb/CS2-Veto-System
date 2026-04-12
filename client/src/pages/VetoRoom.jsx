@@ -92,8 +92,11 @@ const VetoRoom = () => {
         sendAction(matchId, currentStep.a, { mapName }, key);
     };
 
-    const copyInvite = () => {
-        navigator.clipboard.writeText(window.location.href);
+    const copyInviteLink = (targetRole) => {
+        if (!gameState?.keys_data) return;
+        const keyToUse = gameState.keys_data[targetRole];
+        const baseUrl = window.location.origin + window.location.pathname;
+        navigator.clipboard.writeText(`${baseUrl}?key=${keyToUse}`);
         setShowCopyNotify(true);
         setTimeout(() => setShowCopyNotify(false), 2000);
     };
@@ -268,14 +271,35 @@ const VetoRoom = () => {
                         <GlassPanel style={{ padding: '32px' }}>
                             <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>OPERATIONS</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {myRole && !gameState.ready?.[myRole] && (
+                                {myRole && myRole !== 'admin' && gameState.useTimer && !gameState.ready?.[myRole] && (
                                     <GlowButton style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
                                         INITIALIZE READY SIGNAL
                                     </GlowButton>
                                 )}
-                                <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={copyInvite}>
-                                    COPY MATCH TERMINAL LINK
-                                </button>
+
+                                {myRole === 'admin' && (
+                                    <>
+                                        <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink('A')}>
+                                            COPY TEAM A LINK
+                                        </button>
+                                        <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink('B')}>
+                                            COPY TEAM B LINK
+                                        </button>
+                                        <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink('admin')}>
+                                            COPY ADMIN LINK
+                                        </button>
+                                    </>
+                                )}
+                                
+                                {myRole !== 'admin' && (
+                                    <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink(myRole || 'viewer')}>
+                                        COPY MATCH TERMINAL LINK
+                                    </button>
+                                )}
+                                
+                                {showCopyNotify && (
+                                    <div style={{ color: '#00ff88', fontSize: '10px', textAlign: 'center', letterSpacing: '2px', fontWeight: 900 }}>LINK COPIED SECURELY</div>
+                                )}
                             </div>
                         </GlassPanel>
                     )}
