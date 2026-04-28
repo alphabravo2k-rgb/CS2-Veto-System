@@ -28,6 +28,9 @@ import BrandingProvider from './components/layout/BrandingProvider';
 
 // Lazy-loaded Admin Dashboards
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
+const PublicTournament  = React.lazy(() => import('./pages/PublicTournament'));
+const EmbedVeto         = React.lazy(() => import('./pages/EmbedVeto'));
+const Settings          = React.lazy(() => import('./pages/Settings'));
 const Register      = React.lazy(() => import('./pages/Register'));
 const Login         = React.lazy(() => import('./pages/Login'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
@@ -107,6 +110,7 @@ export default function App() {
                             <Route path="/history"   element={<GlobalHome view="history" />} />
                             <Route path="/players/:userId" element={<PlayerProfile />} />
                             <Route path="/org/:orgId/tournament/:tournamentId/live" element={<TournamentPublic />} />
+                            <Route path="/embed/veto/:matchId" element={<EmbedVeto />} />
                             <Route path="/support"   element={<SupportHub />} />
                             <Route path="/quick-veto" element={<QuickVeto />} />
                             <Route path="/veto/:matchId" element={<VetoRoom />} />

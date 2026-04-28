@@ -168,6 +168,24 @@ serve(async (req) => {
         }
     }
 
+    // 4. Outbound Webhook Integration
+    if (finalState.finished && sessionData.temp_webhook_url) {
+      try {
+        await fetch(sessionData.temp_webhook_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'veto.completed',
+            matchId,
+            result: finalState.lastPickedMap,
+            fullState: finalState
+          })
+        })
+      } catch (e) {
+        console.error('Webhook failed:', e)
+      }
+    }
+
     return new Response(JSON.stringify({ success: true, state: finalState }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

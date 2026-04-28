@@ -137,12 +137,25 @@ export default function TournamentDashboard() {
             }
         });
 
+        // 3. Team Tendencies
+        let teamStats = {};
+        if (!statsErr && stats) {
+            stats.forEach(s => {
+                const teamName = s.team_id || 'Unknown'; // Fallback to team_id if name missing
+                if (!teamStats[teamName]) teamStats[teamName] = { picks: {}, bans: {} };
+                
+                const category = s.action_type === 'pick' ? 'picks' : 'bans';
+                teamStats[teamName][category][s.map_name] = (teamStats[teamName][category][s.map_name] || 0) + 1;
+            });
+        }
+
         setAnalytics({
             metrics: {
                 totalMatches: historyData.length,
                 avgDurationMinutes: finishedCount > 0 ? Math.round(totalMinutes / finishedCount) : 0
             },
-            mapStats
+            mapStats,
+            teamStats
         });
     }, [historyData, orgId]);
 
@@ -518,13 +531,29 @@ export default function TournamentDashboard() {
                                     </div>
                                 </div>
                                 <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>MAP PERFORMANCE</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '20px' }}>
                                     {Object.entries(analytics.mapStats).sort((a,b) => b[1].total - a[1].total).slice(0, 5).map(([map, stat]) => (
                                         <div key={map} style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
                                             <span style={{ fontWeight: 700 }}>{map}</span>
                                             <span style={{ opacity: 0.7 }}>{stat.picked}P / {stat.banned}B</span>
                                         </div>
                                     ))}
+                                </div>
+
+                                <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>TEAM TENDENCIES</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {Object.entries(analytics.teamStats).slice(0, 3).map(([team, stats]) => {
+                                        const topPick = Object.entries(stats.picks).sort((a,b) => b[1]-a[1])[0]?.[0] || 'N/A';
+                                        return (
+                                            <div key={team} style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '4px', fontSize: '11px' }}>
+                                                <div style={{ fontWeight: 900, marginBottom: '4px', color: accentColor }}>{team.toUpperCase()}</div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.6 }}>
+                                                    <span>FAVORITE PICK:</span>
+                                                    <span>{topPick}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

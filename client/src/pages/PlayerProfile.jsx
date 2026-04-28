@@ -121,6 +121,9 @@ export default function PlayerProfile() {
                                 {REGION_LABELS[profile.server_region] || profile.server_region}
                             </div>
                         )}
+                        <div style={{ fontSize: '10px', fontWeight: 900, color: '#ffd700', background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)', padding: '4px 12px', borderRadius: '50px', letterSpacing: '1px' }}>
+                            ELO: {profile.elo || 1000}
+                        </div>
                     </div>
                 </div>
 

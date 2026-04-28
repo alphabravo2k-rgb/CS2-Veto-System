@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../../store/useAuthStore';
+import NotificationBell from './NotificationBell';
 
 /**
  * ⚡ UI LAYER — TOP NAVIGATION (GLOBAL SHELL)
@@ -88,7 +89,8 @@ const TopNav = () => {
                 {/* ── Right Side: User ── */}
                 <div className="nav-right">
                     {isAuthenticated ? (
-                        <div className="user-profile-anchor">
+                        <div className="user-profile-anchor" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                            <NotificationBell userId={user?.id} />
                             <div className="user-trigger" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}>
                                 <span className="username desktop-only">{user?.username}</span>
                                 <div className="avatar-circle" style={{ background: `linear-gradient(135deg, var(--brand-primary, #00d4ff), #0055ff)` }}>
