@@ -421,12 +421,20 @@ const VetoRoom = () => {
                     25% { transform: translateX(-3px) }
                     75% { transform: translateX(3px) }
                 }
-                @media (max-width: 768px) {
+                @media (max-width: 1024px) {
+                    .veto-header { flex-direction: column; gap: 20px; padding: 20px; }
+                    .veto-header > div:nth-child(2) { order: -1; margin-bottom: 20px; }
                     .veto-header h2 { font-size: 2rem !important; }
-                    .veto-header .glass-panel { width: 100px !important; height: 100px !important; }
-                    .veto-core-layout { padding: 0 20px 40px !important; }
-                    .veto-core-layout section h4 { font-size: 10px !important; }
-                    .veto-core-layout section div h4 + div { font-size: 1.2rem !important; }
+                    .veto-header .glass-panel { width: 100px !important; height: 100px !important; padding: 12px !important; }
+                    .veto-core-layout { grid-template-columns: 1fr !important; padding: 0 16px 40px !important; gap: 24px !important; }
+                    .veto-core-layout aside { order: 2; }
+                    .veto-core-layout section { order: 1; }
+                    .room-status-bar { padding: 8px 16px !important; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+                }
+                @media (max-width: 480px) {
+                    .veto-header h2 { font-size: 1.5rem !important; }
+                    .veto-header { gap: 10px; }
+                    .veto-header > div { gap: 15px !important; }
                 }
             `}</style>
         </div>

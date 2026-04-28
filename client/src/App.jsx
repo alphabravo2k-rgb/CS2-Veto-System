@@ -39,6 +39,7 @@ const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
 const SupportHub = React.lazy(() => import('./pages/SupportHub'));
 const QuickVeto   = React.lazy(() => import('./pages/QuickVeto'));
 const StreamOverlay = React.lazy(() => import('./pages/StreamOverlay')); // NEW: Streamer Mode
+const TeamManager = React.lazy(() => import('./pages/TeamManager')); // NEW: Team Repository
 
 import AuthVerificationGuard from './components/auth/AuthVerificationGuard';
 
@@ -118,6 +119,7 @@ export default function App() {
                             <Route path="/org/:orgId"   element={<ProtectedRoute><OrgDashboard /></ProtectedRoute>} />
                             <Route path="/org/:orgId/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
                             <Route path="/orgs"         element={<ProtectedRoute><OrgList /></ProtectedRoute>} />
+                            <Route path="/teams"        element={<ProtectedRoute><TeamManager /></ProtectedRoute>} />
                             
                             {/* Unified Tournament Routes */}
                             <Route path="/org/:orgId/tournament/:tournamentId" element={<ProtectedRoute><TournamentDashboard /></ProtectedRoute>} />

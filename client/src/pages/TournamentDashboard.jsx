@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon, RefreshIcon, ActivityIcon, ShieldIcon } from '../components/SharedUI';
+import { NeonText, GlassPanel, NeonButton, Card } from '../components/veto/VetoUIPrimitives';
+import TournamentBracket from '../components/tournaments/TournamentBracket';
 import useVetoStore from '../store/useVetoStore'; 
 import useOrgBranding from '../hooks/useOrgBranding';
 import { supabase } from '../utils/supabase.js';
@@ -26,11 +28,14 @@ export default function TournamentDashboard() {
     const [teamB, setTeamB] = useState('');
     const [teamALogo, setTeamALogo] = useState('');
     const [teamBLogo, setTeamBLogo] = useState('');
+    const [activeTab, setActiveTab] = useState('matches'); // 'matches' | 'bracket' | 'settings' | 'teams'
+    const [bracket, setBracket] = useState(null);
     const [vetoMode, setVetoMode] = useState('vrs');
     const [useTimer, setUseTimer] = useState(false);
     const [timerDuration, setTimerDuration] = useState(60);
     const [useCoinFlip, setUseCoinFlip] = useState(false);
     const [tempWebhook, setTempWebhook] = useState('');
+    const [scheduledAt, setScheduledAt] = useState('');
     
     const [isGenerating, setIsGenerating] = useState(false);
     const [inputError, setInputError] = useState(false);
@@ -66,6 +71,15 @@ export default function TournamentDashboard() {
         if (!error && data) setHistoryData(data);
     }, [tournamentId]);
 
+    const fetchBracket = async () => {
+        const { data } = await supabase
+            .from('tournament_brackets')
+            .select('*')
+            .eq('tournament_id', tournamentId)
+            .single();
+        if (data) setBracket(data.structure);
+    };
+
     useEffect(() => {
         const fetchMaps = async () => {
             const { data, error } = await supabase
@@ -81,7 +95,17 @@ export default function TournamentDashboard() {
         };
         fetchMaps();
         fetchHistory();
+        fetchBracket();
     }, [fetchHistory, tournamentId]);
+
+    const generateBracket = async () => {
+        setIsGenerating(true);
+        const { data, error } = await supabase.functions.invoke('generate-bracket', {
+            body: { tournamentId }
+        });
+        if (!error) await fetchBracket();
+        setIsGenerating(false);
+    };
 
     const fetchAnalytics = useCallback(async () => {
         if (!orgId) return;
@@ -166,7 +190,8 @@ export default function TournamentDashboard() {
             teamALogo, teamBLogo, format,
             customMapNames: format === 'custom' ? customSelectedMaps : null,
             customSequence: format === 'custom' ? customSequence : null,
-            useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim()
+            useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim(),
+            scheduledAt
         }, (response) => {
             const baseUrl = `${window.location.origin}/org/${orgId}/tournament/${tournamentId}/veto/${response.matchId}`;
             setCreatedLinks({
@@ -258,14 +283,35 @@ export default function TournamentDashboard() {
                 <Link to={`/org/${orgId}`} className="glass-panel" style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#fff', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>
                     <HomeIcon /> BACK TO ORGANIZATION
                 </Link>
-                <div style={{ textAlign: 'center' }}>
-                    <h1 className="neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0 }}>{tournamentId.toUpperCase()}</h1>
-                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '4px', opacity: 0.5, marginTop: '4px' }}>TOURNAMENT DASHBOARD</div>
+                
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => setActiveTab('matches')} style={{ padding: '10px 20px', background: activeTab === 'matches' ? '#00d4ff' : 'transparent', color: activeTab === 'matches' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>MATCHES</button>
+                    <button onClick={() => setActiveTab('bracket')} style={{ padding: '10px 20px', background: activeTab === 'bracket' ? '#00d4ff' : 'transparent', color: activeTab === 'bracket' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>BRACKET</button>
+                    <button onClick={() => setActiveTab('settings')} style={{ padding: '10px 20px', background: activeTab === 'settings' ? '#00d4ff' : 'transparent', color: activeTab === 'settings' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>SETTINGS</button>
                 </div>
-                <div style={{ width: '130px' }} /> {/* Spacer */}
+
+                <div style={{ textAlign: 'right' }}>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0, letterSpacing: '8px' }}>DASHBOARD</h1>
+                    <div style={{ color: '#00d4ff', fontWeight: 900, letterSpacing: '2px', fontSize: '12px' }}>{tournamentId.toUpperCase()} // CONTROL CENTER</div>
+                </div>
             </header>
 
-            <main style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '40px', position: 'relative', zIndex: 10 }}>
+            <main style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative', zIndex: 10 }}>
+                {activeTab === 'bracket' && (
+                    <div className="glass-panel" style={{ padding: '40px', minHeight: '600px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+                            <NeonText fontSize="1.5rem">TOURNAMENT BRACKET</NeonText>
+                            {!bracket && (
+                                <NeonButton onClick={generateBracket} disabled={isGenerating}>
+                                    {isGenerating ? 'GENERATING...' : 'GENERATE BRACKET'}
+                                </NeonButton>
+                            )}
+                        </div>
+                        <TournamentBracket structure={bracket} />
+                    </div>
+                )}
+                {activeTab === 'matches' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '40px' }}>
                 
                 {/* ── GENERATE MATCH ── */}
                 <section>
@@ -360,21 +406,33 @@ export default function TournamentDashboard() {
                                     </div>
                                 )}
                             </div>
-                        ) : vetoMode !== 'custom' ? (
-                            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                                {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
-                                    <button 
-                                        key={format} 
-                                        className="premium-button" 
-                                        style={{ flex: 1, padding: '16px', fontSize: '14px' }}
-                                        onClick={() => handleCreateMatchSubmit(format)}
-                                        disabled={isGenerating}
-                                    >
-                                        {isGenerating ? <RefreshIcon className="spin" size={16} /> : `LAUNCH ${format.toUpperCase()}`}
-                                    </button>
-                                ))}
-                            </div>
                         ) : (
+                            <div>
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 900, color: accentColor, letterSpacing: '2px', marginBottom: '8px' }}>SCHEDULE MATCH (UTC)</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        value={scheduledAt}
+                                        onChange={e => setScheduledAt(e.target.value)}
+                                        style={{ width: '100%', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', outline: 'none' }}
+                                    />
+                                </div>
+
+                                {vetoMode !== 'custom' ? (
+                                    <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                                        {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
+                                            <button 
+                                                key={format} 
+                                                className="premium-button" 
+                                                style={{ flex: 1, padding: '16px', fontSize: '14px' }}
+                                                onClick={() => handleCreateMatchSubmit(format)}
+                                                disabled={isGenerating}
+                                            >
+                                                {isGenerating ? <RefreshIcon className="spin" size={16} /> : `LAUNCH ${format.toUpperCase()}`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
                             <div style={{ animation: 'fadeIn 0.5s' }}>
                                 <h4 style={{ fontSize: '10px', color: accentColor, letterSpacing: '2px', marginBottom: '16px' }}>1. MAP POOL</h4>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
@@ -514,6 +572,14 @@ export default function TournamentDashboard() {
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .match-history-card:hover { background: rgba(255,255,255,0.05) !important; }
+                @media (max-width: 1024px) {
+                    header { flex-direction: column; gap: 20px; text-align: center !important; }
+                    header div { text-align: center !important; }
+                    main { grid-template-columns: 1fr !important; gap: 24px !important; }
+                    .glass-panel { padding: 24px !important; }
+                    h1 { font-size: 1.8rem !important; }
+                    .stats-grid { grid-template-columns: 1fr !important; }
+                }
             `}</style>
         </div>
     );

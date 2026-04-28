@@ -125,6 +125,49 @@ serve(async (req) => {
 
     if (updateError) throw new Error(updateError.message)
 
+    // 5. Auto-Advance Bracket
+    if (finalState.finished && initialData.tournament_id) {
+        const { data: bracket } = await supabase
+            .from('tournament_brackets')
+            .select('*')
+            .eq('tournament_id', initialData.tournament_id)
+            .single()
+
+        if (bracket && bracket.structure) {
+            const structure = bracket.structure
+            let updated = false
+            const winnerTeam = finalState.logs[finalState.logs.length - 1]?.includes(finalState.teamA) ? finalState.teamA : finalState.teamB
+            const winnerId = finalState.logs[finalState.logs.length - 1]?.includes(finalState.teamA) ? initialData.team_a_id : initialData.team_b_id
+
+            // Find current match in bracket
+            for (const round of structure.rounds) {
+                const matchNode = round.matches.find((m: any) => m.matchId === matchId || (m.teamA?.id === initialData.team_a_id && m.teamB?.id === initialData.team_b_id))
+                if (matchNode) {
+                    matchNode.winner = winnerId
+                    updated = true
+                    
+                    // Propagate to next match
+                    if (matchNode.nextMatchId) {
+                        for (const r2 of structure.rounds) {
+                            const nextNode = r2.matches.find((nm: any) => nm.id === matchNode.nextMatchId)
+                            if (nextNode) {
+                                nextNode[matchNode.nextMatchPosition] = { id: winnerId, name: winnerTeam }
+                            }
+                        }
+                    }
+                    break
+                }
+            }
+
+            if (updated) {
+                await supabase
+                    .from('tournament_brackets')
+                    .update({ structure })
+                    .eq('id', bracket.id)
+            }
+        }
+    }
+
     return new Response(JSON.stringify({ success: true, state: finalState }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

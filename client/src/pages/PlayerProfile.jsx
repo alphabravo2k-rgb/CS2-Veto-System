@@ -25,6 +25,7 @@ export default function PlayerProfile() {
     useEffect(() => {
         async function fetchProfile() {
             try {
+                // 1. Fetch User & Accounts
                 const { data: user, error: userError } = await supabase
                     .from('users')
                     .select('*, player_accounts(*)')
@@ -33,9 +34,23 @@ export default function PlayerProfile() {
 
                 if (userError || !user) throw new Error('Player not found');
                 
+                // 2. Fetch Team Affiliation
+                const { data: teams } = await supabase
+                    .from('team_members')
+                    .select('*, teams(*)')
+                    .eq('user_id', userId);
+
+                // 3. Fetch Personal Stats (Map Preference)
+                const { data: stats } = await supabase
+                    .from('match_history_stats')
+                    .select('*')
+                    .in('team_id', teams?.map(t => t.team_id) || []);
+
                 setProfile({
                     ...user,
-                    linkedAccounts: user.player_accounts || []
+                    linkedAccounts: user.player_accounts || [],
+                    teams: teams?.map(t => t.teams) || [],
+                    stats: stats || []
                 });
             } catch (e) {
                 setError(e.message);
@@ -115,6 +130,31 @@ export default function PlayerProfile() {
                         <p style={{ margin: 0, fontSize: '0.95rem', color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.6 }}>
                             {profile.bio || "This player has not provided a bio."}
                         </p>
+                    </div>
+                </div>
+
+                {/* ── TEAMS & STATS ── */}
+                <div style={{ padding: '0 40px 32px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div>
+                        <h4 style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.4, marginBottom: '16px' }}>TEAM AFFILIATION</h4>
+                        {profile.teams?.length > 0 ? profile.teams.map(t => (
+                            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                <img src={t.logo_url} style={{ width: '20px', height: '20px', objectFit: 'contain' }} alt="" />
+                                <span style={{ fontSize: '12px', fontWeight: 700 }}>{t.name}</span>
+                            </div>
+                        )) : <div style={{ fontSize: '11px', opacity: 0.4 }}>NO TEAM</div>}
+                    </div>
+                    <div>
+                        <h4 style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.4, marginBottom: '16px' }}>MAP PREFERENCE</h4>
+                        <div style={{ fontSize: '12px', fontWeight: 900, color: accentColor }}>
+                            {profile.stats?.length > 0 ? (
+                                Object.entries(profile.stats.reduce((acc, s) => {
+                                    acc[s.map_name] = (acc[s.map_name] || 0) + 1;
+                                    return acc;
+                                }, {})).sort((a,b) => b[1] - a[1])[0][0].toUpperCase()
+                            ) : 'N/A'}
+                        </div>
+                        <div style={{ fontSize: '9px', opacity: 0.4 }}>MOST FREQUENT VETO ACTION</div>
                     </div>
                 </div>
 

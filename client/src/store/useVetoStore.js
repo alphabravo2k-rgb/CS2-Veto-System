@@ -59,6 +59,16 @@ const useVetoStore = create((set, get) => ({
         const normalizedInitial = normalizeState(initialData);
         set({ gameState: normalizedInitial, isConnected: true });
 
+        // 2.1 Fetch Branding
+        if (initialData.org_id) {
+            const { data: orgData } = await supabase
+                .from('organizations')
+                .select('branding')
+                .eq('id', initialData.org_id)
+                .single();
+            if (orgData) set({ branding: orgData.branding });
+        }
+
         // 3. Authorization (Local check for role)
         const keys = initialData.keys_data || {};
         let role = 'viewer';

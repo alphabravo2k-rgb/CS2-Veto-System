@@ -44,7 +44,8 @@ serve(async (req) => {
     const {
       orgId, tournamentId, teamA, teamB, teamALogo, teamBLogo,
       format, customMapNames, customSequence,
-      useTimer, useCoinFlip, timerDuration, tempWebhookUrl
+      useTimer, useCoinFlip, timerDuration, tempWebhookUrl,
+      gameId = 'cs2' // Default to CS2
     } = payload || {}
 
     // 1. Sanitize
@@ -53,17 +54,28 @@ serve(async (req) => {
     const safeOrgId = (!orgId || orgId === 'global') ? null : orgId;
     const safeTId = (!tournamentId || tournamentId === 'default') ? null : tournamentId;
 
-    // 2. Map Pool
-    let mapPool = getDefaultMapPool(format).map(n => ({ name: n, customImage: null }))
+    // 2. Map Pool & Game Logic
+    let mapPool = []
+    let activeSequence = null
+
     if (format === 'custom' && Array.isArray(customMapNames) && customMapNames.length > 0) {
       mapPool = customMapNames.map(n => ({ name: String(n).trim().slice(0, 50), customImage: null }))
+      activeSequence = customSequence
+    } else {
+      // Fetch from Game Registry
+      const { data: gameData } = await supabase.from('games').select('*').eq('id', gameId).single()
+      const { data: mapData } = await supabase.from('global_maps').select('*').eq('game_id', gameId)
+      
+      if (gameData) activeSequence = gameData.default_sequence
+      if (mapData) mapPool = mapData.map(m => ({ name: m.name, customImage: m.image_url }))
+      else mapPool = getDefaultMapPool(format).map(n => ({ name: n, customImage: null }))
     }
 
     // 3. Initialize Veto
     const vetoState = VetoEngine.initializeVeto({
       format,
       mapPool,
-      customSequence: format === 'custom' ? customSequence : null,
+      customSequence: activeSequence,
       useTimer: !!useTimer,
       timerDuration: parseInt(timerDuration) || 60,
       useCoinFlip: !!useCoinFlip,
@@ -93,6 +105,7 @@ serve(async (req) => {
         team_a_logo: teamALogo || null,
         team_b_logo: teamBLogo || null,
         temp_webhook_url: tempWebhookUrl || null,
+        game: gameId,
         format: vetoState.format,
         sequence: vetoState.sequence,
         step: vetoState.step,
