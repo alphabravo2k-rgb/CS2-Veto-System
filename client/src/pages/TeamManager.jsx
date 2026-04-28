@@ -9,6 +9,38 @@ import { GlassPanel, NeonText, NeonButton } from '../components/veto/VetoUIPrimi
  * Responsibility: Manage persistent team entities for organizations.
  * =============================================================================
  */
+
+const TeamCard = ({ team, onRoster, onStats }) => {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+        >
+            <GlassPanel style={{ padding: '20px', textAlign: 'center', position: 'relative' }}>
+                <img 
+                    src={team.logo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIHJ4PSIsIiBmaWxsPSIjMjAyNTM3Ii8+PHBhdGggZD0iTTQwIDIwTDYwIDUwaC00MEw0MCAyMHoiIGZpbGw9IiMwMGQ0ZmYiLz48L3N2Zz4='} 
+                    alt={team.name}
+                    style={{ width: '100px', height: '100px', objectFit: 'contain', marginBottom: '15px' }}
+                />
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', fontWeight: 900 }}>{team.name}</h3>
+                
+                {/* 📈 TEAM STATS PREVIEW */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px', fontSize: '0.7rem', color: '#00d4ff' }}>
+                    <div>WIN RATE: <span style={{ color: '#fff' }}>68%</span></div>
+                    <div>STREAK: <span style={{ color: '#fff' }}>3W</span></div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                    <button onClick={() => onRoster(team)} style={{ background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>ROSTER</button>
+                    <button onClick={() => onStats(team)} style={{ background: 'transparent', border: '1px solid #444', color: '#fff', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>STATS</button>
+                    <button style={{ background: 'transparent', border: '1px solid #ff4444', color: '#ff4444', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>RETIRE</button>
+                </div>
+            </GlassPanel>
+        </motion.div>
+    );
+};
+
 const TeamManager = () => {
     const [teams, setTeams] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -78,36 +110,13 @@ const TeamManager = () => {
                 <NeonButton onClick={() => setIsCreating(true)}>REGISTER NEW TEAM</NeonButton>
             </div>
 
-const TeamCard = ({ team, onRoster, onStats }) => {
-    return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-        >
-            <GlassPanel style={{ padding: '20px', textAlign: 'center', position: 'relative' }}>
-                <img 
-                    src={team.logo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIHJ4PSIsIiBmaWxsPSIjMjAyNTM3Ii8+PHBhdGggZD0iTTQwIDIwTDYwIDUwaC00MEw0MCAyMHoiIGZpbGw9IiMwMGQ0ZmYiLz48L3N2Zz4='} 
-                    alt={team.name}
-                    style={{ width: '100px', height: '100px', objectFit: 'contain', marginBottom: '15px' }}
-                />
-                <h3 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', fontWeight: 900 }}>{team.name}</h3>
-                
-                {/* 📈 TEAM STATS PREVIEW */}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px', fontSize: '0.7rem', color: '#00d4ff' }}>
-                    <div>WIN RATE: <span style={{ color: '#fff' }}>68%</span></div>
-                    <div>STREAK: <span style={{ color: '#fff' }}>3W</span></div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                    <button onClick={() => onRoster(team)} style={{ background: 'transparent', border: '1px solid #00d4ff', color: '#00d4ff', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>ROSTER</button>
-                    <button onClick={() => onStats(team)} style={{ background: 'transparent', border: '1px solid #444', color: '#fff', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>STATS</button>
-                    <button style={{ background: 'transparent', border: '1px solid #ff4444', color: '#ff4444', padding: '5px 15px', cursor: 'pointer', fontWeight: 900, fontSize: '0.7rem' }}>RETIRE</button>
-                </div>
-            </GlassPanel>
-        </motion.div>
-    );
-};
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px' }}>
+                <AnimatePresence>
+                    {teams.map(team => (
+                        <TeamCard key={team.id} team={team} onRoster={() => {}} onStats={() => {}} />
+                    ))}
+                </AnimatePresence>
+            </div>
 
             {/* Create Modal */}
             {isCreating && (

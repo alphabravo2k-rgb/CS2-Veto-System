@@ -356,10 +356,6 @@ export default function OrgDashboard() {
                             </div>
                         )}
 
-                                </div>
-                            </div>
-                        )}
-
                         {tab === 'members' && (
                             <div className="tab-pane">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -503,10 +499,6 @@ export default function OrgDashboard() {
                                             ))}
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        )}
-
                                 </div>
                             </div>
                         )}

@@ -30,7 +30,7 @@ import BrandingProvider from './components/layout/BrandingProvider';
 const GlobalAdmin = React.lazy(() => import('./pages/GlobalAdmin'));
 const PublicTournament  = React.lazy(() => import('./pages/PublicTournament'));
 const EmbedVeto         = React.lazy(() => import('./pages/EmbedVeto'));
-const Settings          = React.lazy(() => import('./pages/Settings'));
+
 const Register      = React.lazy(() => import('./pages/Register'));
 const Login         = React.lazy(() => import('./pages/Login'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
