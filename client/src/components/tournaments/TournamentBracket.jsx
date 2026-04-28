@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { GlassPanel, NeonText } from '../components/veto/VetoUIPrimitives';
+import { GlassPanel, NeonText } from '../veto/VetoUIPrimitives';
 
 /**
  * 🏆 UI LAYER — TOURNAMENT BRACKET VISUALIZER

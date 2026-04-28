@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../utils/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassPanel, NeonText, NeonButton } from '../components/veto/VetoUIPrimitives';
 

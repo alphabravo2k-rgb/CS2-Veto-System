@@ -178,6 +178,7 @@ const StreamOverlay = () => {
                 .map-card.banned { filter: grayscale(1) brightness(0.5); transform: scale(0.8) translateY(20px); }
                 .map-card.picked { border: 2px solid ${primaryColor}; transform: scale(0.9) translateY(-10px); }
             `}</style>
+            </div>
         </div>
     );
 };

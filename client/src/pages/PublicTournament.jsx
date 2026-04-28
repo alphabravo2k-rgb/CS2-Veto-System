@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '../utils/supabase';
-import { AnimatedBackground, GlassPanel, NeonText } from '../components/SharedUI';
-import TournamentBracket from '../components/tournament/TournamentBracket';
+import { AnimatedBackground } from '../components/SharedUI';
+import { GlassPanel, NeonText } from '../components/veto/VetoUIPrimitives';
+import TournamentBracket from '../components/tournaments/TournamentBracket';
 
 export default function PublicTournament() {
     const { tournamentId } = useParams();

@@ -527,7 +527,6 @@ export default function OrgDashboard() {
                         )}
                     </motion.div>
                 </AnimatePresence>
-            </div>
 
             {/* ── BRANDING MODAL ── */}
             <AnimatePresence>

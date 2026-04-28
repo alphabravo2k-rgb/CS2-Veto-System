@@ -95,3 +95,27 @@ export const GlowButton = ({ children, onClick, color = '#00d4ff', disabled = fa
         {children}
     </motion.button>
 );
+
+export const NeonButton = ({ children, onClick, color = '#00d4ff', disabled = false, style = {}, variant = 'primary' }) => (
+    <button
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+            background: variant === 'ghost' ? 'transparent' : `${color}22`,
+            border: `1px solid ${color}`,
+            color: disabled ? 'rgba(255,255,255,0.3)' : '#fff',
+            padding: '10px 24px',
+            borderRadius: '8px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: 'Rajdhani, sans-serif',
+            fontWeight: 900,
+            letterSpacing: '2px',
+            fontSize: '12px',
+            transition: 'all 0.2s',
+            boxShadow: disabled ? 'none' : `0 0 12px ${color}44`,
+            ...style
+        }}
+    >
+        {children}
+    </button>
+);

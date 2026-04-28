@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { motion } from 'framer-motion';
 import SEO from '../components/SEO';
-import { AnimatedBackground, NeonText, ShieldIcon, ActivityIcon, GlobeIcon } from '../components/SharedUI';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, GlobeIcon } from '../components/SharedUI';
+import { NeonText } from '../components/veto/VetoUIPrimitives';
 
 export default function MatchResult() {
     const { matchId } = useParams();

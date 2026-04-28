@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedBackground, UploadIcon, ExternalLinkIcon, CheckIcon, HomeIcon, RefreshIcon, ActivityIcon, ShieldIcon } from '../components/SharedUI';
-import { NeonText, GlassPanel, NeonButton, Card } from '../components/veto/VetoUIPrimitives';
-import TournamentBracket from '../components/tournaments/TournamentBracket';
+import { NeonText, GlassPanel } from '../components/veto/VetoUIPrimitives';
 import useVetoStore from '../store/useVetoStore'; 
 import useOrgBranding from '../hooks/useOrgBranding';
 import { supabase } from '../utils/supabase.js';
@@ -28,14 +27,11 @@ export default function TournamentDashboard() {
     const [teamB, setTeamB] = useState('');
     const [teamALogo, setTeamALogo] = useState('');
     const [teamBLogo, setTeamBLogo] = useState('');
-    const [activeTab, setActiveTab] = useState('matches'); // 'matches' | 'bracket' | 'settings' | 'teams'
-    const [bracket, setBracket] = useState(null);
     const [vetoMode, setVetoMode] = useState('vrs');
     const [useTimer, setUseTimer] = useState(false);
     const [timerDuration, setTimerDuration] = useState(60);
     const [useCoinFlip, setUseCoinFlip] = useState(false);
     const [tempWebhook, setTempWebhook] = useState('');
-    const [scheduledAt, setScheduledAt] = useState('');
     
     const [isGenerating, setIsGenerating] = useState(false);
     const [inputError, setInputError] = useState(false);
@@ -52,6 +48,9 @@ export default function TournamentDashboard() {
     const [bulkInput, setBulkInput] = useState('');
     const [isBulkProcessing, setIsBulkProcessing] = useState(false);
     const [bulkReport, setBulkReport] = useState(null);
+    const [activeTab, setActiveTab] = useState('matches');
+    const [bracket, setBracket] = useState(null);
+    const [scheduledAt, setScheduledAt] = useState('');
 
     // Analytics State
     const [analytics, setAnalytics] = useState(null);
@@ -71,15 +70,6 @@ export default function TournamentDashboard() {
         if (!error && data) setHistoryData(data);
     }, [tournamentId]);
 
-    const fetchBracket = async () => {
-        const { data } = await supabase
-            .from('tournament_brackets')
-            .select('*')
-            .eq('tournament_id', tournamentId)
-            .single();
-        if (data) setBracket(data.structure);
-    };
-
     useEffect(() => {
         const fetchMaps = async () => {
             const { data, error } = await supabase
@@ -95,87 +85,66 @@ export default function TournamentDashboard() {
         };
         fetchMaps();
         fetchHistory();
-        fetchBracket();
     }, [fetchHistory, tournamentId]);
+
+    const fetchBracket = async () => {
+        const { data } = await supabase
+            .from('tournament_brackets')
+            .select('*')
+            .eq('tournament_id', tournamentId)
+            .single();
+        if (data) setBracket(data.structure);
+    };
 
     const generateBracket = async () => {
         setIsGenerating(true);
         const { data, error } = await supabase.functions.invoke('generate-bracket', {
             body: { tournamentId }
         });
-        if (!error) await fetchBracket();
+        if (!error && data) setBracket(data);
         setIsGenerating(false);
     };
 
     const fetchAnalytics = useCallback(async () => {
         if (!orgId) return;
-
-        // 1. Fetch Map Stats
-        const { data: stats, error: statsErr } = await supabase
+        
+        // Real map stats from match_history_stats
+        const { data: stats } = await supabase
             .from('match_history_stats')
             .select('map_name, action_type')
             .eq('org_id', orgId);
 
         let mapStats = {};
-        if (!statsErr && stats) {
+        if (stats) {
             stats.forEach(s => {
-                if (!mapStats[s.map_name]) mapStats[s.map_name] = { picked: 0, banned: 0, total: 0 };
+                if (!mapStats[s.map_name]) mapStats[s.map_name] = { picked: 0, banned: 0 };
                 if (s.action_type === 'pick') mapStats[s.map_name].picked++;
                 else mapStats[s.map_name].banned++;
-                mapStats[s.map_name].total++;
             });
         }
 
-        // 2. Calculate Avg Duration
-        let totalMinutes = 0;
-        let finishedCount = 0;
+        let totalMinutes = 0, finishedCount = 0;
         historyData.forEach(m => {
             if (m.finished && m.finished_at && m.created_at) {
-                const duration = (new Date(m.finished_at) - new Date(m.created_at)) / (1000 * 60);
-                totalMinutes += duration;
+                totalMinutes += (new Date(m.finished_at) - new Date(m.created_at)) / 60000;
                 finishedCount++;
             }
         });
 
-        // 3. Team Tendencies
-        let teamStats = {};
-        if (!statsErr && stats) {
-            stats.forEach(s => {
-                const teamName = s.team_id || 'Unknown';
-                if (!teamStats[teamName]) teamStats[teamName] = { picks: {}, bans: {} };
-                
-                const category = s.action_type === 'pick' ? 'picks' : 'bans';
-                teamStats[teamName][category][s.map_name] = (teamStats[teamName][category][s.map_name] || 0) + 1;
-            });
-        }
-
-        // 4. Subscription Data
-        const { data: orgData } = await supabase.from('orgs').select('plan_id, veto_credits, current_period_end').eq('id', orgId).single();
-        const { data: planData } = await supabase.from('plans').select('features').eq('id', orgData?.plan_id).single();
-        
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0,0,0,0);
-        const { count: monthlyUsage } = await supabase
-            .from('veto_sessions')
-            .select('*', { count: 'exact', head: true })
-            .eq('org_id', orgId)
-            .gte('created_at', startOfMonth.toISOString());
+        const { data: orgData } = await supabase.from('orgs')
+            .select('plan_id, veto_credits, current_period_end').eq('id', orgId).single();
 
         setAnalytics({
             metrics: {
                 totalMatches: historyData.length,
                 avgDurationMinutes: finishedCount > 0 ? Math.round(totalMinutes / finishedCount) : 0,
-                monthlyUsage,
-                maxVetoes: planData?.features?.max_vetoes || -1,
                 credits: orgData?.veto_credits || 0,
                 planId: orgData?.plan_id || 'individual',
                 expiry: orgData?.current_period_end
             },
-            mapStats,
-            teamStats
+            mapStats
         });
-    }, [historyData, orgId]);
+    }, [historyData]);
 
     useEffect(() => {
         if (showAnalytics) fetchAnalytics();
@@ -221,8 +190,7 @@ export default function TournamentDashboard() {
             teamALogo, teamBLogo, format,
             customMapNames: format === 'custom' ? customSelectedMaps : null,
             customSequence: format === 'custom' ? customSequence : null,
-            useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim(),
-            scheduledAt
+            useTimer, useCoinFlip, timerDuration, tempWebhookUrl: tempWebhook.trim()
         }, (response) => {
             const baseUrl = `${window.location.origin}/org/${orgId}/tournament/${tournamentId}/veto/${response.matchId}`;
             setCreatedLinks({
@@ -314,35 +282,14 @@ export default function TournamentDashboard() {
                 <Link to={`/org/${orgId}`} className="glass-panel" style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#fff', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>
                     <HomeIcon /> BACK TO ORGANIZATION
                 </Link>
-                
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => setActiveTab('matches')} style={{ padding: '10px 20px', background: activeTab === 'matches' ? '#00d4ff' : 'transparent', color: activeTab === 'matches' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>MATCHES</button>
-                    <button onClick={() => setActiveTab('bracket')} style={{ padding: '10px 20px', background: activeTab === 'bracket' ? '#00d4ff' : 'transparent', color: activeTab === 'bracket' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>BRACKET</button>
-                    <button onClick={() => setActiveTab('settings')} style={{ padding: '10px 20px', background: activeTab === 'settings' ? '#00d4ff' : 'transparent', color: activeTab === 'settings' ? '#000' : '#fff', border: '1px solid #00d4ff', fontWeight: 900, cursor: 'pointer' }}>SETTINGS</button>
+                <div style={{ textAlign: 'center' }}>
+                    <h1 className="neon-text" style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0 }}>{tournamentId.toUpperCase()}</h1>
+                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '4px', opacity: 0.5, marginTop: '4px' }}>TOURNAMENT DASHBOARD</div>
                 </div>
-
-                <div style={{ textAlign: 'right' }}>
-                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, margin: 0, letterSpacing: '8px' }}>DASHBOARD</h1>
-                    <div style={{ color: '#00d4ff', fontWeight: 900, letterSpacing: '2px', fontSize: '12px' }}>{tournamentId.toUpperCase()} // CONTROL CENTER</div>
-                </div>
+                <div style={{ width: '130px' }} /> {/* Spacer */}
             </header>
 
-            <main style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative', zIndex: 10 }}>
-                {activeTab === 'bracket' && (
-                    <div className="glass-panel" style={{ padding: '40px', minHeight: '600px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                            <NeonText fontSize="1.5rem">TOURNAMENT BRACKET</NeonText>
-                            {!bracket && (
-                                <NeonButton onClick={generateBracket} disabled={isGenerating}>
-                                    {isGenerating ? 'GENERATING...' : 'GENERATE BRACKET'}
-                                </NeonButton>
-                            )}
-                        </div>
-                        <TournamentBracket structure={bracket} />
-                    </div>
-                )}
-                {activeTab === 'matches' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '40px' }}>
+            <main style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '40px', position: 'relative', zIndex: 10 }}>
                 
                 {/* ── GENERATE MATCH ── */}
                 <section>
@@ -437,33 +384,21 @@ export default function TournamentDashboard() {
                                     </div>
                                 )}
                             </div>
+                        ) : vetoMode !== 'custom' ? (
+                            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                                {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
+                                    <button 
+                                        key={format} 
+                                        className="premium-button" 
+                                        style={{ flex: 1, padding: '16px', fontSize: '14px' }}
+                                        onClick={() => handleCreateMatchSubmit(format)}
+                                        disabled={isGenerating}
+                                    >
+                                        {isGenerating ? <RefreshIcon className="spin" size={16} /> : `LAUNCH ${format.toUpperCase()}`}
+                                    </button>
+                                ))}
+                            </div>
                         ) : (
-                            <div>
-                                <div style={{ marginBottom: '24px' }}>
-                                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 900, color: accentColor, letterSpacing: '2px', marginBottom: '8px' }}>SCHEDULE MATCH (UTC)</label>
-                                    <input 
-                                        type="datetime-local" 
-                                        value={scheduledAt}
-                                        onChange={e => setScheduledAt(e.target.value)}
-                                        style={{ width: '100%', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', outline: 'none' }}
-                                    />
-                                </div>
-
-                                {vetoMode !== 'custom' ? (
-                                    <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                                        {['bo1', 'bo3', 'bo5'].filter(f => vetoMode !== 'wingman' || f !== 'bo5').map(format => (
-                                            <button 
-                                                key={format} 
-                                                className="premium-button" 
-                                                style={{ flex: 1, padding: '16px', fontSize: '14px' }}
-                                                onClick={() => handleCreateMatchSubmit(format)}
-                                                disabled={isGenerating}
-                                            >
-                                                {isGenerating ? <RefreshIcon className="spin" size={16} /> : `LAUNCH ${format.toUpperCase()}`}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
                             <div style={{ animation: 'fadeIn 0.5s' }}>
                                 <h4 style={{ fontSize: '10px', color: accentColor, letterSpacing: '2px', marginBottom: '16px' }}>1. MAP POOL</h4>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
@@ -536,39 +471,6 @@ export default function TournamentDashboard() {
                             </button>
                         </h2>
 
-                        {/* Subscription & Credits Widget */}
-                        {analytics?.metrics && (
-                            <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', background: 'rgba(0,212,255,0.05)', border: `1px solid ${accentColor}22` }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', color: accentColor }}>PLAN: {analytics.metrics.planId.toUpperCase()}</div>
-                                    <Link to={`/org/${orgId}/billing`} style={{ fontSize: '9px', fontWeight: 900, color: '#fff', opacity: 0.5 }}>UPGRADE</Link>
-                                </div>
-                                
-                                {analytics.metrics.maxVetoes > 0 && (
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '6px' }}>
-                                            <span>MONTHLY USAGE</span>
-                                            <span>{analytics.metrics.monthlyUsage} / {analytics.metrics.maxVetoes}</span>
-                                        </div>
-                                        <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                                            <div style={{ height: '100%', background: accentColor, width: `${Math.min(100, (analytics.metrics.monthlyUsage / analytics.metrics.maxVetoes) * 100)}%` }} />
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ fontSize: '10px', opacity: 0.6 }}>PAYG CREDITS</div>
-                                    <div style={{ fontSize: '14px', fontWeight: 900, color: analytics.metrics.credits > 0 ? '#00ff88' : '#ff4b2b' }}>{analytics.metrics.credits}</div>
-                                </div>
-
-                                {analytics.metrics.expiry && new Date(analytics.metrics.expiry) < new Date() && (
-                                    <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(255,75,43,0.1)', border: '1px solid #ff4b2b', borderRadius: '4px', fontSize: '9px', fontWeight: 900, color: '#ff4b2b', textAlign: 'center' }}>
-                                        ⚠️ GRACE PERIOD ACTIVE — RENEW IN {Math.max(1, Math.ceil((new Date(analytics.metrics.expiry).setDate(new Date(analytics.metrics.expiry).getDate() + 3) - new Date()) / (1000 * 60 * 60 * 24)))} DAYS
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
                         {showAnalytics && analytics && (
                             <div style={{ marginBottom: '24px', animation: 'fadeIn 0.3s' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
@@ -582,29 +484,13 @@ export default function TournamentDashboard() {
                                     </div>
                                 </div>
                                 <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>MAP PERFORMANCE</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     {Object.entries(analytics.mapStats).sort((a,b) => b[1].total - a[1].total).slice(0, 5).map(([map, stat]) => (
                                         <div key={map} style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
                                             <span style={{ fontWeight: 700 }}>{map}</span>
                                             <span style={{ opacity: 0.7 }}>{stat.picked}P / {stat.banned}B</span>
                                         </div>
                                     ))}
-                                </div>
-
-                                <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>TEAM TENDENCIES</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {Object.entries(analytics.teamStats).slice(0, 3).map(([team, stats]) => {
-                                        const topPick = Object.entries(stats.picks).sort((a,b) => b[1]-a[1])[0]?.[0] || 'N/A';
-                                        return (
-                                            <div key={team} style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '4px', fontSize: '11px' }}>
-                                                <div style={{ fontWeight: 900, marginBottom: '4px', color: accentColor }}>{team.toUpperCase()}</div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.6 }}>
-                                                    <span>FAVORITE PICK:</span>
-                                                    <span>{topPick}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
                                 </div>
                             </div>
                         )}
@@ -652,14 +538,6 @@ export default function TournamentDashboard() {
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .match-history-card:hover { background: rgba(255,255,255,0.05) !important; }
-                @media (max-width: 1024px) {
-                    header { flex-direction: column; gap: 20px; text-align: center !important; }
-                    header div { text-align: center !important; }
-                    main { grid-template-columns: 1fr !important; gap: 24px !important; }
-                    .glass-panel { padding: 24px !important; }
-                    h1 { font-size: 1.8rem !important; }
-                    .stats-grid { grid-template-columns: 1fr !important; }
-                }
             `}</style>
         </div>
     );
