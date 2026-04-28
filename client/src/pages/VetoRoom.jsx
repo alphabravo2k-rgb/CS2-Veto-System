@@ -80,10 +80,10 @@ const VetoRoom = () => {
     const currentActionColor = useMemo(() => {
         if (!gameState || gameState.finished) return 'rgba(255,255,255,0.2)';
         const currentStep = gameState.sequence[gameState.step];
-        if (currentStep?.t === 'A') return 'var(--brand-primary, #00d4ff)';
+        if (currentStep?.t === 'A') return gameTheme.primary;
         if (currentStep?.t === 'B') return '#ff0055';
         return '#ffd700';
-    }, [gameState]);
+    }, [gameState, gameTheme]);
 
     const handleMapClick = (mapName) => {
         if (!isMyTurn) return;
@@ -101,6 +101,15 @@ const VetoRoom = () => {
         setTimeout(() => setShowCopyNotify(false), 2000);
     };
 
+    const gameTheme = useMemo(() => {
+        const themes = {
+            cs2: { primary: '#00d4ff', secondary: 'rgba(0, 212, 255, 0.1)', name: 'Counter-Strike 2' },
+            valorant: { primary: '#ff4655', secondary: 'rgba(255, 70, 85, 0.1)', name: 'Valorant' },
+            r6: { primary: '#ffd700', secondary: 'rgba(255, 215, 0, 0.1)', name: 'Rainbow Six Siege' }
+        };
+        return themes[gameState?.game] || themes.cs2;
+    }, [gameState?.game]);
+
     if (!gameState) {
         return (
             <div className="loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', color: '#fff' }}>
@@ -110,7 +119,7 @@ const VetoRoom = () => {
                     animate={{ opacity: 1 }}
                     style={{ textAlign: 'center', zIndex: 10 }}
                 >
-                    <div style={{ width: '40px', height: '40px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1.5rem' }} />
+                    <div style={{ width: '40px', height: '40px', border: '3px solid #00d4ff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1.5rem' }} />
                     <NeonText fontSize="1.5rem">Initializing Terminal Signal...</NeonText>
                     {serverError && <p style={{ color: '#ff4b2b', marginTop: '1rem' }}>{serverError}</p>}
                 </motion.div>
@@ -148,7 +157,7 @@ const VetoRoom = () => {
             {/* ── STATUS BAR ── */}
             <div className="room-status-bar" style={{ background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'space-between', padding: '12px 40px', fontSize: '11px', zIndex: 100, position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'rgba(255,255,255,0.7)' }}>
-                    <ActivityIcon size={14} color="var(--brand-primary)" />
+                    <ActivityIcon size={14} color={gameTheme.primary} />
                     <span style={{ letterSpacing: '3px', fontWeight: 900 }}>LIVE TERMINAL FEED</span>
                     
                     {/* 1. SPECTATOR COUNT */}
@@ -171,12 +180,13 @@ const VetoRoom = () => {
             </div>
 
             {/* ── CINEMATIC HEADER ── */}
-            <header style={{ 
+            <header className="veto-header" style={{ 
                 display: 'flex', 
+                flexWrap: 'wrap',
                 alignItems: 'center', 
                 justifyContent: 'center', 
-                padding: '80px 40px', 
-                gap: '100px', 
+                padding: '40px 20px', 
+                gap: '40px', 
                 position: 'relative', 
                 zIndex: 10,
                 background: 'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%)'
@@ -201,14 +211,14 @@ const VetoRoom = () => {
                         animation: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'A') ? 'teamPulse 2s ease-in-out infinite' : 'none',
                         opacity: (!gameState.finished && gameState.sequence[gameState.step]?.t !== 'A') ? 0.4 : 1
                     }}>
-                        <img src={gameState.teamALogo || 'https://via.placeholder.com/100'} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                        <img src={gameState.teamALogo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiPjxjaXJjbGUgY3g9IjEyIiBjeT0iOCIgcj0iNSIvPjxwYXRoIGQ9Ik0zIDIwdjJjMCAxLjEgLjkgMiAyIDJoMTRjMS4xIDAgMi0uOSAyLTJ2LTJjMC0yLjItMS44LTQtNC00SDdjLTIuMiAwLTQgMS44LTQgNHoiLz48L3N2Zz4='} alt={gameState.teamA} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </GlassPanel>
                 </motion.div>
 
                 {/* Center / VS */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                     <NeonText fontSize="3rem" color="rgba(255,255,255,0.2)">VS</NeonText>
-                    <div style={{ padding: '6px 20px', border: '1px solid var(--brand-primary)', borderRadius: '50px', fontSize: '12px', fontWeight: 900, letterSpacing: '4px' }}>{gameState.format.toUpperCase()}</div>
+                    <div style={{ padding: '6px 20px', border: `1px solid ${gameTheme.primary}`, borderRadius: '50px', fontSize: '12px', fontWeight: 900, letterSpacing: '4px' }}>{gameState.format.toUpperCase()}</div>
                     {gameState.useTimer && !gameState.finished && (
                         <div style={{ 
                             fontSize: '4rem', fontWeight: 900, letterSpacing: '-4px', color: '#fff',
@@ -235,7 +245,7 @@ const VetoRoom = () => {
                         animation: (!gameState.finished && gameState.sequence[gameState.step]?.t === 'B') ? 'teamPulse 2s ease-in-out infinite' : 'none',
                         opacity: (!gameState.finished && gameState.sequence[gameState.step]?.t !== 'B') ? 0.4 : 1
                     }}>
-                        <img src={gameState.teamBLogo || 'https://via.placeholder.com/100'} alt={gameState.teamB} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                        <img src={gameState.teamBLogo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiPjxjaXJjbGUgY3g9IjEyIiBjeT0iOCIgcj0iNSIvPjxwYXRoIGQ9Ik0zIDIwdjJjMCAxLjEgLjkgMiAyIDJoMTRjMS4xIDAgMi0uOSAyLTJ2LTJjMC0yLjItMS44LTQtNC00SDdjLTIuMiAwLTQgMS44LTQgNHoiLz48L3N2Zz4='} alt={gameState.teamB} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </GlassPanel>
                     <div>
                         <div style={{ fontSize: '12px', opacity: 0.4, letterSpacing: '4px', marginBottom: '8px' }}>CHALLENGER</div>
@@ -246,14 +256,23 @@ const VetoRoom = () => {
             </header>
 
             {/* ── CORE LAYOUT ── */}
-            <main style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '48px', maxWidth: '1700px', margin: '0 auto', padding: '0 40px 100px', position: 'relative', zIndex: 10 }}>
+            <main className="veto-core-layout" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', 
+                gap: '48px', 
+                maxWidth: '1700px', 
+                margin: '0 auto', 
+                padding: '0 40px 100px', 
+                position: 'relative', 
+                zIndex: 10 
+            }}>
                 {/* Sidebar */}
                 <aside style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                     <GlassPanel style={{ padding: '32px' }}>
                         <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>TERMINAL LOGS</h4>
                         <div className="log-container" ref={logContainerRef} style={{ maxHeight: '450px', overflowY: 'auto' }}>
                             <AnimatePresence initial={false}>
-                                {gameState.logs.slice(-10).map((log, idx) => (
+                                {gameState.logs.map((log, idx) => (
                                     <motion.div 
                                         key={`${idx}-${log}`}
                                         initial={{ opacity: 0, x: -20 }}
@@ -271,6 +290,27 @@ const VetoRoom = () => {
                         <GlassPanel style={{ padding: '32px' }}>
                             <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>OPERATIONS</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {/* SIDE SELECTION UI (Fixes Gap 2.7) */}
+                                {isMyTurn && gameState.sequence[gameState.step]?.a === 'side' && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
+                                        <div style={{ fontSize: '10px', color: '#ffd700', letterSpacing: '2px', textAlign: 'center', fontWeight: 900 }}>CHOOSE STARTING SIDE</div>
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <GlowButton 
+                                                style={{ flex: 1, justifyContent: 'center', background: 'rgba(0,212,255,0.1)', borderColor: '#00d4ff' }}
+                                                onClick={() => sendAction(matchId, 'side', { side: 'CT' }, key)}
+                                            >
+                                                COUNTER-TERRORISTS
+                                            </GlowButton>
+                                            <GlowButton 
+                                                style={{ flex: 1, justifyContent: 'center', background: 'rgba(255,0,85,0.1)', borderColor: '#ff0055' }}
+                                                onClick={() => sendAction(matchId, 'side', { side: 'T' }, key)}
+                                            >
+                                                TERRORISTS
+                                            </GlowButton>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {myRole && myRole !== 'admin' && gameState.useTimer && !gameState.ready?.[myRole] && (
                                     <GlowButton style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
                                         INITIALIZE READY SIGNAL
@@ -373,13 +413,20 @@ const VetoRoom = () => {
             <style>{`
                 .log-container::-webkit-scrollbar { display: none; }
                 @keyframes teamPulse {
-                    0%, 100% { border-left-color: var(--brand-primary, #00d4ff) }
-                    50% { border-left-color: rgba(0,212,255,0.3) }
+                    0%, 100% { border-left-color: ${gameTheme.primary} }
+                    50% { border-left-color: rgba(255,255,255,0.1) }
                 }
                 @keyframes timerShake {
                     0%, 100% { transform: translateX(0) }
                     25% { transform: translateX(-3px) }
                     75% { transform: translateX(3px) }
+                }
+                @media (max-width: 768px) {
+                    .veto-header h2 { font-size: 2rem !important; }
+                    .veto-header .glass-panel { width: 100px !important; height: 100px !important; }
+                    .veto-core-layout { padding: 0 20px 40px !important; }
+                    .veto-core-layout section h4 { font-size: 10px !important; }
+                    .veto-core-layout section div h4 + div { font-size: 1.2rem !important; }
                 }
             `}</style>
         </div>

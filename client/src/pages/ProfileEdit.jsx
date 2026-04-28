@@ -80,6 +80,16 @@ export default function ProfileEdit() {
     const handleSave = async (e) => {
         e.preventDefault();
         setError(''); setSuccess(''); setSaving(true);
+
+        const usernameLockedUntil = profile?.username_locked_until;
+        if (usernameLockedUntil && new Date() < new Date(usernameLockedUntil)) {
+            if (form.username !== profile.username) {
+                setError('USERNAME IS LOCKED. Cannot change at this time.');
+                setSaving(false);
+                return;
+            }
+        }
+
         try {
             const { data, error: updateError } = await supabase
                 .from('users')

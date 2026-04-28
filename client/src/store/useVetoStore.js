@@ -96,6 +96,10 @@ const useVetoStore = create((set, get) => ({
                 if (status === 'CLOSED' || status === 'TIMED_OUT') {
                     set({ isConnected: false, isDisconnected: true });
                 }
+                if (status === 'CHANNEL_ERROR') {
+                    console.error('[REALTIME] Channel error. Retrying in 2s...');
+                    setTimeout(() => get().connectToRoom(matchId, key), 2000);
+                }
             });
 
         set({ _channel: channel });

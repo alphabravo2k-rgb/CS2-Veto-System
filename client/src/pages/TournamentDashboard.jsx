@@ -84,16 +84,43 @@ export default function TournamentDashboard() {
     }, [fetchHistory, tournamentId]);
 
     const fetchAnalytics = useCallback(async () => {
-        // Simple client-side analytics since we're in testing
-        // or we can invoke a 'get-analytics' edge function
+        if (!orgId) return;
+
+        // 1. Fetch Map Stats
+        const { data: stats, error: statsErr } = await supabase
+            .from('match_history_stats')
+            .select('map_name, action_type')
+            .eq('org_id', orgId);
+
+        let mapStats = {};
+        if (!statsErr && stats) {
+            stats.forEach(s => {
+                if (!mapStats[s.map_name]) mapStats[s.map_name] = { picked: 0, banned: 0, total: 0 };
+                if (s.action_type === 'pick') mapStats[s.map_name].picked++;
+                else mapStats[s.map_name].banned++;
+                mapStats[s.map_name].total++;
+            });
+        }
+
+        // 2. Calculate Avg Duration
+        let totalMinutes = 0;
+        let finishedCount = 0;
+        historyData.forEach(m => {
+            if (m.finished && m.finished_at && m.created_at) {
+                const duration = (new Date(m.finished_at) - new Date(m.created_at)) / (1000 * 60);
+                totalMinutes += duration;
+                finishedCount++;
+            }
+        });
+
         setAnalytics({
             metrics: {
                 totalMatches: historyData.length,
-                avgDurationMinutes: 12
+                avgDurationMinutes: finishedCount > 0 ? Math.round(totalMinutes / finishedCount) : 0
             },
-            mapStats: {}
+            mapStats
         });
-    }, [historyData]);
+    }, [historyData, orgId]);
 
     useEffect(() => {
         if (showAnalytics) fetchAnalytics();

@@ -132,8 +132,8 @@ class PaymentService {
             .insert({
                 org_id: payment.org_id,
                 plan_id: payment.plan,
-                start_date: startDate.toISOString(),
-                end_date: endDate.toISOString(),
+                starts_at: startDate.toISOString(),
+                ends_at: endDate.toISOString(),
                 status: 'active',
                 payment_id: payment.id
             });

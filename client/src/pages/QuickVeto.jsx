@@ -19,11 +19,7 @@ export default function QuickVeto() {
         try {
             // Create a match under a 'Global' context (null tournament/org)
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                setError('Please sign in to start a Quick Veto');
-                return;
-            }
-
+            
             const { data, error: matchError } = await supabase.functions.invoke('create-match', {
                 body: {
                     teamA: teamA.trim(),

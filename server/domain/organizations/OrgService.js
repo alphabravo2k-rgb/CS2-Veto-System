@@ -243,7 +243,7 @@ class OrgService {
             .select('*')
             .eq('org_id', orgId)
             .eq('status', 'active')
-            .order('end_date', { ascending: false })
+            .order('ends_at', { ascending: false })
             .limit(1);
 
         if (periodsErr || !periods || periods.length === 0) {
@@ -252,7 +252,7 @@ class OrgService {
 
         const activePeriod = periods[0];
         const now = new Date();
-        const endDate = new Date(activePeriod.end_date);
+        const endDate = new Date(activePeriod.ends_at);
         
         const GRACE_PERIOD_DAYS = 3;
         const graceDate = new Date(endDate);

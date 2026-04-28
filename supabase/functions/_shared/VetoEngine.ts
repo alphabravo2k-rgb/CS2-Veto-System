@@ -48,6 +48,7 @@ export default class VetoEngine {
             useCoinFlip: !!useCoinFlip,
             coinFlip: useCoinFlip ? { status: 'waiting_call', winner: null, result: null } : null,
             ready: { A: false, B: false },
+            sideHistory: { A: [], B: [] }, // GAP FIX: Cross-map side tracking
             timerEndsAt: null,
         };
     }
@@ -113,12 +114,22 @@ export default class VetoEngine {
         if (!valid) return { state, error: reason };
         if (currentStep.a !== 'side') return { state, error: `Expected action: ${currentStep.a}` };
 
+        // GAP FIX: Side Choice Validation
+        if (state.sideHistory?.[teamKey]?.includes(side)) {
+            return { state, error: `You have already chosen ${side} in this series. Must choose the opposite.` };
+        }
+
         const targetMap = state.lastPickedMap || (state.maps.find((m: any) => m.status === 'available')?.name);
         if (!targetMap) return { state, error: 'No map available to assign a side to' };
 
         const mapIdx = state.maps.findIndex((m: any) => m.name === targetMap);
         const newState = VetoEngine._clone(state);
         newState.maps[mapIdx].side = side;
+        newState.maps[mapIdx].sideChosenBy = teamKey;
+        
+        if (!newState.sideHistory) newState.sideHistory = { A: [], B: [] };
+        newState.sideHistory[teamKey].push(side);
+
         newState.lastPickedMap = null;
         newState.step++;
 
@@ -219,6 +230,28 @@ export default class VetoEngine {
         }
 
         return state;
+    }
+
+    static timeout(state: any, teamA: string, teamB: string) {
+        const { valid, reason, currentStep } = VetoEngine.validateTurn(state, 'admin', 'timeout');
+        if (!valid) return { state, error: reason };
+
+        const availableMaps = state.maps.filter((m: any) => m.status === 'available');
+        if (availableMaps.length === 0) return { state, error: 'No maps available for timeout' };
+
+        const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)].name;
+        const teamName = currentStep.t === 'A' ? teamA : teamB;
+
+        if (currentStep.a === 'ban') {
+            return VetoEngine.banMap(state, currentStep.t, randomMap, `${teamName} (AUTO)`);
+        } else if (currentStep.a === 'pick') {
+            return VetoEngine.pickMap(state, currentStep.t, randomMap, `${teamName} (AUTO)`);
+        } else if (currentStep.a === 'side') {
+            const randomSide = Math.random() > 0.5 ? 'CT' : 'T';
+            return VetoEngine.pickSide(state, currentStep.t, randomSide, `${teamName} (AUTO)`);
+        }
+
+        return { state, error: `Auto-action not implemented for ${currentStep.a}` };
     }
 
     static _clone(state: any) {

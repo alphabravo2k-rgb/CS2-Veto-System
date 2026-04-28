@@ -107,7 +107,12 @@ async function register({ email, password, username, displayName, country, serve
     return { user, accessToken, refreshToken: refreshTokenValue };
 }
 
-async function login({ email, password }) {
+const { authenticator } = require('otplib');
+const qrcode = require('qrcode');
+
+// ... (existing helpers)
+
+async function login({ email, password, totpCode }) {
     if (!email || !password) throw new Error('Email and password required');
 
     // 1. Authenticate with Supabase Auth (Native)
@@ -127,6 +132,15 @@ async function login({ email, password }) {
 
     if (profileError || !user) throw new Error('Account profile missing');
     if (user.suspended) throw new Error('Account suspended');
+
+    // 3. 2FA Enforcement (Fixes Gap 2.6)
+    if (user.totp_enabled) {
+        if (!totpCode) {
+            return { mfaRequired: true, userId: user.id };
+        }
+        const isValid = authenticator.check(totpCode, user.totp_secret);
+        if (!isValid) throw new Error('Invalid 2FA code');
+    }
 
     const accessToken  = signAccessToken({ sub: user.id, username: user.username, role: user.role });
     const refreshTokenValue = await issueRefreshToken(user.id);
@@ -177,4 +191,35 @@ async function logout(token) {
     }
 }
 
-module.exports = { register, login, refreshToken, logout, verifyAccessToken };
+/**
+ * Setup 2FA for a user.
+ */
+async function setup2FA(userId) {
+    const { data: user } = await supabase.from('users').select('username, email').eq('id', userId).single();
+    if (!user) throw new Error('User not found');
+
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri(user.email, 'CS2-Veto-System', secret);
+    const qrCodeUrl = await qrcode.toDataURL(otpauth);
+
+    // Temporarily save secret until verified
+    await supabase.from('users').update({ totp_secret: secret }).eq('id', userId);
+
+    return { secret, qrCodeUrl };
+}
+
+/**
+ * Verify and enable 2FA.
+ */
+async function verifyAndEnable2FA(userId, code) {
+    const { data: user } = await supabase.from('users').select('totp_secret').eq('id', userId).single();
+    if (!user || !user.totp_secret) throw new Error('2FA setup not initiated');
+
+    const isValid = authenticator.check(code, user.totp_secret);
+    if (!isValid) throw new Error('Invalid verification code');
+
+    await supabase.from('users').update({ totp_enabled: true }).eq('id', userId);
+    return { success: true };
+}
+
+module.exports = { register, login, refreshToken, logout, verifyAccessToken, setup2FA, verifyAndEnable2FA };

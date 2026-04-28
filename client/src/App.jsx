@@ -38,6 +38,7 @@ const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
 const ProfileEdit = React.lazy(() => import('./pages/ProfileEdit'));
 const SupportHub = React.lazy(() => import('./pages/SupportHub'));
 const QuickVeto   = React.lazy(() => import('./pages/QuickVeto'));
+const StreamOverlay = React.lazy(() => import('./pages/StreamOverlay')); // NEW: Streamer Mode
 
 import AuthVerificationGuard from './components/auth/AuthVerificationGuard';
 
@@ -108,6 +109,7 @@ export default function App() {
                             <Route path="/support"   element={<SupportHub />} />
                             <Route path="/quick-veto" element={<QuickVeto />} />
                             <Route path="/veto/:matchId" element={<VetoRoom />} />
+                            <Route path="/overlay/:matchId" element={<StreamOverlay />} />
 
                             {/* ── PROTECTED OPERATIONS ── */}
                             <Route path="/profile"     element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />

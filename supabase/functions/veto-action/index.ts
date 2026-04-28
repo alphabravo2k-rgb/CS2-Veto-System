@@ -40,8 +40,10 @@ serve(async (req) => {
 
     // 2. Authorize
     const keys = match.keys_data || {}
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
     let role = 'viewer'
-    if (key === keys.admin) role = 'admin'
+    if (key === keys.admin || key === serviceKey) role = 'admin' // Watchdog or Admin key
     else if (key === keys.A) role = 'A'
     else if (key === keys.B) role = 'B'
 
@@ -61,6 +63,7 @@ serve(async (req) => {
       sequence: typeof match.sequence === 'string' ? JSON.parse(match.sequence) : match.sequence,
       logs: typeof match.logs === 'string' ? JSON.parse(match.logs) : match.logs,
       ready: typeof match.ready === 'string' ? JSON.parse(match.ready) : match.ready,
+      sideHistory: typeof match.side_history === 'string' ? JSON.parse(match.side_history) : match.side_history,
       coinFlip: typeof match.coin_flip === 'string' ? JSON.parse(match.coin_flip) : match.coin_flip,
       playedMaps: typeof match.played_maps === 'string' ? JSON.parse(match.played_maps) : match.played_maps,
       useTimer: match.use_timer,
@@ -82,14 +85,25 @@ serve(async (req) => {
       result = VetoEngine.pickMap(state, actingAs, data.mapName, teamName)
     } else if (action === 'side') {
       result = VetoEngine.pickSide(state, actingAs, data.side, teamName)
+    } else if (action === 'timeout') {
+      result = VetoEngine.timeout(state, teamA, teamB)
     } else {
       throw new Error(`Invalid action: ${action}`)
     }
 
     if (result.error) throw new Error(result.error)
 
-    // 4. Update Database
+    // 4. Handle Next Timer
     const finalState = result.state
+    if (finalState.useTimer && !finalState.finished && (action !== 'ready' || (finalState.ready.A && finalState.ready.B))) {
+        // If both teams are ready, or if an action was just taken, start the next timer
+        const duration = finalState.timerDuration || 60
+        finalState.timerEndsAt = new Date(Date.now() + duration * 1000).toISOString()
+    } else if (finalState.finished) {
+        finalState.timerEndsAt = null
+    }
+
+    // 4. Update Database
     const { error: updateError } = await supabase
       .from('veto_sessions')
       .update({
@@ -100,9 +114,12 @@ serve(async (req) => {
         last_picked_map: finalState.lastPickedMap,
         played_maps: finalState.playedMaps,
         ready: finalState.ready,
+        side_history: finalState.sideHistory,
         coin_flip: finalState.coinFlip,
-        sequence: finalState.sequence, // In case of coin flip swaps
-        timer_ends_at: finalState.timerEndsAt
+        sequence: finalState.sequence,
+        timer_ends_at: finalState.timerEndsAt,
+        status: finalState.finished ? 'finished' : 'veto_in_progress',
+        finished_at: finalState.finished ? new Date().toISOString() : null
       })
       .eq('id', matchId)
 

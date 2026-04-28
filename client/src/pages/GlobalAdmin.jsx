@@ -86,13 +86,28 @@ const GlobalAdmin = () => {
         }
     };
 
-    // Refetch logs specifically if switching to logs tab
     useEffect(() => {
-        if (activeTab === 'logs' && data.logs.length === 0) {
-            supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(50)
-                .then(res => setData(prev => ({ ...prev, logs: res.data || [] })));
-        }
+        if (activeTab === 'settings') fetchSettings();
+        if (activeTab === 'logs') fetchLogs();
     }, [activeTab]);
+
+    const fetchLogs = async () => {
+        const { data: res } = await supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100);
+        if (res) setData(prev => ({ ...prev, logs: res }));
+    };
+
+    const fetchSettings = async () => {
+        const { data: res } = await supabase.from('settings').select('*');
+        if (res) {
+            const s = {};
+            res.forEach(item => {
+                if (item.key === 'platform_name') s.platformName = item.value;
+                if (item.key === 'discord_webhook_url') s.discordWebhookUrl = item.value;
+                if (item.key === 'enforce_watermarks') s.showWatermark = item.value === 'true';
+            });
+            setSettings(prev => ({ ...prev, ...s }));
+        }
+    };
 
     const handleSuspendUser = async (userId, currentStatus) => {
         const { error } = await supabase.from('users').update({ suspended: !currentStatus }).eq('id', userId);
@@ -109,6 +124,20 @@ const GlobalAdmin = () => {
         if (!error) fetchAdminData();
     };
 
+    const handleDowngradePlan = async (orgId) => {
+        if (!window.confirm("FORCE DOWNGRADE THIS ORG TO TRIAL?")) return;
+        const { error } = await supabase.from('org_branding').update({ plan: 'trial', trial_count: 0 }).eq('org_id', orgId);
+        if (!error) {
+            await supabase.from('subscription_periods').update({ status: 'expired' }).eq('org_id', orgId).eq('status', 'active');
+            fetchAdminData();
+        }
+    };
+
+    const handleResetTrial = async (orgId) => {
+        const { error } = await supabase.from('org_branding').update({ trial_count: 0 }).eq('org_id', orgId);
+        if (!error) fetchAdminData();
+    };
+
     const handleApprovePayment = async (paymentId) => {
         const { error } = await supabase.from('payments').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', paymentId);
         if (!error) fetchAdminData();
@@ -119,8 +148,42 @@ const GlobalAdmin = () => {
         if (!error) fetchAdminData();
     };
 
+    const handleImpersonate = (userId) => {
+        if (!window.confirm("IMPERSONATE THIS USER?")) return;
+        sessionStorage.setItem('impersonated_user_id', userId);
+        window.location.href = '/dashboard';
+    };
+
+    const handleSendEmail = (email) => {
+        const msg = window.prompt(`SEND DIRECT EMAIL TO ${email}:`);
+        if (!msg) return;
+        alert("TRANSMISSION QUEUED: Email service integration pending.");
+    };
+
     const saveSettings = async () => {
-        alert('Settings saved (Mock implementation for now)');
+        setLoading(true);
+        const updates = [
+            { key: 'platform_name', value: settings.platformName },
+            { key: 'discord_webhook_url', value: settings.discordWebhookUrl },
+            { key: 'enforce_watermarks', value: String(settings.showWatermark) }
+        ];
+        
+        const { error } = await supabase.from('settings').upsert(updates);
+        setLoading(false);
+        if (!error) alert('PLATFORM CONFIGURATION HARDENED');
+        else alert('SAVE FAILED: ' + error.message);
+    };
+
+    const sendBroadcast = async () => {
+        const msg = window.prompt("ENTER ANNOUNCEMENT TEXT:");
+        if (!msg) return;
+        // Mocking audit log as broadcast
+        await supabase.from('audit_logs').insert({
+            action: 'broadcast_announcement',
+            actor_id: user.id,
+            meta: { message: msg }
+        });
+        alert('BROADCAST LOGGED (Integration with WebSocket Hub pending)');
     };
 
     if (error) return <div style={{ minHeight: '100vh', background: '#050a14', color: '#ff4b2b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><NeonText>{error}</NeonText></div>;
@@ -191,6 +254,10 @@ const GlobalAdmin = () => {
                                             <td style={{ padding: '16px 20px', opacity: 0.5 }}>{new Date(o.created_at).toLocaleDateString()}</td>
                                             <td style={{ padding: '16px 20px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                                 <GlowButton style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => window.open(`/org/${o.id}`, '_blank')}>VIEW</GlowButton>
+                                                <GlowButton color="#ffd700" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleResetTrial(o.id)}>RESET TRIAL</GlowButton>
+                                                {o.branding?.plan !== 'trial' && (
+                                                    <GlowButton color="#ff4b2b" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleDowngradePlan(o.id)}>DOWNGRADE</GlowButton>
+                                                )}
                                                 <GlowButton color="#ff4b2b" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSuspendOrg(o.id, o.branding?.suspended)}>
                                                     {o.branding?.suspended ? 'UNSUSPEND' : 'SUSPEND'}
                                                 </GlowButton>
@@ -220,10 +287,12 @@ const GlobalAdmin = () => {
                                             <td style={{ padding: '16px 20px' }}>{u.role === 'platform_admin' ? <span style={{ color: '#ff4b2b' }}>PLATFORM ADMIN</span> : 'USER'}</td>
                                             <td style={{ padding: '16px 20px', color: u.suspended ? '#ff4b2b' : '#00ff88' }}>{u.suspended ? 'SUSPENDED' : 'ACTIVE'}</td>
                                             <td style={{ padding: '16px 20px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                <GlowButton style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleImpersonate(u.id)}>IMPERSONATE</GlowButton>
+                                                <GlowButton color="#ffd700" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSendEmail(u.email)}>EMAIL</GlowButton>
                                                 {u.role !== 'platform_admin' && (
-                                                    <GlowButton color="#ffd700" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSetPlatformAdmin(u.id)}>SET ADMIN</GlowButton>
+                                                    <GlowButton color="#00ff88" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSetPlatformAdmin(u.id)}>PROMOTE</GlowButton>
                                                 )}
-                                                <GlowButton color={u.suspended ? '#00ff88' : '#ff4b2b'} style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSuspendUser(u.id, u.suspended)}>
+                                                <GlowButton color="#ff4b2b" style={{ padding: '6px 12px', fontSize: '10px' }} onClick={() => handleSuspendUser(u.id, u.suspended)}>
                                                     {u.suspended ? 'UNSUSPEND' : 'SUSPEND'}
                                                 </GlowButton>
                                             </td>
@@ -312,7 +381,10 @@ const GlobalAdmin = () => {
                                 </label>
 
                                 <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)', margin: '32px 0' }} />
-                                <GlowButton color="#00ff88" onClick={saveSettings} style={{ width: '100%', justifyContent: 'center', padding: '16px' }}>SAVE PLATFORM CONFIGURATION</GlowButton>
+                                <div style={{ display: 'flex', gap: '16px' }}>
+                                    <GlowButton color="#00ff88" onClick={saveSettings} style={{ flex: 1, justifyContent: 'center', padding: '16px' }}>SAVE PLATFORM CONFIGURATION</GlowButton>
+                                    <GlowButton color="#ffd700" onClick={sendBroadcast} style={{ flex: 1, justifyContent: 'center', padding: '16px' }}>GLOBAL ANNOUNCEMENT</GlowButton>
+                                </div>
                             </GlassPanel>
                         </div>
                     )}
