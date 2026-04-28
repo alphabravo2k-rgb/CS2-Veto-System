@@ -83,7 +83,7 @@ const StreamOverlay = () => {
                 display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0' 
             }}>
                 <TeamBar team={gameState.teamA} side="left" color={primaryColor} />
-                <div style={{ width: '200px', textAlign: 'center', z-index: 10 }}>
+                <div style={{ width: '200px', textAlign: 'center', zIndex: 10 }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 900, color: primaryColor, letterSpacing: '4px' }}>VS</div>
                     {gameState.useTimer && !gameState.finished && (
                         <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>
@@ -204,7 +204,5 @@ const MinimalScorebug = ({ gameState, primaryColor }) => (
         {gameState.useTimer && !gameState.finished && <Countdown target={gameState.timerEndsAt} />}
     </div>
 );
-
-export default StreamOverlay;
 
 export default StreamOverlay;

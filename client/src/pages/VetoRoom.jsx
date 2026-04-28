@@ -29,9 +29,14 @@ const VetoRoom = () => {
     const { 
         gameState, 
         myRole, 
-        isConnected, 
-        initSocket, 
-        sendAction, 
+        isConnected,
+        isDisconnected,
+        serverError,
+        roomUserCount,
+        connectToRoom,
+        disconnectRoom,
+        sendAction,
+        sendReady,
         sendCoinCall, 
         sendCoinDecide,
         reportResult
