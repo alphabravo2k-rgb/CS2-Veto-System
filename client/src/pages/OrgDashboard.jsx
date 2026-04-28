@@ -24,6 +24,7 @@ export default function OrgDashboard() {
     const [tournaments, setTournaments] = useState([]);
     const [members,     setMembers]     = useState([]);
     const [invites,     setInvites]     = useState([]);
+    const [plans,       setPlans]       = useState([]);
     const [tab,         setTab]         = useState('tournaments');
     const [userRole,    setUserRole]    = useState(null);
     const [membersLoading, setMembersLoading] = useState(false);
@@ -81,8 +82,13 @@ export default function OrgDashboard() {
                         secondaryColor: brandingData.secondary_color || '#0a0f1e',
                         logoUrl: brandingData.logo_url || '',
                         bannerUrl: brandingData.banner_url || '',
+                        customDomain: orgData.custom_domain || '',
                     });
                 }
+
+                // Fetch Available Plans
+                const { data: pData } = await supabase.from('plans').select('*');
+                setPlans(pData || []);
             } catch (e) {
                 setError(e.message);
             } finally {
@@ -158,6 +164,12 @@ export default function OrgDashboard() {
                 .eq('org_id', orgId);
 
             if (error) throw error;
+            
+            // Sync custom domain to orgs table
+            await supabase
+                .from('orgs')
+                .update({ custom_domain: brandingForm.customDomain || null })
+                .eq('id', orgId);
             
             // Reload branding to confirm save
             window.dispatchEvent(new Event('brandingUpdated'));
@@ -260,10 +272,24 @@ export default function OrgDashboard() {
                 </div>
             </div>
 
-            <div className="org-body" style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px' }}>
+                {/* ── GRACE PERIOD ALERT ── */}
+                {org.subscription_status === 'past_due' && (
+                    <div style={{ padding: '16px', background: 'rgba(255, 75, 43, 0.1)', border: '1px solid rgba(255, 75, 43, 0.2)', borderRadius: '12px', marginBottom: '32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#ff4b2b' }}>
+                            <ActivityIcon size={20} />
+                            <span style={{ fontWeight: 900, fontSize: '14px', letterSpacing: '1px' }}>
+                                GRACE PERIOD ACTIVE: YOUR SUBSCRIPTION EXPIRED. ACTIONS WILL BE RESTRICTED IN {
+                                    Math.ceil((new Date(org.grace_period_ends) - new Date()) / (1000 * 60 * 60 * 24))
+                                } DAYS.
+                            </span>
+                        </div>
+                        <button className="premium-button" style={{ padding: '8px 24px', fontSize: '12px' }} onClick={() => setTab('billing')}>RENEW NOW</button>
+                    </div>
+                )}
+
                 {/* ── TABS ── */}
                 <div className="tab-nav" style={{ display: 'flex', gap: '32px', marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    {['tournaments', 'members', 'logs'].map(t => (
+                    {['tournaments', 'members', 'billing', 'logs', ...(org?.plan_id === 'enterprise' ? ['compliance'] : [])].map(t => (
                         <button 
                             key={t} 
                             style={{ 
@@ -407,6 +433,100 @@ export default function OrgDashboard() {
                             </div>
                         )}
 
+                        {tab === 'billing' && (
+                            <div className="tab-pane">
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '40px' }}>
+                                    <div>
+                                        <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px' }}>SUBSCRIPTION STATUS</h2>
+                                        <div className="glass-panel" style={{ padding: '32px', borderLeft: `4px solid ${accentColor}` }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '10px', opacity: 0.5, fontWeight: 900, letterSpacing: '1px' }}>CURRENT PLAN</div>
+                                                    <div style={{ fontSize: '2rem', fontWeight: 900, color: accentColor }}>{org.plan_id?.toUpperCase() || 'TRIAL'}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '10px', opacity: 0.5, fontWeight: 900, letterSpacing: '1px' }}>STATUS</div>
+                                                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: org.subscription_status === 'active' ? '#00ff88' : '#ffaa00' }}>
+                                                        {(org.subscription_status || 'TRIALING').toUpperCase()}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '10px', opacity: 0.5, fontWeight: 900 }}>RENEWAL DATE</div>
+                                                    <div style={{ fontWeight: 900 }}>{org.current_period_end ? new Date(org.current_period_end).toLocaleDateString() : 'N/A'}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '10px', opacity: 0.5, fontWeight: 900 }}>VETO CREDITS</div>
+                                                    <div style={{ fontWeight: 900 }}>{org.veto_credits || 0}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', margin: '48px 0 24px' }}>CUSTOM DOMAIN</h2>
+                                        <div className="glass-panel" style={{ padding: '32px' }}>
+                                            <div style={{ opacity: 0.6, fontSize: '14px', marginBottom: '24px' }}>
+                                                Route your veto rooms through your own brand's domain (e.g. veto.yourdomain.com).
+                                            </div>
+                                            {org.plan_id === 'enterprise' ? (
+                                                <div style={{ display: 'flex', gap: '16px' }}>
+                                                    <input 
+                                                        disabled
+                                                        value={org.custom_domain || 'NOT CONFIGURED'}
+                                                        style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px' }}
+                                                    />
+                                                    <button className="premium-button" onClick={() => setEditBranding(true)}>CONFIGURE</button>
+                                                </div>
+                                            ) : (
+                                                <div style={{ padding: '20px', background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.2)', borderRadius: '8px', color: '#ffaa00', fontSize: '12px', fontWeight: 700 }}>
+                                                    UPGRADE TO ENTERPRISE TO UNLOCK CUSTOM DOMAINS
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="glass-panel" style={{ padding: '24px' }}>
+                                        <h3 style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', opacity: 0.5, marginBottom: '24px' }}>AVAILABLE PLANS</h3>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            {plans.map(p => (
+                                                <div key={p.id} style={{ padding: '16px', borderRadius: '12px', border: org.plan_id === p.id ? `2px solid ${accentColor}` : '1px solid rgba(255,255,255,0.05)', background: org.plan_id === p.id ? `${accentColor}11` : 'transparent' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                        <div style={{ fontWeight: 900 }}>{p.name}</div>
+                                                        <div style={{ fontWeight: 900, color: accentColor }}>${p.price_usd}/mo</div>
+                                                    </div>
+                                                    <div style={{ fontSize: '10px', opacity: 0.4 }}>{Object.entries(p.features || {}).map(([k, v]) => `${k}: ${v}`).join(', ')}</div>
+                                                    {org.plan_id !== p.id && (
+                                                        <button className="premium-button" style={{ width: '100%', marginTop: '12px', padding: '8px', fontSize: '10px' }}>UPGRADE</button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'compliance' && (
+                            <div className="tab-pane">
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>LEGAL & COMPLIANCE</h2>
+                                <div className="glass-panel" style={{ padding: '32px' }}>
+                                    <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: '16px' }}>ENTERPRISE WHITE-LABEL CERTIFICATE</h3>
+                                    <p style={{ opacity: 0.6, fontSize: '14px', marginBottom: '24px' }}>
+                                        As an Enterprise client, you are legally authorized to use the VETO platform under your own branding and domains.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '16px' }}>
+                                        <button className="premium-button" style={{ padding: '12px 24px' }}>DOWNLOAD SLA (PDF)</button>
+                                        <button className="premium-button" style={{ padding: '12px 24px', background: 'rgba(255,255,255,0.05)' }}>DOWNLOAD LICENSE CERTIFICATE</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {tab === 'logs' && (
                             <div className="tab-pane">
                                 <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>AUDIT DATA</h2>
@@ -475,6 +595,18 @@ export default function OrgDashboard() {
                                         style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px' }}
                                     />
                                 </div>
+                                {org?.plan_id === 'enterprise' && (
+                                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <label style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '1px', opacity: 0.5 }}>CUSTOM DOMAIN</label>
+                                        <input 
+                                            type="text" 
+                                            value={brandingForm.customDomain} 
+                                            onChange={e => setBrandingForm(b => ({ ...b, customDomain: e.target.value }))}
+                                            placeholder="veto.example.com"
+                                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', color: '#fff', borderRadius: '8px' }}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>

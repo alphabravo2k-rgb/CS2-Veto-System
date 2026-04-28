@@ -270,9 +270,18 @@ const VetoRoom = () => {
             }}>
                 {/* Sidebar */}
                 <aside style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    <GlassPanel style={{ padding: '32px' }}>
+                    <GlassPanel style={{ padding: '32px', position: 'relative' }}>
                         <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>TERMINAL LOGS</h4>
-                        <div className="log-container" ref={logContainerRef} style={{ maxHeight: '450px', overflowY: 'auto' }}>
+                        <div 
+                            className="log-container custom-scrollbar" 
+                            ref={logContainerRef} 
+                            style={{ 
+                                maxHeight: '500px', 
+                                overflowY: 'auto',
+                                scrollBehavior: 'smooth',
+                                paddingRight: '10px'
+                            }}
+                        >
                             <AnimatePresence initial={false}>
                                 {gameState.logs.map((log, idx) => (
                                     <motion.div 
@@ -292,27 +301,6 @@ const VetoRoom = () => {
                         <GlassPanel style={{ padding: '32px' }}>
                             <h4 style={{ fontSize: '11px', letterSpacing: '4px', color: 'var(--brand-primary)', margin: '0 0 24px 0', fontWeight: 900 }}>OPERATIONS</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {/* SIDE SELECTION UI (Fixes Gap 2.7) */}
-                                {isMyTurn && gameState.sequence[gameState.step]?.a === 'side' && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
-                                        <div style={{ fontSize: '10px', color: '#ffd700', letterSpacing: '2px', textAlign: 'center', fontWeight: 900 }}>CHOOSE STARTING SIDE</div>
-                                        <div style={{ display: 'flex', gap: '10px' }}>
-                                            <GlowButton 
-                                                style={{ flex: 1, justifyContent: 'center', background: 'rgba(0,212,255,0.1)', borderColor: '#00d4ff' }}
-                                                onClick={() => sendAction(matchId, 'side', { side: 'CT' }, key)}
-                                            >
-                                                COUNTER-TERRORISTS
-                                            </GlowButton>
-                                            <GlowButton 
-                                                style={{ flex: 1, justifyContent: 'center', background: 'rgba(255,0,85,0.1)', borderColor: '#ff0055' }}
-                                                onClick={() => sendAction(matchId, 'side', { side: 'T' }, key)}
-                                            >
-                                                TERRORISTS
-                                            </GlowButton>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {myRole && myRole !== 'admin' && gameState.useTimer && !gameState.ready?.[myRole] && (
                                     <GlowButton style={{ width: '100%', justifyContent: 'center' }} onClick={() => sendReady(matchId, key)}>
                                         INITIALIZE READY SIGNAL
@@ -366,6 +354,54 @@ const VetoRoom = () => {
                             </button>
                         )}
                     </div>
+
+                    {/* 🛡️ SIDE SELECTION OVERLAY (Fixes Gap 2.7) */}
+                    <AnimatePresence>
+                        {isMyTurn && gameState.sequence[gameState.step]?.a === 'side' && (
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="glass-panel"
+                                style={{ 
+                                    padding: '40px', 
+                                    textAlign: 'center', 
+                                    border: `1px solid ${currentActionColor}`,
+                                    background: `${currentActionColor}05`,
+                                    marginBottom: '32px',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                            >
+                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg, transparent, ${currentActionColor}, transparent)` }} />
+                                <h3 style={{ fontSize: '1rem', fontWeight: 900, letterSpacing: '4px', marginBottom: '8px' }}>TACTICAL DEPLOYMENT</h3>
+                                <p style={{ fontSize: '12px', opacity: 0.5, letterSpacing: '1px', marginBottom: '32px' }}>CHOOSE YOUR STARTING FACTION ON {gameState.lastPickedMap || 'DECIDER'}</p>
+                                
+                                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                                    <GlowButton 
+                                        style={{ padding: '20px 40px', background: 'rgba(0,212,255,0.05)', borderColor: '#00d4ff' }}
+                                        onClick={() => sendAction(matchId, 'side', { side: 'CT' }, key)}
+                                    >
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                            <ShieldIcon size={24} color="#00d4ff" />
+                                            <span style={{ fontSize: '14px' }}>COUNTER-TERRORISTS</span>
+                                        </div>
+                                    </GlowButton>
+                                    <GlowButton 
+                                        style={{ padding: '20px 40px', background: 'rgba(255,0,85,0.05)', borderColor: '#ff0055' }}
+                                        onClick={() => sendAction(matchId, 'side', { side: 'T' }, key)}
+                                    >
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff0055" strokeWidth="2">
+                                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                            </svg>
+                                            <span style={{ fontSize: '14px' }}>TERRORISTS</span>
+                                        </div>
+                                    </GlowButton>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {gameState.finished && myRole === 'admin' && !gameState.result_reported_at && (
                         <motion.div 
@@ -475,7 +511,11 @@ const VetoRoom = () => {
             </AnimatePresence>
 
             <style>{`
-                .log-container::-webkit-scrollbar { display: none; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); borderRadius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--brand-primary, #00d4ff); }
+                
                 @keyframes teamPulse {
                     0%, 100% { border-left-color: ${gameTheme.primary} }
                     50% { border-left-color: rgba(255,255,255,0.1) }

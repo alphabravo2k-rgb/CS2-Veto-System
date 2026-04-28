@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logAudit } from "../_shared/AuditService.ts"
+import { triggerWebhooks } from "../_shared/WebhookService.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +22,7 @@ Deno.serve(async (req) => {
     // 1. Verify Admin Key
     const { data: sessionData, error: fetchErr } = await supabase
       .from('veto_sessions')
-      .select('keys_data, team_a, team_b')
+      .select('keys_data, team_a, team_b, org_id')
       .eq('id', matchId)
       .single()
 
@@ -39,6 +41,21 @@ Deno.serve(async (req) => {
       .eq('id', matchId)
 
     if (updateErr) throw updateErr
+
+    // 3. Audit & Webhooks
+    await logAudit(supabase, {
+      actor_id: 'admin_key',
+      action: 'match.reported',
+      target_id: matchId,
+      meta: { org_id: sessionData.org_id, score_a: scoreA, score_b: scoreB, winner_id: winnerId }
+    })
+
+    await triggerWebhooks(supabase, sessionData.org_id, 'match.reported', {
+      match_id: matchId,
+      score_a: scoreA,
+      score_b: scoreB,
+      winner_id: winnerId
+    })
 
     // 3. ELO Calculation (Simplified)
     // In a real system, we'd fetch all players in team_a and team_b

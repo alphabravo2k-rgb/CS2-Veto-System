@@ -13,12 +13,21 @@ export const getMapNameWithPrefix = (mapName) => {
 
 export const getMapImageUrl = (mapName, customImage = null) => {
     if (customImage) return { primary: customImage, fallbacks: [] };
-    const baseName = getMapNameWithPrefix(mapName).toLowerCase();
+    const baseName = mapName.toLowerCase();
+    
+    // 🛡️ Priority 1: Locally bundled assets (No dependency risk)
+    const localPath = `/maps/${baseName}.jpg`;
+    
+    // Priority 2: External GitHub Mirror
+    const prefixName = getMapNameWithPrefix(mapName).toLowerCase();
+    const githubUrl = `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${prefixName}.png`;
+    
     return { 
-        primary: `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.png`, 
+        primary: localPath, 
         fallbacks: [
-            `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${baseName}.jpg`, 
-            `https://image.gametracker.com/images/maps/160x120/csgo/${baseName}.jpg`
+            githubUrl,
+            `https://raw.githubusercontent.com/rpkaul/cs-map-images/refs/heads/main/${prefixName}.jpg`, 
+            `https://image.gametracker.com/images/maps/160x120/csgo/${prefixName}.jpg`
         ] 
     };
 };

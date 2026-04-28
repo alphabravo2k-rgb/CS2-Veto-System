@@ -48,6 +48,21 @@ serve(async (req) => {
       gameId = 'cs2' // Default to CS2
     } = payload || {}
 
+    // 🛡️ SUBSCRIPTION VALIDATION (Phase F)
+    const { validateSubscription } = await import("../_shared/SubscriptionService.ts");
+    const subCheck = await validateSubscription(supabase, orgId, tournamentId);
+    
+    if (!subCheck.valid) {
+      return new Response(JSON.stringify({ error: subCheck.reason, sub_block: true }), { 
+        status: 402, // Payment Required
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
+    if (subCheck.consumeCredit) {
+      await supabase.rpc('decrement_veto_credits', { org_id: orgId });
+    }
+
     // 1. Sanitize
     const safeTeamA = typeof teamA === 'string' ? teamA.trim().slice(0, 50) : 'Team A'
     const safeTeamB = typeof teamB === 'string' ? teamB.trim().slice(0, 50) : 'Team B'

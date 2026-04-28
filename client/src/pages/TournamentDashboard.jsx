@@ -141,7 +141,7 @@ export default function TournamentDashboard() {
         let teamStats = {};
         if (!statsErr && stats) {
             stats.forEach(s => {
-                const teamName = s.team_id || 'Unknown'; // Fallback to team_id if name missing
+                const teamName = s.team_id || 'Unknown';
                 if (!teamStats[teamName]) teamStats[teamName] = { picks: {}, bans: {} };
                 
                 const category = s.action_type === 'pick' ? 'picks' : 'bans';
@@ -149,10 +149,28 @@ export default function TournamentDashboard() {
             });
         }
 
+        // 4. Subscription Data
+        const { data: orgData } = await supabase.from('orgs').select('plan_id, veto_credits, current_period_end').eq('id', orgId).single();
+        const { data: planData } = await supabase.from('plans').select('features').eq('id', orgData?.plan_id).single();
+        
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0,0,0,0);
+        const { count: monthlyUsage } = await supabase
+            .from('veto_sessions')
+            .select('*', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .gte('created_at', startOfMonth.toISOString());
+
         setAnalytics({
             metrics: {
                 totalMatches: historyData.length,
-                avgDurationMinutes: finishedCount > 0 ? Math.round(totalMinutes / finishedCount) : 0
+                avgDurationMinutes: finishedCount > 0 ? Math.round(totalMinutes / finishedCount) : 0,
+                monthlyUsage,
+                maxVetoes: planData?.features?.max_vetoes || -1,
+                credits: orgData?.veto_credits || 0,
+                planId: orgData?.plan_id || 'individual',
+                expiry: orgData?.current_period_end
             },
             mapStats,
             teamStats
@@ -517,6 +535,39 @@ export default function TournamentDashboard() {
                                 {showAnalytics ? 'HIDE ANALYTICS' : 'SHOW ANALYTICS'}
                             </button>
                         </h2>
+
+                        {/* Subscription & Credits Widget */}
+                        {analytics?.metrics && (
+                            <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', background: 'rgba(0,212,255,0.05)', border: `1px solid ${accentColor}22` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '2px', color: accentColor }}>PLAN: {analytics.metrics.planId.toUpperCase()}</div>
+                                    <Link to={`/org/${orgId}/billing`} style={{ fontSize: '9px', fontWeight: 900, color: '#fff', opacity: 0.5 }}>UPGRADE</Link>
+                                </div>
+                                
+                                {analytics.metrics.maxVetoes > 0 && (
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '6px' }}>
+                                            <span>MONTHLY USAGE</span>
+                                            <span>{analytics.metrics.monthlyUsage} / {analytics.metrics.maxVetoes}</span>
+                                        </div>
+                                        <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', background: accentColor, width: `${Math.min(100, (analytics.metrics.monthlyUsage / analytics.metrics.maxVetoes) * 100)}%` }} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '10px', opacity: 0.6 }}>PAYG CREDITS</div>
+                                    <div style={{ fontSize: '14px', fontWeight: 900, color: analytics.metrics.credits > 0 ? '#00ff88' : '#ff4b2b' }}>{analytics.metrics.credits}</div>
+                                </div>
+
+                                {analytics.metrics.expiry && new Date(analytics.metrics.expiry) < new Date() && (
+                                    <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(255,75,43,0.1)', border: '1px solid #ff4b2b', borderRadius: '4px', fontSize: '9px', fontWeight: 900, color: '#ff4b2b', textAlign: 'center' }}>
+                                        ⚠️ GRACE PERIOD ACTIVE — RENEW IN {Math.max(1, Math.ceil((new Date(analytics.metrics.expiry).setDate(new Date(analytics.metrics.expiry).getDate() + 3) - new Date()) / (1000 * 60 * 60 * 24)))} DAYS
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {showAnalytics && analytics && (
                             <div style={{ marginBottom: '24px', animation: 'fadeIn 0.3s' }}>

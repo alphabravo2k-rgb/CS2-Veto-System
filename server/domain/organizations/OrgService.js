@@ -15,7 +15,11 @@ class OrgService {
     async createOrg({ userId, name, slug, primaryColor, secondaryColor, logoUrl }) {
         if (!userId) throw new Error('User ID required');
         
-        // 1. Create org
+        // 🛡️ SECURITY: Check if user is suspended
+        const { data: user } = await supabase.from('users').select('suspended').eq('id', userId).single();
+        if (user?.suspended) throw new Error('Access denied: Account is suspended');
+        
+        if (!this.isSafeLogoUrl(logoUrl)) throw new Error('Invalid logo URL: XSS detected or unsupported format');
         const { data: org, error: orgErr } = await supabase
             .from('orgs')
             .insert({ id: slug, name, slug })
@@ -107,6 +111,10 @@ class OrgService {
      * Update branding for an organization.
      */
     async updateBranding(orgId, brandingData) {
+        if (brandingData.logo_url && !this.isSafeLogoUrl(brandingData.logo_url)) {
+            throw new Error('Invalid logo URL: Potential XSS detected');
+        }
+
         const { data, error } = await supabase
             .from('org_branding')
             .update(brandingData)
@@ -213,63 +221,109 @@ class OrgService {
 
     /**
      * Check if an organization is eligible to create a new match.
-     * Fixes Gap 2.3 & 2.4 (Expiry tracking, Grace period).
+     * Fixes Gap 4.2.1 & 4.2.2 (Monthly limits, Per-event pricing, PAYG).
      */
-    async validateSubscription(orgId) {
-        if (orgId === 'global') return { valid: true };
+    async validateSubscription(orgId, tournamentId = null) {
+        if (orgId === 'global' || !orgId) return { valid: true };
 
-        // 1. Fetch Org Branding/Status
-        const { data: branding, error: brandingErr } = await supabase
-            .from('org_branding')
-            .select('*')
-            .eq('org_id', orgId)
+        const { data: org, error: orgErr } = await supabase
+            .from('orgs')
+            .select('plan_id, subscription_status, current_period_end, grace_period_ends, veto_credits')
+            .eq('id', orgId)
             .single();
 
-        if (brandingErr || !branding) {
-            return { valid: false, reason: 'Organization not found or inactive' };
-        }
+        if (orgErr || !org) return { valid: false, reason: 'Organization not found' };
 
-        // 2. Handle Trial Plan
-        if (branding.plan === 'trial') {
-            if (branding.trial_count >= branding.trial_limit) {
-                return { valid: false, reason: 'Trial limit reached. Please upgrade to continue.' };
-            }
-            return { valid: true, type: 'trial' };
-        }
+        // 1. Fetch Plan Features
+        const { data: plan } = await supabase.from('plans').select('features').eq('id', org.plan_id).single();
+        const features = plan?.features || {};
 
-        // 3. Handle Paid Plans (Check Subscription Periods)
-        const { data: periods, error: periodsErr } = await supabase
-            .from('subscription_periods')
-            .select('*')
-            .eq('org_id', orgId)
-            .eq('status', 'active')
-            .order('ends_at', { ascending: false })
-            .limit(1);
-
-        if (periodsErr || !periods || periods.length === 0) {
-            return { valid: false, reason: 'No active subscription found. Please renew.' };
-        }
-
-        const activePeriod = periods[0];
+        // 2. Check Expiry & Grace Period
         const now = new Date();
-        const endDate = new Date(activePeriod.ends_at);
-        
-        const GRACE_PERIOD_DAYS = 3;
-        const graceDate = new Date(endDate);
-        graceDate.setDate(graceDate.getDate() + GRACE_PERIOD_DAYS);
+        const periodEnd = org.current_period_end ? new Date(org.current_period_end) : null;
+        const graceEnd = org.grace_period_ends ? new Date(org.grace_period_ends) : null;
 
-        if (now > graceDate) {
-            return { valid: false, reason: `Subscription expired on ${endDate.toLocaleDateString()}. Grace period ended.` };
+        if (periodEnd && now > periodEnd) {
+            if (graceEnd && now < graceEnd) {
+                // Inside Grace Period
+            } else {
+                return { valid: false, reason: 'Subscription expired. Please renew to continue.' };
+            }
         }
 
-        if (now > endDate) {
-            return { 
-                valid: true, 
-                warning: `Subscription expired on ${endDate.toLocaleDateString()}. You are currently in a grace period.` 
-            };
+        // 3. Check Monthly Usage (Starter Plan etc.)
+        const maxVetoes = features.max_vetoes || -1;
+        if (maxVetoes > 0) {
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            const { count, error: countErr } = await supabase
+                .from('veto_sessions')
+                .select('*', { count: 'exact', head: true })
+                .eq('org_id', orgId)
+                .gte('created_at', startOfMonth);
+            
+            if (!countErr && count >= maxVetoes) {
+                // If they have PAYG credits, allow them to consume 1 credit
+                if (org.veto_credits > 0) {
+                    return { valid: true, consumeCredit: true, warning: 'Monthly limit reached. Consuming 1 credit.' };
+                }
+                return { valid: false, reason: `Monthly limit reached (${maxVetoes}/${maxVetoes}). Upgrade for unlimited vetoes.` };
+            }
         }
 
-        return { valid: true };
+        // 4. Check Per-Event Payment (Tournament Plan)
+        if (features.per_event && tournamentId) {
+            const { data: tourney } = await supabase
+                .from('tournaments')
+                .select('per_event_paid')
+                .eq('id', tournamentId)
+                .single();
+            
+            if (tourney && !tourney.per_event_paid) {
+                return { valid: false, reason: 'This tournament requires a per-event activation fee.' };
+            }
+        }
+
+        return { 
+            valid: true, 
+            warning: periodEnd && now > periodEnd ? 'Subscription in grace period (ends in ' + Math.ceil((graceEnd - now) / (1000 * 60 * 60 * 24)) + ' days)' : null 
+        };
+    }
+
+    /**
+     * Consume a veto credit for an organization.
+     */
+    async consumeCredit(orgId) {
+        const { error } = await supabase.rpc('decrement_veto_credits', { org_id: orgId });
+        if (error) console.error('[OrgService] Failed to consume credit:', error.message);
+    }
+
+    /**
+     * 🛡️ SECURITY: Robust Logo Validation
+     * Detects malicious SVGs and suspicious base64 payloads.
+     */
+    isSafeLogoUrl(url) {
+        if (!url) return true;
+        if (url.length > 500000) return false; // 0.5MB limit
+
+        // If it's a URL, check common patterns
+        if (url.startsWith('http')) {
+            const forbidden = ['<script', 'javascript:', 'onerror', 'onload'];
+            return !forbidden.some(f => url.toLowerCase().includes(f));
+        }
+
+        // If it's base64 data URI
+        if (url.startsWith('data:')) {
+            if (!url.startsWith('data:image/')) return false;
+            // Forbidden characters in decoded base64 (looking for script tags)
+            const forbiddenRaw = ['<script', 'javascript:', 'onload=', 'onerror='];
+            try {
+                const decoded = Buffer.from(url.split(',')[1] || '', 'base64').toString('utf8');
+                if (forbiddenRaw.some(f => decoded.toLowerCase().includes(f))) return false;
+            } catch {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

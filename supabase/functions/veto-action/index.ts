@@ -9,6 +9,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0"
 import VetoEngine from "../_shared/VetoEngine.ts"
+import { logAudit } from "../_shared/AuditService.ts"
+import { triggerWebhooks } from "../_shared/WebhookService.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,6 +92,12 @@ serve(async (req) => {
     } else if (action === 'revert') {
       if (role !== 'admin') throw new Error('Only admin can revert steps')
       result = VetoEngine.revertStep(state)
+      await logAudit(supabase, {
+        actor_id: role === 'admin' ? 'admin_key' : key,
+        action: 'veto.revert',
+        target_id: matchId,
+        meta: { org_id: match.org_id, step: state.step }
+      })
     } else {
       throw new Error(`Invalid action: ${action}`)
     }
@@ -172,21 +180,12 @@ serve(async (req) => {
     }
 
     // 4. Outbound Webhook Integration
-    if (finalState.finished && sessionData.temp_webhook_url) {
-      try {
-        await fetch(sessionData.temp_webhook_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'veto.completed',
-            matchId,
-            result: finalState.lastPickedMap,
-            fullState: finalState
-          })
-        })
-      } catch (e) {
-        console.error('Webhook failed:', e)
-      }
+    if (finalState.finished) {
+      await triggerWebhooks(supabase, match.org_id, 'veto.finished', {
+        match_id: matchId,
+        last_map: finalState.lastPickedMap,
+        logs: finalState.logs
+      })
     }
 
     return new Response(JSON.stringify({ success: true, state: finalState }), {

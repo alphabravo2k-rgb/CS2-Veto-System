@@ -11,6 +11,8 @@ const express    = require('express');
 const http       = require('http');
 const cors       = require('cors');
 const path       = require('path');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
 const supabase   = require('./infra/supabase');
 
 require('dotenv').config();
@@ -38,8 +40,36 @@ const allowedOrigins = IS_PROD
     ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [])
     : '*';
 
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://*.supabase.co"],
+            connectSrc: ["'self'", "https://*.supabase.co", "wss://*.supabase.co"],
+            imgSrc: ["'self'", "data:", "https://*.supabase.co", "https://*.placeholder.com"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+        },
+    }
+}));
+
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' })); // Reduced from 5mb for security
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests from this IP, please try again later.' }
+});
+
+const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10, // 10 attempts per hour for auth
+    message: { error: 'Too many login attempts. Try again in an hour.' }
+});
+
+app.use('/api/', globalLimiter);
+app.use('/api/auth', authLimiter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) =>

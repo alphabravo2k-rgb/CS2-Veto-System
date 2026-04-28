@@ -143,24 +143,34 @@ export default class VetoEngine {
         return { state: VetoEngine.finalizeSeries(newState) };
     }
 
+    /**
+     * Mark a team as ready. Starts veto when both are ready.
+     */
     static setTeamReady(state: any, teamKey: string, teamName: string) {
-        if (!state.useTimer) return { state, error: 'Timer is not enabled for this match' };
-        if (state.finished) return { state, error: 'Match is already finished' };
-        if (teamKey !== 'A' && teamKey !== 'B') return { state, error: 'Only team A or B can set ready status' };
+        if (!state.useTimer) return { state, bothReady: false };
+        if (state.ready[teamKey]) return { state, bothReady: state.ready.A && state.ready.B };
 
         const newState = VetoEngine._clone(state);
         newState.ready[teamKey] = true;
         newState.logs.push(`[READY] ${teamName} is ready`);
 
-        return { state: newState };
+        const bothReady = newState.ready.A && newState.ready.B;
+        if (bothReady) {
+            const coinFlipDone = !newState.useCoinFlip || newState.coinFlip?.status === 'done';
+            if (coinFlipDone) newState.logs.push('[SYSTEM] Both teams ready — veto timer started');
+        }
+
+        return { state: newState, bothReady };
     }
 
+    /**
+     * Process coin flip call.
+     */
     static coinCall(state: any, call: string, teamAName: string) {
         if (!state.useCoinFlip || !state.coinFlip || state.coinFlip.status !== 'waiting_call') {
             return { state, error: 'Coin flip not applicable at this time' };
         }
 
-        // Deno native CSPRNG
         const randomByte = new Uint8Array(1);
         crypto.getRandomValues(randomByte);
         const result = randomByte[0] % 2 === 0 ? 'heads' : 'tails';
@@ -175,6 +185,9 @@ export default class VetoEngine {
         return { state: newState, result, winner };
     }
 
+    /**
+     * Process coin flip decision.
+     */
     static coinDecision(state: any, winner: string, decision: string, winnerName: string) {
         if (!state.useCoinFlip || !state.coinFlip || state.coinFlip.status !== 'deciding') {
             return { state, error: 'No pending coin flip decision' };
@@ -199,6 +212,25 @@ export default class VetoEngine {
         return { state: newState };
     }
 
+    /**
+     * Reset the veto to initial state.
+     */
+    static resetVeto(state: any) {
+        const freshState = VetoEngine.initializeVeto({
+            format: state.format,
+            mapPool: state.maps.map((m: any) => ({ name: m.name, customImage: m.customImage })),
+            customSequence: null,
+            useTimer: state.useTimer,
+            timerDuration: state.timerDuration,
+            useCoinFlip: state.useCoinFlip,
+        });
+        freshState.logs = ['[ADMIN] Veto reset by admin'];
+        return freshState;
+    }
+
+    /**
+     * Finalize the series if steps are exhausted.
+     */
     static finalizeSeries(state: any) {
         if (state.finished) return state;
         const step = state.sequence[state.step];
@@ -232,6 +264,9 @@ export default class VetoEngine {
         return state;
     }
 
+    /**
+     * Revert a step (stateless logic).
+     */
     static revertStep(state: any) {
         if (state.step <= 0) return { state, error: 'Cannot revert initial state' };
 
@@ -252,7 +287,7 @@ export default class VetoEngine {
         } else if (lastAction.a === 'pick') {
             const mapMatch = lastLog.match(/picked (.*)/);
             if (mapMatch) {
-                const mapName = mapMatch[1].split(' (')[0]; // Handle side choice append
+                const mapName = mapMatch[1].split(' (')[0];
                 const mIdx = newState.maps.findIndex((m: any) => m.name === mapName);
                 if (mIdx !== -1) {
                     newState.maps[mIdx].status = 'available';
@@ -267,10 +302,13 @@ export default class VetoEngine {
                 newState.maps[mIdx].side = null;
                 newState.maps[mIdx].sideChosenBy = null;
             }
-            // If it's a BO1 decider knife, we might need to handle differently, but standard sequence is side.
+            // Clean side history for the team
+            const team = lastAction.t;
+            if (newState.sideHistory?.[team]) {
+                newState.sideHistory[team].pop();
+            }
         }
 
-        // Cleanup decider if it was set
         newState.maps.forEach((m: any) => {
             if (m.status === 'decider') {
                 m.status = 'available';
@@ -282,26 +320,51 @@ export default class VetoEngine {
         return { state: newState };
     }
 
-    static timeout(state: any, teamA: string, teamB: string) {
-        const { valid, reason, currentStep } = VetoEngine.validateTurn(state, 'admin', 'timeout');
-        if (!valid) return { state, error: reason };
+    static handleTimeout(state: any, teamAName: string, teamBName: string) {
+        if (state.finished) return state;
 
-        const availableMaps = state.maps.filter((m: any) => m.status === 'available');
-        if (availableMaps.length === 0) return { state, error: 'No maps available for timeout' };
+        const step = state.sequence[state.step];
+        if (!step) return state;
 
-        const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)].name;
-        const teamName = currentStep.t === 'A' ? teamA : teamB;
+        const teamName = step.t === 'A' ? teamAName : step.t === 'B' ? teamBName : 'System';
+        const available = state.maps.filter((m: any) => m.status === 'available');
 
-        if (currentStep.a === 'ban') {
-            return VetoEngine.banMap(state, currentStep.t, randomMap, `${teamName} (AUTO)`);
-        } else if (currentStep.a === 'pick') {
-            return VetoEngine.pickMap(state, currentStep.t, randomMap, `${teamName} (AUTO)`);
-        } else if (currentStep.a === 'side') {
-            const randomSide = Math.random() > 0.5 ? 'CT' : 'T';
-            return VetoEngine.pickSide(state, currentStep.t, randomSide, `${teamName} (AUTO)`);
+        if ((step.a === 'ban' || step.a === 'pick') && available.length > 0) {
+            const randomMap = available[Math.floor(Math.random() * available.length)];
+            const action = step.a === 'ban' ? 'ban' : 'pick';
+            const newState = VetoEngine._clone(state);
+            const mapIdx = newState.maps.findIndex((m: any) => m.name === randomMap.name);
+
+            if (action === 'ban') {
+                newState.maps[mapIdx].status = 'banned';
+                newState.step++;
+                newState.logs.push(`[AUTO-BAN] ${teamName} → ${randomMap.name} (timeout)`);
+            } else {
+                newState.maps[mapIdx].status = 'picked';
+                newState.maps[mapIdx].pickedBy = step.t;
+                newState.lastPickedMap = randomMap.name;
+                newState.playedMaps.push(randomMap.name);
+                newState.step++;
+                newState.logs.push(`[AUTO-PICK] ${teamName} → ${randomMap.name} (timeout)`);
+            }
+
+            return VetoEngine.finalizeSeries(newState);
         }
 
-        return { state, error: `Auto-action not implemented for ${currentStep.a}` };
+        if (step.a === 'side') {
+            const targetMap = state.lastPickedMap || available[0]?.name;
+            if (!targetMap) return state;
+            const newState = VetoEngine._clone(state);
+            const mapIdx = newState.maps.findIndex((m: any) => m.name === targetMap);
+            const randomSide = Math.random() > 0.5 ? 'CT' : 'T';
+            newState.maps[mapIdx].side = randomSide;
+            newState.lastPickedMap = null;
+            newState.step++;
+            newState.logs.push(`[AUTO-SIDE] ${teamName} → ${randomSide} on ${targetMap} (timeout)`);
+            return VetoEngine.finalizeSeries(newState);
+        }
+
+        return state;
     }
 
     static _clone(state: any) {
