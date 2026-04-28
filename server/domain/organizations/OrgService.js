@@ -153,6 +153,144 @@ class OrgService {
         if (error) throw new Error(`Member addition failed: ${error.message}`);
         return data;
     }
+
+    /**
+     * Create an invite code for an organization.
+     * Fixes Gap 2.5 (Invite link system)
+     */
+    async createInvite(orgId, { creatorId, role = 'member', expiresDays = 7, limit = 1 }) {
+        const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + expiresDays);
+
+        const { data, error } = await supabase
+            .from('org_invites')
+            .insert({
+                org_id: orgId,
+                code,
+                created_by: creatorId,
+                role,
+                expires_at: expiresAt.toISOString(),
+                usage_limit: limit
+            })
+            .select()
+            .single();
+
+        if (error) throw new Error(`Invite creation failed: ${error.message}`);
+        return data;
+    }
+
+    /**
+     * Join an organization via invite code.
+     */
+    async joinByInvite(userId, code) {
+        // 1. Resolve code
+        const { data: invite, error: invErr } = await supabase
+            .from('org_invites')
+            .select('*')
+            .eq('code', code)
+            .single();
+
+        if (invErr || !invite) throw new Error('Invalid or expired invite code');
+        if (new Date() > new Date(invite.expires_at)) throw new Error('Invite code has expired');
+        if (invite.usage_count >= invite.usage_limit) throw new Error('Invite usage limit reached');
+
+        // 2. Add member
+        const { error: memErr } = await supabase
+            .from('org_members')
+            .insert({ org_id: invite.org_id, user_id: userId, role: invite.role });
+
+        if (memErr) throw new Error(`Failed to join: ${memErr.message}`);
+
+        // 3. Increment usage
+        await supabase
+            .from('org_invites')
+            .update({ usage_count: invite.usage_count + 1 })
+            .eq('id', invite.id);
+
+        return { orgId: invite.org_id, role: invite.role };
+    }
+
+    /**
+     * Check if an organization is eligible to create a new match.
+     * Fixes Gap 2.3 & 2.4 (Expiry tracking, Grace period).
+     */
+    async validateSubscription(orgId) {
+        if (orgId === 'global') return { valid: true };
+
+        // 1. Fetch Org Branding/Status
+        const { data: branding, error: brandingErr } = await supabase
+            .from('org_branding')
+            .select('*')
+            .eq('org_id', orgId)
+            .single();
+
+        if (brandingErr || !branding) {
+            return { valid: false, reason: 'Organization not found or inactive' };
+        }
+
+        // 2. Handle Trial Plan
+        if (branding.plan === 'trial') {
+            if (branding.trial_count >= branding.trial_limit) {
+                return { valid: false, reason: 'Trial limit reached. Please upgrade to continue.' };
+            }
+            return { valid: true, type: 'trial' };
+        }
+
+        // 3. Handle Paid Plans (Check Subscription Periods)
+        const { data: periods, error: periodsErr } = await supabase
+            .from('subscription_periods')
+            .select('*')
+            .eq('org_id', orgId)
+            .eq('status', 'active')
+            .order('end_date', { ascending: false })
+            .limit(1);
+
+        if (periodsErr || !periods || periods.length === 0) {
+            return { valid: false, reason: 'No active subscription found. Please renew.' };
+        }
+
+        const activePeriod = periods[0];
+        const now = new Date();
+        const endDate = new Date(activePeriod.end_date);
+        
+        const GRACE_PERIOD_DAYS = 3;
+        const graceDate = new Date(endDate);
+        graceDate.setDate(graceDate.getDate() + GRACE_PERIOD_DAYS);
+
+        if (now > graceDate) {
+            return { valid: false, reason: `Subscription expired on ${endDate.toLocaleDateString()}. Grace period ended.` };
+        }
+
+        if (now > endDate) {
+            return { 
+                valid: true, 
+                warning: `Subscription expired on ${endDate.toLocaleDateString()}. You are currently in a grace period.` 
+            };
+        }
+
+        return { valid: true };
+    }
+
+    /**
+     * Increment the trial count for an organization.
+     */
+    async incrementTrial(orgId) {
+        if (orgId === 'global') return;
+        
+        const { data: branding } = await supabase
+            .from('org_branding')
+            .select('plan, trial_count')
+            .eq('org_id', orgId)
+            .single();
+
+        if (branding && branding.plan === 'trial') {
+            await supabase
+                .from('org_branding')
+                .update({ trial_count: (branding.trial_count || 0) + 1 })
+                .eq('org_id', orgId);
+        }
+    }
 }
 
 module.exports = new OrgService();

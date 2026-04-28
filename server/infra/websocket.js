@@ -1,23 +1,3 @@
-/**
- * ⚡ INFRA LAYER — WEBSOCKET ORCHESTRATION
- * =============================================================================
- * PROBLEM (Architecture Flaw): All WebSocket logic (which is I/O) was mixed
- * into the same file as the veto state machine logic and the REST API routes.
- * This made the 900-line server.js an untestable monolith.
- *
- * PROBLEM (Fragile Logic — Undo): The original undo parsed log strings to
- * determine previous game state. See VetoEngine.js for the fix.
- *
- * PROBLEM (Performance — Memory Leak): The rateLimits Map grew without bound.
- * Keys were never deleted — only entries in the `rooms` object were purged.
- * Under sustained load (40+ events/IP/min) this fills RAM.
- *
- * FIX: WebSocket handlers extracted here. Game transitions delegate to
- * VetoEngine (pure FSM). An undo stack (array of full state snapshots) replaces
- * log-string parsing. The rate limiter now properly evicts expired entries.
- * =============================================================================
- */
-
 'use strict';
 
 const { Server } = require('socket.io');
@@ -25,13 +5,16 @@ const crypto = require('crypto');
 const VetoEngine = require('../domain/veto-engine/VetoEngine');
 const { SEQUENCES } = require('../domain/veto-engine/sequences');
 const TournamentService = require('../domain/tournaments/TournamentService');
-const db = require('./database');
+const OrgService = require('../domain/organizations/OrgService'); // ALIGNED: Unified Org Service
+const supabase = require('./supabase');
 const { log: auditLog } = require('./auditLog');
 const discordWebhook = require('../discord-webhook');
 const settings = require('../settings');
 
-// In-memory room store — keyed by roomId. Still needed for O(1) socket lookups.
+// In-memory room store — keyed by roomId. 
+// FIX (DoS/OOM): Limit total active rooms to prevent RAM exhaustion.
 let rooms = {};
+const MAX_ROOMS = 1000;
 
 // FIX (Memory Leak): Rate limiter map with proper eviction
 const rateLimits = new Map();
@@ -49,13 +32,13 @@ function isRateLimited(ip) {
     return entry.count > RATE_LIMIT_MAX;
 }
 
-// FIX: Periodically evict expired rate limit entries (was missing before)
+// FIX: Periodically evict expired rate limit entries
 setInterval(() => {
     const now = Date.now();
     for (const [ip, entry] of rateLimits.entries()) {
         if (now > entry.resetAt) rateLimits.delete(ip);
     }
-}, 5 * 60_000); // Every 5 minutes
+}, 5 * 60_000);
 
 function getClientIp(socket) {
     return socket.handshake.headers['x-forwarded-for']?.split(',')[0].trim()
@@ -105,44 +88,44 @@ const safeRoomState = (room) => {
     return safe;
 };
 
+// FIX (Database): Refactored to use Supabase and correct veto_sessions schema
 async function saveRoom(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     try {
         const { keys, timerHandle, undoStack, ...data } = room;
-        await db.run(
-            `INSERT INTO match_history (
-               id, org_id, tournament_id, date, teamA, teamB, teamALogo, teamBLogo, format,
-               sequence, step, maps, logs, finished, lastPickedMap, playedMaps,
-               useTimer, ready, timerEndsAt, timerDuration, useCoinFlip, coinFlip, keys_data, tempWebhookUrl
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-               org_id=excluded.org_id, tournament_id=excluded.tournament_id,
-               teamA=excluded.teamA, teamB=excluded.teamB,
-               format=excluded.format, sequence=excluded.sequence, step=excluded.step,
-               maps=excluded.maps, logs=excluded.logs, finished=excluded.finished,
-               lastPickedMap=excluded.lastPickedMap, playedMaps=excluded.playedMaps,
-               useTimer=excluded.useTimer, ready=excluded.ready, timerEndsAt=excluded.timerEndsAt,
-               timerDuration=excluded.timerDuration, useCoinFlip=excluded.useCoinFlip,
-               coinFlip=excluded.coinFlip, keys_data=excluded.keys_data,
-               tempWebhookUrl=excluded.tempWebhookUrl`,
-            [
-                data.id, data.org_id || 'global', data.tournament_id || 'default', data.date,
-                (data.teamA||'').slice(0,50), (data.teamB||'').slice(0,50),
-                data.teamALogo, data.teamBLogo, data.format,
-                JSON.stringify(data.sequence), data.step,
-                JSON.stringify(data.maps), JSON.stringify(data.logs),
-                data.finished ? 1 : 0, data.lastPickedMap || null,
-                JSON.stringify(data.playedMaps),
-                data.useTimer ? 1 : 0, JSON.stringify(data.ready),
-                data.timerEndsAt || null, data.timerDuration || 60,
-                data.useCoinFlip ? 1 : 0,
-                data.coinFlip ? JSON.stringify(data.coinFlip) : null,
-                !data.finished ? JSON.stringify(keys) : null,
-                data.tempWebhookUrl || null,
-            ]
-        );
-    } catch (e) { console.error('[WS] Error saving room:', e.message); }
+        const { error } = await supabase
+            .from('veto_sessions')
+            .upsert({
+                id: data.id,
+                org_id: data.org_id === 'global' ? null : data.org_id,
+                tournament_id: data.tournament_id === 'default' ? null : data.tournament_id,
+                date: data.date,
+                team_a: data.teamA,
+                team_b: data.teamB,
+                team_a_logo: data.teamALogo,
+                team_b_logo: data.teamBLogo,
+                format: data.format,
+                sequence: data.sequence,
+                step: data.step,
+                maps: data.maps,
+                logs: data.logs,
+                finished: data.finished,
+                last_picked_map: data.lastPickedMap,
+                played_maps: data.playedMaps,
+                use_timer: data.useTimer,
+                ready: data.ready,
+                timer_duration: data.timerDuration,
+                use_coin_flip: data.useCoinFlip,
+                coin_flip: data.coinFlip,
+                side_history: data.sideHistory, // FIX: Persist sideHistory for series summary
+                keys_data: !data.finished ? keys : null,
+                temp_webhook_url: data.tempWebhookUrl,
+                finished_at: data.finished ? new Date().toISOString() : null
+            });
+
+        if (error) throw error;
+    } catch (e) { console.error('[WS] Error saving room to Supabase:', e.message); }
 }
 
 async function notifyWebhook(roomId, eventType, data) {
@@ -153,6 +136,34 @@ async function notifyWebhook(roomId, eventType, data) {
         if (adminWebhook) await discordWebhook.sendDiscordNotification(adminWebhook, room, eventType, data);
         if (room.tempWebhookUrl) await discordWebhook.sendDiscordNotification(room.tempWebhookUrl, room, eventType, data);
     } catch { /* Webhooks must never crash the match */ }
+}
+
+async function recordStats(roomId) {
+    try {
+        const room = rooms[roomId];
+        if (!room || !room.finished) return;
+
+        // Extract picks and bans from maps array
+        const stats = room.maps
+            .filter(m => m.status !== 'available')
+            .map(m => ({
+                org_id: room.org_id === 'global' ? null : room.org_id,
+                map_name: m.name,
+                action_type: m.status, // 'picked', 'banned', 'decider'
+                team_a_name: room.teamA,
+                team_b_name: room.teamB,
+                occured_at: new Date().toISOString()
+            }));
+
+        if (stats.length > 0) {
+            const { error } = await supabase
+                .from('match_history_stats')
+                .insert(stats);
+            if (error) throw error;
+        }
+    } catch (e) {
+        console.error('[WS] Error recording stats:', e.message);
+    }
 }
 
 const startTimer = (io, roomId) => {
@@ -174,6 +185,7 @@ const startTimer = (io, roomId) => {
         } else {
             rooms[roomId].timerEndsAt = null;
             notifyWebhook(roomId, 'match_complete', {});
+            recordStats(roomId); // FIX: Record analytics on finish
         }
         saveRoom(roomId);
         io.to(roomId).emit('update_state', safeRoomState(rooms[roomId]));
@@ -189,44 +201,55 @@ function initWebSocket(server, allowedOrigins) {
     const io = new Server(server, { cors: { origin: allowedOrigins } });
     const MASTER_SECRET = process.env.ADMIN_SECRET || 'default_secret';
 
-    // Restore active matches from DB on startup
+    // FIX (Database): Restore active matches from Supabase veto_sessions
     (async () => {
         try {
-            const rows = await db.all(
-                'SELECT * FROM match_history WHERE finished = 0 ORDER BY date DESC'
-            );
+            const { data: rows, error } = await supabase
+                .from('veto_sessions')
+                .select('*')
+                .eq('finished', false)
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
             for (const row of rows) {
                 try {
                     rooms[row.id] = {
                         id: row.id,
+                        org_id: row.org_id || 'global',
                         tournament_id: row.tournament_id || 'default',
                         date: row.date,
-                        teamA: row.teamA, teamB: row.teamB,
-                        teamALogo: row.teamALogo, teamBLogo: row.teamBLogo,
+                        teamA: row.team_a, 
+                        teamB: row.team_b,
+                        teamALogo: row.team_a_logo, 
+                        teamBLogo: row.team_b_logo,
                         format: row.format,
-                        sequence: JSON.parse(row.sequence || '[]'),
-                        step: row.step, finished: row.finished === 1,
-                        maps: JSON.parse(row.maps || '[]'),
-                        logs: JSON.parse(row.logs || '[]'),
-                        lastPickedMap: row.lastPickedMap,
-                        playedMaps: JSON.parse(row.playedMaps || '[]'),
-                        useTimer: row.useTimer === 1,
-                        ready: JSON.parse(row.ready || '{"A":false,"B":false}'),
-                        timerEndsAt: null, timerHandle: null,
-                        timerDuration: row.timerDuration || 60,
-                        useCoinFlip: row.useCoinFlip === 1,
-                        coinFlip: row.coinFlip ? JSON.parse(row.coinFlip) : null,
-                        keys: row.keys_data ? JSON.parse(row.keys_data) : {
+                        sequence: row.sequence,
+                        step: row.step, 
+                        finished: row.finished,
+                        maps: row.maps,
+                        logs: row.logs,
+                        lastPickedMap: row.last_picked_map,
+                        playedMaps: row.played_maps,
+                        useTimer: row.use_timer,
+                        ready: row.ready,
+                        timerEndsAt: null, 
+                        timerHandle: null,
+                        timerDuration: row.timer_duration || 60,
+                        useCoinFlip: row.use_coin_flip,
+                        coinFlip: row.coin_flip,
+                        sideHistory: row.side_history || { A: [], B: [] }, // FIX: Restore sideHistory
+                        keys: row.keys_data || {
                             admin: generateKey(8), A: generateKey(8), B: generateKey(8)
                         },
-                        tempWebhookUrl: isValidWebhook(row.tempWebhookUrl) ? row.tempWebhookUrl : null,
-                        undoStack: [],  // FIX: Initialize undo stack (not persisted across restarts by design)
+                        tempWebhookUrl: isValidWebhook(row.temp_webhook_url) ? row.temp_webhook_url : null,
+                        undoStack: [], 
                     };
                 } catch (parseErr) {
                     console.error(`[WS] Failed to restore room ${row.id}:`, parseErr.message);
                 }
             }
-            console.log(`[WS] Restored ${rows.length} active room(s) from database`);
+            console.log(`[WS] Restored ${rows.length} active room(s) from Supabase`);
         } catch (e) {
             console.error('[WS] Failed to restore rooms:', e.message);
         }
@@ -255,6 +278,11 @@ function initWebSocket(server, allowedOrigins) {
         socket.on('create_match', async (payload) => {
             if (isRateLimited(clientIp)) return socket.emit('error', 'Rate limit exceeded');
 
+            // FIX (DoS): Check total active rooms
+            if (Object.keys(rooms).length >= MAX_ROOMS) {
+                return socket.emit('error', 'Server is at maximum capacity. Try again later.');
+            }
+
             const {
                 orgId, tournamentId, teamA, teamB, teamALogo, teamBLogo,
                 format, customMapNames, customSequence,
@@ -269,7 +297,15 @@ function initWebSocket(server, allowedOrigins) {
             const safeOrgId   = typeof orgId === 'string' && orgId.trim() ? orgId.trim() : 'global';
             const safeTId     = typeof tournamentId === 'string' && tournamentId.trim() ? tournamentId.trim() : 'default';
 
-            // Load map pool from per-tournament config (falls back to CS2 defaults)
+            // FIX (Subscription): Validate Org status before match creation
+            const subCheck = await OrgService.validateSubscription(safeOrgId);
+            if (!subCheck.valid) {
+                return socket.emit('error', subCheck.reason);
+            }
+            if (subCheck.warning) {
+                socket.emit('warning', subCheck.warning);
+            }
+
             let mapPool;
             try {
                 const dbMaps = await TournamentService.getMapPool(safeTId);
@@ -279,7 +315,6 @@ function initWebSocket(server, allowedOrigins) {
                 mapPool = getDefaultMapPool(format).map(n => ({ name: n, customImage: null }));
             }
 
-            // For custom format, override map pool with user selection
             if (format === 'custom' && Array.isArray(customMapNames) && customMapNames.length > 0) {
                 mapPool = customMapNames.map(n => ({ name: String(n).trim().slice(0, 50), customImage: null }));
             }
@@ -311,9 +346,14 @@ function initWebSocket(server, allowedOrigins) {
                 teamALogo: safeLogoA, teamBLogo: safeLogoB,
                 tempWebhookUrl: safeWebhook,
                 timerHandle: null,
-                undoStack: [],  // FIX: Undo stack — stores full state snapshots
+                undoStack: [],
                 ...vetoState,
             };
+
+            // FIX (Trial): Increment trial count if using trial plan
+            if (subCheck.type === 'trial') {
+                await OrgService.incrementTrial(safeOrgId);
+            }
 
             await saveRoom(roomId);
             notifyWebhook(roomId, 'match_created', {});
@@ -420,13 +460,12 @@ function initWebSocket(server, allowedOrigins) {
             const currentStep = room.sequence[room.step];
             if (!currentStep) return;
 
-            // Determine which team is acting — admin can act for anyone
             const actingAs = role === 'admin' ? currentStep.t : role;
 
-            // FIX (Undo Stack): Save snapshot BEFORE mutation so undo can restore it
+            // FIX (Undo Stack): Save snapshot BEFORE mutation
             const snapshot = VetoEngine._clone(room);
-            // Strip non-JSON-safe fields from snapshot
             delete snapshot.timerHandle;
+            delete snapshot.undoStack;
 
             let result;
             const teamName = actingAs === 'A' ? room.teamA : room.teamB;
@@ -443,15 +482,13 @@ function initWebSocket(server, allowedOrigins) {
 
             if (result.error) return socket.emit('error', result.error);
 
-            // Commit state
             rooms[roomId] = {
                 ...room,
                 ...result.state,
                 timerHandle: room.timerHandle,
-                undoStack: [...(room.undoStack || []), snapshot].slice(-20), // Keep last 20 snapshots
+                undoStack: [...(room.undoStack || []), snapshot].slice(-20),
             };
 
-            // Timer management
             if (rooms[roomId].useTimer) {
                 if (rooms[roomId].timerHandle) { clearTimeout(rooms[roomId].timerHandle); rooms[roomId].timerHandle = null; rooms[roomId].timerEndsAt = null; }
                 if (!rooms[roomId].finished && rooms[roomId].ready.A && rooms[roomId].ready.B) {
@@ -459,7 +496,10 @@ function initWebSocket(server, allowedOrigins) {
                 }
             }
 
-            if (rooms[roomId].finished) notifyWebhook(roomId, 'match_complete', {});
+            if (rooms[roomId].finished) {
+                notifyWebhook(roomId, 'match_complete', {});
+                recordStats(roomId); // FIX: Record analytics on finish
+            }
 
             saveRoom(roomId);
             io.to(roomId).emit('update_state', safeRoomState(rooms[roomId]));
@@ -472,7 +512,6 @@ function initWebSocket(server, allowedOrigins) {
             const room = rooms[roomId];
             if (!room) return;
 
-            // FIX: Use the undo stack instead of parsing log strings
             const { state, error } = VetoEngine.undoStep(room.undoStack || []);
             if (error) return socket.emit('error', error);
 
@@ -533,7 +572,6 @@ function initWebSocket(server, allowedOrigins) {
     return io;
 }
 
-// Expose room store for admin REST routes that need match state
 function getRooms() { return rooms; }
 function deleteRoom(roomId) {
     const room = rooms[roomId];

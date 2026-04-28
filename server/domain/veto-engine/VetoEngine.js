@@ -58,6 +58,7 @@ class VetoEngine {
             status: 'available',  // 'available' | 'banned' | 'picked' | 'decider'
             pickedBy: null,       // 'A' | 'B' | null
             side: null,           // 'CT' | 'T' | 'Knife' | null
+            sideChosenBy: null,   // 'A' | 'B' | null
         }));
 
         return {
@@ -69,6 +70,7 @@ class VetoEngine {
             finished: false,
             lastPickedMap: null,
             playedMaps: [],
+            sideHistory: { A: [], B: [] }, // NEW: Track side choices per team
             useTimer: !!useTimer,
             timerDuration: Number(timerDuration) || 60,
             useCoinFlip: !!useCoinFlip,
@@ -174,6 +176,11 @@ class VetoEngine {
         if (!valid) return { state, error: reason };
         if (currentStep.a !== 'side') return { state, error: `Expected action: ${currentStep.a}` };
 
+        // GAP FIX: Validation that a team can't pick the same side twice in a series
+        if (state.sideHistory[teamKey].includes(side)) {
+            return { state, error: `You have already chosen ${side} in this series. Must choose the opposite.` };
+        }
+
         // Find the map that was just picked (lastPickedMap) or the last available
         const targetMap = state.lastPickedMap
             || (state.maps.find(m => m.status === 'available')?.name);
@@ -185,6 +192,8 @@ class VetoEngine {
 
         const newState = VetoEngine._clone(state);
         newState.maps[mapIdx].side = side;
+        newState.maps[mapIdx].sideChosenBy = teamKey;
+        newState.sideHistory[teamKey].push(side);
         newState.lastPickedMap = null;
         newState.step++;
 

@@ -105,22 +105,7 @@ class PaymentService {
                 .single();
 
             if (payment) {
-                // Upgrade organization
-                await supabase
-                    .from('org_branding')
-                    .update({ 
-                        plan: payment.plan, 
-                        trial_count: 0, 
-                        is_registered: true 
-                    })
-                    .eq('org_id', payment.org_id);
-
-                await log({ 
-                    actor_id: 'SYSTEM', 
-                    action: 'payment_confirmed', 
-                    target_id: payment.org_id, 
-                    meta: { payment_id, plan: payment.plan } 
-                });
+                await this.activateSubscription(payment, payment_id);
             }
         } else if (payment_status === 'expired') {
             await supabase
@@ -133,14 +118,59 @@ class PaymentService {
     }
 
     /**
+     * Internal: Activate or renew a subscription period.
+     */
+    async activateSubscription(payment, externalRef) {
+        const months = payment.period_months || 1;
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(startDate.getMonth() + months);
+
+        // 1. Create subscription period record (Fixes Gap 2.3)
+        await supabase
+            .from('subscription_periods')
+            .insert({
+                org_id: payment.org_id,
+                plan_id: payment.plan,
+                start_date: startDate.toISOString(),
+                end_date: endDate.toISOString(),
+                status: 'active',
+                payment_id: payment.id
+            });
+
+        // 2. Upgrade organization branding/status
+        await supabase
+            .from('org_branding')
+            .update({ 
+                plan: payment.plan, 
+                trial_count: 0, 
+                is_registered: true 
+            })
+            .eq('org_id', payment.org_id);
+
+        // 3. Log event
+        await log({ 
+            actor_id: 'SYSTEM', 
+            action: 'payment_confirmed', 
+            target_id: payment.org_id, 
+            meta: { payment_id: externalRef, plan: payment.plan, expires_at: endDate.toISOString() } 
+        });
+
+        // 4. TODO: Send Email Receipt (Gap 2.4)
+        console.log(`[PaymentService] Subscription activated for Org ${payment.org_id}. Expires: ${endDate.toISOString()}`);
+    }
+
+    /**
      * Verify NOWPayments HMAC-SHA512 signature.
+     * FIX: NOWPayments recommends using the raw body, but if only JSON is available,
+     * sorted keys are the standard fallback for their IPN.
      */
     verifySignature(payload, signature) {
         if (!signature || !process.env.NOWPAYMENTS_IPN_SECRET) return false;
         
-        // NOWPayments sends payload as JSON, but we need sorted keys string for some versions,
-        // or the raw body. Usually, it's the raw body string.
         const hmac = crypto.createHmac('sha512', process.env.NOWPAYMENTS_IPN_SECRET);
+        
+        // NOWPayments IPN verification often requires sorting keys alphabetically
         const sortedPayload = Object.keys(payload).sort().reduce((acc, key) => {
             acc[key] = payload[key];
             return acc;
@@ -192,15 +222,8 @@ class PaymentService {
             .single();
 
         if (payment) {
-            await supabase
-                .from('org_branding')
-                .update({ 
-                    plan: payment.plan, 
-                    trial_count: 0, 
-                    is_registered: true 
-                })
-                .eq('org_id', payment.org_id);
-
+            await this.activateSubscription(payment, `MANUAL-${adminUserId}`);
+            
             await log({ 
                 actor_id: adminUserId, 
                 action: 'payment.manual_approve', 
