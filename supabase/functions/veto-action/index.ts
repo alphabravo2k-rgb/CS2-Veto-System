@@ -87,6 +87,9 @@ serve(async (req) => {
       result = VetoEngine.pickSide(state, actingAs, data.side, teamName)
     } else if (action === 'timeout') {
       result = VetoEngine.timeout(state, teamA, teamB)
+    } else if (action === 'revert') {
+      if (role !== 'admin') throw new Error('Only admin can revert steps')
+      result = VetoEngine.revertStep(state)
     } else {
       throw new Error(`Invalid action: ${action}`)
     }

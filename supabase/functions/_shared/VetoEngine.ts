@@ -232,6 +232,56 @@ export default class VetoEngine {
         return state;
     }
 
+    static revertStep(state: any) {
+        if (state.step <= 0) return { state, error: 'Cannot revert initial state' };
+
+        const newState = VetoEngine._clone(state);
+        newState.finished = false;
+        newState.step--;
+        
+        const lastAction = newState.sequence[newState.step];
+        const lastLog = newState.logs.pop();
+
+        if (lastAction.a === 'ban') {
+            const mapMatch = lastLog.match(/banned (.*)/);
+            if (mapMatch) {
+                const mapName = mapMatch[1];
+                const mIdx = newState.maps.findIndex((m: any) => m.name === mapName);
+                if (mIdx !== -1) newState.maps[mIdx].status = 'available';
+            }
+        } else if (lastAction.a === 'pick') {
+            const mapMatch = lastLog.match(/picked (.*)/);
+            if (mapMatch) {
+                const mapName = mapMatch[1].split(' (')[0]; // Handle side choice append
+                const mIdx = newState.maps.findIndex((m: any) => m.name === mapName);
+                if (mIdx !== -1) {
+                    newState.maps[mIdx].status = 'available';
+                    newState.maps[mIdx].pickedBy = null;
+                    newState.maps[mIdx].side = null;
+                    newState.playedMaps = newState.playedMaps.filter((m: string) => m !== mapName);
+                }
+            }
+        } else if (lastAction.a === 'side') {
+            const mIdx = newState.maps.findIndex((m: any) => m.side && m.side !== 'Knife');
+            if (mIdx !== -1) {
+                newState.maps[mIdx].side = null;
+                newState.maps[mIdx].sideChosenBy = null;
+            }
+            // If it's a BO1 decider knife, we might need to handle differently, but standard sequence is side.
+        }
+
+        // Cleanup decider if it was set
+        newState.maps.forEach((m: any) => {
+            if (m.status === 'decider') {
+                m.status = 'available';
+                m.side = null;
+                newState.playedMaps = newState.playedMaps.filter((pm: string) => pm !== m.name);
+            }
+        });
+
+        return { state: newState };
+    }
+
     static timeout(state: any, teamA: string, teamB: string) {
         const { valid, reason, currentStep } = VetoEngine.validateTurn(state, 'admin', 'timeout');
         if (!valid) return { state, error: reason };

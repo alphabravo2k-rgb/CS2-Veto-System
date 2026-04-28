@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import SEO from '../components/SEO';
 import useVetoStore from '../store/useVetoStore';
 import useOrgBranding from '../hooks/useOrgBranding';
 import MapCard from '../components/veto/MapCard';
@@ -28,17 +29,17 @@ const VetoRoom = () => {
     const { 
         gameState, 
         myRole, 
-        roomUserCount, 
         isConnected, 
-        isDisconnected,
-        serverError,
-        connectToRoom, 
-        disconnectRoom, 
+        initSocket, 
         sendAction, 
-        sendReady, 
         sendCoinCall, 
-        sendCoinDecide 
+        sendCoinDecide,
+        reportResult
     } = useVetoStore();
+
+    const [scoreA, setScoreA] = useState('');
+    const [scoreB, setScoreB] = useState('');
+    const [isReporting, setIsReporting] = useState(false);
 
     const { branding } = useOrgBranding(gameState?.org_id);
     const [showCopyNotify, setShowCopyNotify] = useState(false);
@@ -113,6 +114,7 @@ const VetoRoom = () => {
     if (!gameState) {
         return (
             <div className="loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050a14', color: '#fff' }}>
+                <SEO title="Loading Veto" description="Initializing Veto Session..." />
                 <AnimatedBackground />
                 <motion.div 
                     initial={{ opacity: 0 }}
@@ -355,7 +357,69 @@ const VetoRoom = () => {
                             </NeonText>
                         </div>
                         {isMyTurn && <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 900, letterSpacing: '2px' }}>⚡ YOUR ACTION REQUIRED</div>}
+                        {myRole === 'admin' && gameState.step > 0 && !gameState.finished && (
+                            <button 
+                                onClick={() => sendAction(matchId, 'revert', {}, key)}
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#ff4444', padding: '8px 16px', borderRadius: '4px', fontSize: '10px', fontWeight: 900, cursor: 'pointer', letterSpacing: '2px' }}
+                            >
+                                ↩ UNDO STEP
+                            </button>
+                        )}
                     </div>
+
+                    {gameState.finished && myRole === 'admin' && !gameState.result_reported_at && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="glass-panel" 
+                            style={{ padding: '32px', border: '1px solid #ffd70044', background: '#ffd70005', marginBottom: '32px' }}
+                        >
+                            <h3 style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '2px', color: '#ffd700', marginBottom: '24px' }}>REPORT FINAL MATCH SCORE</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '32px', justifyContent: 'center' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>{gameState.teamA}</div>
+                                    <input 
+                                        type="number" 
+                                        value={scoreA}
+                                        onChange={(e) => setScoreA(e.target.value)}
+                                        style={{ width: '80px', height: '60px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', textAlign: 'center', fontSize: '24px', color: '#fff', fontWeight: 900 }}
+                                    />
+                                </div>
+                                <div style={{ fontSize: '24px', fontWeight: 900, opacity: 0.2, marginTop: '20px' }}>VS</div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', opacity: 0.5, marginBottom: '8px' }}>{gameState.teamB}</div>
+                                    <input 
+                                        type="number" 
+                                        value={scoreB}
+                                        onChange={(e) => setScoreB(e.target.value)}
+                                        style={{ width: '80px', height: '60px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', textAlign: 'center', fontSize: '24px', color: '#fff', fontWeight: 900 }}
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                onClick={async () => {
+                                    setIsReporting(true);
+                                    const winner = parseInt(scoreA) > parseInt(scoreB) ? 'A' : 'B';
+                                    await reportResult(matchId, parseInt(scoreA), parseInt(scoreB), winner, key);
+                                    setIsReporting(false);
+                                }}
+                                disabled={isReporting || scoreA === '' || scoreB === ''}
+                                className="premium-button"
+                                style={{ width: '100%', marginTop: '32px', height: '50px' }}
+                            >
+                                {isReporting ? 'UPLOADING...' : 'SUBMIT AUTHORITATIVE RESULT'}
+                            </button>
+                        </motion.div>
+                    )}
+
+                    {gameState.result_reported_at && (
+                        <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', marginBottom: '32px', border: '1px solid #00ff8844', background: '#00ff8805' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 900, color: '#00ff88', letterSpacing: '2px', marginBottom: '8px' }}>FINAL SCORE REPORTED</div>
+                            <div style={{ fontSize: '24px', fontWeight: 900 }}>
+                                {gameState.teamA} <span style={{ color: '#00ff88' }}>{gameState.score_a}</span> - <span style={{ color: '#00ff88' }}>{gameState.score_b}</span> {gameState.teamB}
+                            </div>
+                        </div>
+                    )}
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
                         <AnimatePresence mode="popLayout">

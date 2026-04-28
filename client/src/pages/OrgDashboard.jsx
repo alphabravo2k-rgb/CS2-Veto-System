@@ -3,8 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
 import useOrgBranding from '../hooks/useOrgBranding';
-import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, RefreshIcon, CheckIcon } from '../components/SharedUI';
+import { AnimatedBackground, ShieldIcon, ActivityIcon, UsersIcon, GlobeIcon, RefreshIcon, CheckIcon, ListIcon } from '../components/SharedUI';
 import { supabase } from '../utils/supabase.js';
+import AuditLogViewer from '../components/org/AuditLogViewer';
 
 /**
  * ⚡ UI LAYER — PREMIUM ORGANIZATION DASHBOARD
@@ -22,8 +23,11 @@ export default function OrgDashboard() {
     const [org,         setOrg]         = useState(null);
     const [tournaments, setTournaments] = useState([]);
     const [members,     setMembers]     = useState([]);
+    const [invites,     setInvites]     = useState([]);
     const [tab,         setTab]         = useState('tournaments');
+    const [userRole,    setUserRole]    = useState(null);
     const [membersLoading, setMembersLoading] = useState(false);
+    const [invitesLoading, setInvitesLoading] = useState(false);
     const [loading,     setLoading]     = useState(true);
     const [error,       setError]       = useState('');
 
@@ -54,6 +58,16 @@ export default function OrgDashboard() {
                 setOrg(orgData);
                 setTournaments(tData || []);
                 
+                // Fetch User Role
+                const { data: roleData } = await supabase
+                    .from('org_members')
+                    .select('role')
+                    .eq('org_id', orgId)
+                    .eq('user_id', user.id)
+                    .single();
+                
+                if (roleData) setUserRole(roleData.role);
+
                 const { data: brandingData } = await supabase
                     .from('org_branding')
                     .select('*')
@@ -99,11 +113,37 @@ export default function OrgDashboard() {
         }
     };
 
+    const loadInvites = async () => {
+        setInvitesLoading(true);
+        try {
+            const { data } = await supabase
+                .from('org_invites')
+                .select('*')
+                .eq('org_id', orgId);
+            if (data) setInvites(data);
+        } finally {
+            setInvitesLoading(false);
+        }
+    };
+
+    const revokeInvite = async (id) => {
+        const { error } = await supabase.from('org_invites').delete().eq('id', id);
+        if (!error) setInvites(prev => prev.filter(i => i.id !== id));
+        else alert('Failed to revoke invite');
+    };
+
     useEffect(() => {
-        if (tab === 'members') loadMembers();
+        if (tab === 'members') {
+            loadMembers();
+            loadInvites();
+        }
     }, [tab]);
 
     const saveBranding = async () => {
+        if (userRole !== 'admin') {
+            alert('Only organization admins can modify branding.');
+            return;
+        }
         setSavingBrand(true);
         try {
             const { error } = await supabase
@@ -203,9 +243,16 @@ export default function OrgDashboard() {
                         </div>
                     </div>
                     <div className="org-header-right" style={{ display: 'flex', gap: '16px' }}>
-                        <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setEditBranding(true)}>
-                            EDIT BRANDING
-                        </button>
+                        {userRole === 'admin' && (
+                            <>
+                                <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => navigate(`/org/${orgId}/developer`)}>
+                                    DEVELOPER PORTAL
+                                </button>
+                                <button className="premium-button" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setEditBranding(true)}>
+                                    EDIT BRANDING
+                                </button>
+                            </>
+                        )}
                         <button onClick={createTournament} className="premium-button">
                             CREATE TOURNAMENT
                         </button>
@@ -216,7 +263,7 @@ export default function OrgDashboard() {
             <div className="org-body" style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px' }}>
                 {/* ── TABS ── */}
                 <div className="tab-nav" style={{ display: 'flex', gap: '32px', marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    {['tournaments', 'members'].map(t => (
+                    {['tournaments', 'members', 'logs'].map(t => (
                         <button 
                             key={t} 
                             style={{ 
@@ -283,24 +330,33 @@ export default function OrgDashboard() {
                             </div>
                         )}
 
+                                </div>
+                            </div>
+                        )}
+
                         {tab === 'members' && (
                             <div className="tab-pane">
-                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>MEMBERS</h2>
-                                <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                    <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px' }}>ACTIVE MEMBERS</h2>
+                                    <button className="premium-button" style={{ padding: '8px 24px', fontSize: '12px' }} onClick={() => {
+                                        const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+                                        supabase.from('org_invites').insert([{ org_id: orgId, code, created_by: user.id }]).then(() => loadInvites());
+                                    }}>GENERATE INVITE CODE</button>
+                                </div>
+                                
+                                <div className="glass-panel" style={{ overflow: 'hidden', marginBottom: '40px' }}>
                                     {membersLoading ? (
                                         <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>LOADING MEMBERS...</div>
-                                    ) : members.length === 0 ? (
-                                        <div style={{ padding: '80px', textAlign: 'center', opacity: 0.2, letterSpacing: '4px' }}>NO MEMBERS FOUND. INVITE YOUR TEAM.</div>
                                     ) : (
                                         <div className="members-list">
                                             {members.map(m => (
-                                                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 32px', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.3s' }} className="member-row">
+                                                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 32px', borderBottom: '1px solid rgba(255,255,255,0.05)' }} className="member-row">
                                                     <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: `${accentColor}22`, color: accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: `1px solid ${accentColor}44` }}>
                                                         {(m.username || 'U').charAt(0).toUpperCase()}
                                                     </div>
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{m.display_name || m.username}</div>
-                                                        <div style={{ fontSize: '0.8rem', opacity: 0.4, fontWeight: 700 }}>@{m.username} / {m.email || 'N/A'}</div>
+                                                        <div style={{ fontSize: '0.8rem', opacity: 0.4, fontWeight: 700 }}>@{m.username}</div>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <ShieldIcon size={14} color={m.role === 'admin' ? accentColor : 'rgba(255,255,255,0.4)'} />
@@ -311,6 +367,50 @@ export default function OrgDashboard() {
                                         </div>
                                     )}
                                 </div>
+
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '24px' }}>PENDING INVITES</h2>
+                                <div className="glass-panel" style={{ padding: '24px' }}>
+                                    {invites.length === 0 ? (
+                                        <div style={{ opacity: 0.3, fontSize: '12px', textAlign: 'center', padding: '20px' }}>NO ACTIVE INVITE CODES</div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            {invites.map(inv => (
+                                                <div key={inv.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px 24px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '14px', fontWeight: 900, letterSpacing: '2px', color: accentColor }}>{inv.code}</div>
+                                                        <div style={{ fontSize: '10px', opacity: 0.5 }}>EXPIRES: {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString() : 'NEVER'}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                                        <button 
+                                                            className="glass-panel" 
+                                                            style={{ padding: '8px 16px', fontSize: '10px', fontWeight: 900, cursor: 'pointer' }}
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(inv.code);
+                                                                alert('Copied!');
+                                                            }}
+                                                        >
+                                                            COPY CODE
+                                                        </button>
+                                                        <button 
+                                                            className="glass-panel" 
+                                                            style={{ padding: '8px 16px', fontSize: '10px', fontWeight: 900, cursor: 'pointer', color: '#ff4444' }}
+                                                            onClick={() => revokeInvite(inv.id)}
+                                                        >
+                                                            REVOKE
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'logs' && (
+                            <div className="tab-pane">
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '2px', marginBottom: '32px' }}>AUDIT DATA</h2>
+                                <AuditLogViewer orgId={orgId} />
                             </div>
                         )}
                     </motion.div>

@@ -43,6 +43,8 @@ const SupportHub = React.lazy(() => import('./pages/SupportHub'));
 const QuickVeto   = React.lazy(() => import('./pages/QuickVeto'));
 const StreamOverlay = React.lazy(() => import('./pages/StreamOverlay')); // NEW: Streamer Mode
 const TeamManager = React.lazy(() => import('./pages/TeamManager')); // NEW: Team Repository
+const DevPortal = React.lazy(() => import('./pages/DevPortal'));
+const MatchResult = React.lazy(() => import('./pages/MatchResult'));
 
 import AuthVerificationGuard from './components/auth/AuthVerificationGuard';
 
@@ -114,6 +116,7 @@ export default function App() {
                             <Route path="/support"   element={<SupportHub />} />
                             <Route path="/quick-veto" element={<QuickVeto />} />
                             <Route path="/veto/:matchId" element={<VetoRoom />} />
+                            <Route path="/m/:matchId" element={<MatchResult />} />
                             <Route path="/overlay/:matchId" element={<StreamOverlay />} />
 
                             {/* ── PROTECTED OPERATIONS ── */}
@@ -127,6 +130,7 @@ export default function App() {
                             
                             {/* Unified Tournament Routes */}
                             <Route path="/org/:orgId/tournament/:tournamentId" element={<ProtectedRoute><TournamentDashboard /></ProtectedRoute>} />
+                            <Route path="/org/:orgId/developer" element={<ProtectedRoute><DevPortal /></ProtectedRoute>} />
                             <Route path="/org/:orgId/tournament/:tournamentId/veto/:matchId" element={<VetoRoom />} />
 
                             {/* ── LEGACY SIGNAL COMPATIBILITY ── */}

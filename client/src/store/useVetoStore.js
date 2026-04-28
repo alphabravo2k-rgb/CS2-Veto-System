@@ -174,6 +174,16 @@ const useVetoStore = create((set, get) => ({
             headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
         if (error) set({ serverError: error.message });
+    },
+
+    reportResult: async (matchId, scoreA, scoreB, winnerId, key) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { error } = await supabase.functions.invoke('report-result', {
+            body: { matchId, scoreA, scoreB, winnerId, key },
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+        });
+        if (error) set({ serverError: error.message });
+        return !error;
     }
 }));
 
