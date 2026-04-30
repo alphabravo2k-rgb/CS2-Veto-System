@@ -22,12 +22,20 @@ Deno.serve(async (req) => {
     // 1. Verify Admin Key
     const { data: sessionData, error: fetchErr } = await supabase
       .from('veto_sessions')
-      .select('keys_data, team_a, team_b, org_id')
+      .select('team_a, team_b, org_id')
       .eq('id', matchId)
       .single()
 
     if (fetchErr || !sessionData) throw new Error('Match not found')
-    if (sessionData.keys_data.admin !== key) throw new Error('Unauthorized: Admin key required')
+
+    const { data: keysData, error: keysErr } = await supabase
+      .from('veto_keys')
+      .select('keys_data')
+      .eq('match_id', matchId)
+      .single()
+
+    if (keysErr || !keysData) throw new Error('Keys not found')
+    if (keysData.keys_data.admin !== key) throw new Error('Unauthorized: Admin key required')
 
     // 2. Update Session
     const { error: updateErr } = await supabase

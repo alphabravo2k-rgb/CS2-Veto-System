@@ -286,11 +286,11 @@ const OrgList = () => {
                 )}
             </AnimatePresence>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style>{`
                 @media (max-width: 900px) {
                     .motion-div { grid-template-columns: 1fr !important; }
                 }
-            `}} />
+            `}</style>
         </div>
     );
 };

@@ -43,7 +43,7 @@ export default function QuickVeto() {
                 } catch(e) {}
                 throw new Error(msg);
             }
-            navigate(`/veto/${data.matchId}?key=${data.keys.admin}`);
+            navigate(`/veto/${data.matchId}?key=${data.keys.admin}`, { state: { keys: data.keys } });
         } catch (e) {
             setError(e.message || 'FAILED TO INITIALIZE VETO TERMINAL');
         } finally {

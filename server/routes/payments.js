@@ -32,7 +32,7 @@ router.post('/create', requireAuth, requireOrgAdmin, async (req, res) => {
 router.post('/webhook', async (req, res) => {
     try {
         const signature = req.headers['x-nowpayments-sig'];
-        const result = await PaymentService.handleWebhook(req.body, signature);
+        const result = await PaymentService.handleWebhook(req.body, signature, req.rawBody);
         res.json(result);
     } catch (err) {
         console.error('[Payments Webhook Error]', err.message);

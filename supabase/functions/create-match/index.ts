@@ -107,14 +107,13 @@ serve(async (req) => {
     const keys = { admin: generateKey(16), A: generateKey(16), B: generateKey(16) };
 
     // 5. Insert into Postgres
-    const { error: insertError } = await supabase
+    const { error: insertSessionError } = await supabase
       .from('veto_sessions')
       .insert({
         id: roomId,
         org_id: safeOrgId,
         tournament_id: safeTId,
         date: new Date().toISOString(),
-        keys_data: keys,
         team_a: safeTeamA,
         team_b: safeTeamB,
         team_a_logo: teamALogo || null,
@@ -137,7 +136,16 @@ serve(async (req) => {
         timer_ends_at: vetoState.timerEndsAt
       })
 
-    if (insertError) throw new Error(insertError.message)
+    if (insertSessionError) throw new Error(insertSessionError.message)
+
+    const { error: insertKeysError } = await supabase
+      .from('veto_keys')
+      .insert({
+        match_id: roomId,
+        keys_data: keys
+      })
+
+    if (insertKeysError) throw new Error(insertKeysError.message)
 
     return new Response(JSON.stringify({ matchId: roomId, roomId, keys }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

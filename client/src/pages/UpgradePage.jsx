@@ -365,7 +365,7 @@ const UpgradePage = () => {
                 </p>
             </footer>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style>{`
                 .pulse-dot {
                     width: 10px;
                     height: 10px;
@@ -378,7 +378,7 @@ const UpgradePage = () => {
                     50% { transform: scale(1.3); opacity: 0.5; }
                     100% { transform: scale(0.9); opacity: 1; }
                 }
-            `}} />
+            `}</style>
         </div>
     );
 };

@@ -69,12 +69,17 @@ const useVetoStore = create((set, get) => ({
             if (orgData) set({ branding: orgData.branding });
         }
 
-        // 3. Authorization (Local check for role)
-        const keys = initialData.keys_data || {};
+        // 3. Authorization (Securely via RPC)
         let role = 'viewer';
-        if (key === keys.admin) role = 'admin';
-        else if (key === keys.A) role = 'A';
-        else if (key === keys.B) role = 'B';
+        if (key) {
+            const { data: rpcRole, error: rpcError } = await supabase.rpc('get_veto_role', {
+                match_id_param: matchId,
+                provided_key: key
+            });
+            if (!rpcError && rpcRole) {
+                role = rpcRole;
+            }
+        }
         set({ myRole: role });
 
         // 4. Set up Realtime Subscription

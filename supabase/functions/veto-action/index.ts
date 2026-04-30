@@ -41,7 +41,15 @@ serve(async (req) => {
     if (match.finished) throw new Error('Match already finished')
 
     // 2. Authorize
-    const keys = match.keys_data || {}
+    const { data: keysData, error: keysError } = await supabase
+      .from('veto_keys')
+      .select('keys_data')
+      .eq('match_id', matchId)
+      .single()
+
+    if (keysError || !keysData) throw new Error('Match keys not found')
+    
+    const keys = keysData.keys_data || {}
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     
     let role = 'viewer'

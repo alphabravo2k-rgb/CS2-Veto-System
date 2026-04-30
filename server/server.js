@@ -53,7 +53,12 @@ app.use(helmet({
 }));
 
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json({ limit: '1mb' })); // Reduced from 5mb for security
+app.use(express.json({ 
+    limit: '1mb',
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+})); // Reduced from 5mb for security
 
 // Rate Limiting
 const globalLimiter = rateLimit({

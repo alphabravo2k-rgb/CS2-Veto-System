@@ -83,9 +83,9 @@ class PaymentService {
     /**
      * Handle incoming NOWPayments IPN webhook.
      */
-    async handleWebhook(payload, signature) {
+    async handleWebhook(payload, signature, rawBodyBuffer) {
         // 1. Verify signature
-        if (!this.verifySignature(payload, signature)) {
+        if (!this.verifySignature(payload, signature, rawBodyBuffer)) {
             console.error('[PaymentService] Invalid Webhook Signature');
             throw new Error('Invalid signature');
         }
@@ -162,24 +162,27 @@ class PaymentService {
 
     /**
      * Verify NOWPayments HMAC-SHA512 signature.
-     * FIX: NOWPayments recommends using the raw body, but if only JSON is available,
-     * sorted keys are the standard fallback for their IPN.
+     * NOWPayments recommends using the raw body.
      */
-    verifySignature(payload, signature) {
+    verifySignature(payload, signature, rawBodyBuffer) {
         if (!signature || !process.env.NOWPAYMENTS_IPN_SECRET) return false;
         
         const hmac = crypto.createHmac('sha512', process.env.NOWPAYMENTS_IPN_SECRET);
         
-        // NOWPayments IPN verification often requires sorting keys alphabetically
-        const sortedPayload = Object.keys(payload).sort().reduce((acc, key) => {
-            acc[key] = payload[key];
-            return acc;
-        }, {});
+        if (rawBodyBuffer) {
+            hmac.update(rawBodyBuffer);
+        } else {
+            // NOWPayments IPN verification often requires sorting keys alphabetically if raw body is missing
+            const sortedPayload = Object.keys(payload).sort().reduce((acc, key) => {
+                acc[key] = payload[key];
+                return acc;
+            }, {});
+            
+            const checkString = JSON.stringify(sortedPayload);
+            hmac.update(checkString);
+        }
         
-        const checkString = JSON.stringify(sortedPayload);
-        hmac.update(checkString);
         const expected = hmac.digest('hex');
-        
         return expected === signature;
     }
 

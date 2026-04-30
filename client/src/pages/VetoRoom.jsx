@@ -99,8 +99,9 @@ const VetoRoom = () => {
     };
 
     const copyInviteLink = (targetRole) => {
-        if (!gameState?.keys_data) return;
-        const keyToUse = gameState.keys_data[targetRole];
+        const keysToUse = location.state?.keys;
+        if (!keysToUse) return;
+        const keyToUse = keysToUse[targetRole];
         const baseUrl = window.location.origin + window.location.pathname;
         navigator.clipboard.writeText(`${baseUrl}?key=${keyToUse}`);
         setShowCopyNotify(true);
@@ -312,7 +313,7 @@ const VetoRoom = () => {
                                     </GlowButton>
                                 )}
 
-                                {myRole === 'admin' && (
+                                {myRole === 'admin' && location.state?.keys && (
                                     <>
                                         <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink('A')}>
                                             COPY TEAM A LINK
@@ -326,7 +327,7 @@ const VetoRoom = () => {
                                     </>
                                 )}
                                 
-                                {myRole !== 'admin' && (
+                                {myRole !== 'admin' && location.state?.keys && (
                                     <button className="glass-panel" style={{ width: '100%', padding: '14px', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', fontWeight: 900, borderRadius: '12px', letterSpacing: '2px', cursor: 'pointer' }} onClick={() => copyInviteLink(myRole || 'viewer')}>
                                         COPY MATCH TERMINAL LINK
                                     </button>
