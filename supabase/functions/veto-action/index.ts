@@ -137,22 +137,22 @@ serve(async (req) => {
     if (updateError) throw new Error(updateError.message)
 
     // 5. Auto-Advance Bracket
-    if (finalState.finished && initialData.tournament_id) {
+    if (finalState.finished && match.tournament_id) {
         const { data: bracket } = await supabase
             .from('tournament_brackets')
             .select('*')
-            .eq('tournament_id', initialData.tournament_id)
+            .eq('tournament_id', match.tournament_id)
             .single()
 
         if (bracket && bracket.structure) {
             const structure = bracket.structure
             let updated = false
             const winnerTeam = finalState.logs[finalState.logs.length - 1]?.includes(finalState.teamA) ? finalState.teamA : finalState.teamB
-            const winnerId = finalState.logs[finalState.logs.length - 1]?.includes(finalState.teamA) ? initialData.team_a_id : initialData.team_b_id
+            const winnerId = finalState.logs[finalState.logs.length - 1]?.includes(finalState.teamA) ? match.team_a_id : match.team_b_id
 
             // Find current match in bracket
             for (const round of structure.rounds) {
-                const matchNode = round.matches.find((m: any) => m.matchId === matchId || (m.teamA?.id === initialData.team_a_id && m.teamB?.id === initialData.team_b_id))
+                const matchNode = round.matches.find((m: any) => m.matchId === matchId || (m.teamA?.id === match.team_a_id && m.teamB?.id === match.team_b_id))
                 if (matchNode) {
                     matchNode.winner = winnerId
                     updated = true

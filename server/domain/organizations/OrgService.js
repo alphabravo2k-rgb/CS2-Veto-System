@@ -22,7 +22,7 @@ class OrgService {
         if (!this.isSafeLogoUrl(logoUrl)) throw new Error('Invalid logo URL: XSS detected or unsupported format');
         const { data: org, error: orgErr } = await supabase
             .from('orgs')
-            .insert({ id: slug, name, slug })
+            .insert({ id: slug, name, slug, owner_id: userId })
             .select()
             .single();
 

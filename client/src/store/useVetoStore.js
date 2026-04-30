@@ -62,7 +62,7 @@ const useVetoStore = create((set, get) => ({
         // 2.1 Fetch Branding
         if (initialData.org_id) {
             const { data: orgData } = await supabase
-                .from('organizations')
+                .from('orgs')
                 .select('branding')
                 .eq('id', initialData.org_id)
                 .single();

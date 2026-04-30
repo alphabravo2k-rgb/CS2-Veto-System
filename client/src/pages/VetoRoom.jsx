@@ -8,7 +8,7 @@ import MapCard from '../components/veto/MapCard';
 import CoinFlipOverlay from '../components/veto/CoinFlipOverlay';
 import LogLineRenderer from '../components/veto/LogLineRenderer';
 import Countdown from '../components/veto/Countdown';
-import { AnimatedBackground, HomeIcon, CheckIcon, ActivityIcon, RefreshIcon } from '../components/SharedUI';
+import { AnimatedBackground, HomeIcon, CheckIcon, ActivityIcon, RefreshIcon, ShieldIcon } from '../components/SharedUI';
 import Watermark from '../components/Watermark';
 import { NeonText, GlassPanel, ScanlineOverlay, GlowButton } from '../components/veto/VetoUIPrimitives';
 

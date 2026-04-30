@@ -19,7 +19,7 @@ const SEQUENCES = {
     bo1: [
         { t: 'A', a: 'ban' }, { t: 'A', a: 'ban' }, { t: 'B', a: 'ban' },
         { t: 'B', a: 'ban' }, { t: 'B', a: 'ban' }, { t: 'A', a: 'ban' },
-        { t: 'B', a: 'side' }
+        { t: 'System', a: 'knife' }
     ],
     bo3: [
         { t: 'A', a: 'ban'  }, { t: 'B', a: 'ban'  },

@@ -57,7 +57,7 @@ export default function GlobalHome({ view = 'home' }) {
                                 ) : history.map(m => (
                                     <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', marginBottom: '1rem', transition: 'all 0.2s' }}>
                                         <div>
-                                            <div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '0.5px' }}>{m.teamA} <span style={{color: 'var(--brand-primary)', margin: '0 8px'}}>VS</span> {m.teamB}</div>
+                                            <div style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '0.5px' }}>{m.team_a} <span style={{color: 'var(--brand-primary)', margin: '0 8px'}}>VS</span> {m.team_b}</div>
                                             <div style={{ fontSize: '0.8rem', opacity: 0.4, marginTop: '4px' }}>{new Date(m.date).toLocaleString()} • {m.id.slice(0,8).toUpperCase()}</div>
                                         </div>
                                         <button className="premium-button" style={{ padding: '8px 16px', fontSize: '0.8rem' }} onClick={() => navigate(`/veto/${m.id}`)}>
